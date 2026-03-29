@@ -1,0 +1,2188 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>管理システム</title>
+<style>
+:root {
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --primary: #1a1a2e;
+  --accent: #e94560;
+  --accent2: #0f3460;
+  --text: #1a1a2e;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --radius: 12px;
+  --shadow: 0 2px 12px rgba(0,0,0,0.08);
+  --nav-h: 52px;
+  --bottom-h: 60px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); font-size: 15px;
+  min-height: 100%; -webkit-text-size-adjust: 100%;
+  /* GASのiframe内でも正しいサイズで表示 */
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* ========== ナビ（上部・管理者用） ========== */
+#nav {
+  background: var(--primary);
+  display: flex;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  position: sticky; top: 0; z-index: 100;
+  height: var(--nav-h);
+}
+#nav::-webkit-scrollbar { display: none; }
+#nav button {
+  color: rgba(255,255,255,.55);
+  background: none; border: none;
+  padding: 0 16px;
+  cursor: pointer; white-space: nowrap;
+  font-size: 13px; font-weight: 500;
+  border-bottom: 3px solid transparent;
+  transition: all .2s;
+  height: var(--nav-h);
+  flex-shrink: 0;
+}
+#nav button.active { color: #fff; border-bottom-color: var(--accent); }
+
+/* ========== ボトムナビ（セラピスト用） ========== */
+#bottom-nav {
+  display: none;
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  height: var(--bottom-h);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  z-index: 100;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+#bottom-nav.show { display: flex; }
+#bottom-nav button {
+  flex: 1;
+  background: none; border: none;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 10px; font-weight: 500;
+  cursor: pointer;
+  padding: 6px 4px;
+  transition: color .15s;
+  border-top: 2px solid transparent;
+}
+#bottom-nav button.active { color: var(--accent); border-top-color: var(--accent); }
+#bottom-nav button .icon { font-size: 22px; line-height: 1; }
+
+/* ========== コンテンツ ========== */
+.page { display: none; padding: 12px; max-width: 680px; margin: 0 auto; }
+.page.active { display: block; }
+/* セラピストモード時はボトムナビ分の余白 */
+body.therapist-mode .page { padding-bottom: calc(var(--bottom-h) + env(safe-area-inset-bottom) + 8px); }
+
+/* ========== カード ========== */
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.card-title { font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+.card-value { font-size: 20px; font-weight: 700; }
+
+/* ========== フォーム ========== */
+.form-group { margin-bottom: 12px; }
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+input, select, textarea {
+  width: 100%; padding: 12px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px; font-size: 16px;
+  background: var(--surface); color: var(--text);
+  transition: border-color .2s;
+  -webkit-appearance: none; appearance: none;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+input[type=number] { -moz-appearance: textfield; }
+input[type=range] { padding: 0; border: none; background: none; }
+select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236b7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
+
+/* ========== ボタン ========== */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 12px 20px; border-radius: 10px; border: none;
+  cursor: pointer; font-size: 15px; font-weight: 600;
+  transition: all .15s; touch-action: manipulation;
+  -webkit-appearance: none;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:active { opacity: .8; transform: scale(.98); }
+.btn-secondary { background: var(--border); color: var(--text); }
+.btn-secondary:active { opacity: .8; }
+.btn-line { background: #06c755; color: #fff; }
+.btn-danger { background: #fee2e2; color: #b91c1c; }
+.btn-sm { padding: 8px 14px; font-size: 13px; border-radius: 8px; }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ========== テーブル ========== */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { background: var(--bg); padding: 10px 8px; text-align: left; font-weight: 600; font-size: 11px; color: var(--muted); border-bottom: 1.5px solid var(--border); white-space: nowrap; }
+td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 13px; }
+tr:last-child td { border-bottom: none; }
+
+/* ========== グリッド ========== */
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+@media (max-width: 480px) {
+  .grid2 { grid-template-columns: 1fr; }
+  .grid3 { grid-template-columns: 1fr 1fr; }
+}
+
+/* ========== バッジ ========== */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.badge-green { background: #d1fae5; color: #065f46; }
+.badge-red { background: #fee2e2; color: #b91c1c; }
+.badge-gray { background: var(--border); color: var(--muted); }
+
+/* ========== オーバーレイ ========== */
+#overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9999; align-items: center; justify-content: center; flex-direction: column; color: #fff; gap: 16px; font-size: 18px; }
+#overlay.show { display: flex; }
+.spinner { width: 36px; height: 36px; border: 3px solid rgba(255,255,255,.3); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ========== セクション ========== */
+.sec-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.sec-title { font-size: 16px; font-weight: 700; }
+
+/* ========== 日付ナビ ========== */
+.date-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.date-nav button { background: var(--border); border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 16px; touch-action: manipulation; }
+.date-nav span { font-size: 15px; font-weight: 700; min-width: 110px; text-align: center; }
+
+/* ========== ログイン画面 ========== */
+#login-page { max-width: 360px; margin: 40px auto; padding: 16px; }
+#login-page .card { padding: 28px; text-align: center; }
+
+/* ========== フィルターバー ========== */
+.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: flex-end; }
+.filter-bar .form-group { margin-bottom: 0; flex: 1; min-width: 130px; }
+
+/* ========== その他 ========== */
+#course-price-display { font-size: 18px; font-weight: 700; color: var(--accent); margin-top: 4px; }
+.therapist-card { border-left: 4px solid var(--accent); }
+.therapist-card .card-value.pay { color: var(--success); }
+.therapist-card .card-value.store { color: var(--accent2); }
+.tab-active { background: rgba(233,69,96,0.08); }
+
+/* ========== iPhoneセーフエリア ========== */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  #bottom-nav { padding-bottom: env(safe-area-inset-bottom); height: calc(var(--bottom-h) + env(safe-area-inset-bottom)); }
+}
+
+/* ========== GAS iframe内モバイル対応 ========== */
+/* GASはiframeで表示されるためhtml/bodyに幅を明示 */
+html, body {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+/* ボタンのタップ領域を拡大 */
+.btn { min-height: 44px; }
+.btn-sm { min-height: 36px; }
+/* テーブルセルの文字を読みやすく */
+td, th { font-size: 13px; }
+/* ナビボタンを太く */
+#nav button { font-size: 14px; padding: 0 14px; }
+/* ボトムナビのアイコンを大きく */
+#bottom-nav button .icon { font-size: 24px; }
+#bottom-nav button { font-size: 11px; }
+</style>
+</head>
+<body>
+
+<!-- 初期ローディング（JS読み込み前に表示） -->
+<div id="init-loading" style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px;color:#6b7280;font-size:14px;padding:20px">
+  <div style="width:32px;height:32px;border:3px solid #e5e7eb;border-top-color:#e94560;border-radius:50%;animation:spin .7s linear infinite"></div>
+  読み込み中...
+  <div id="debug-url" style="font-size:11px;color:#aaa;word-break:break-all;text-align:center;max-width:320px"></div>
+</div>
+
+<!-- オーバーレイ -->
+<div id="overlay"><div class="spinner"></div><span>送信中...</span></div>
+
+<!-- ログイン画面（トークン方式） -->
+<div id="login-page" style="display:none">
+  <div style="max-width:360px;margin:60px auto;padding:16px">
+    <div class="card" style="padding:32px;text-align:center">
+      <div style="width:64px;height:64px;background:#06c755;border-radius:16px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+          <path d="M30 15.5C30 10.2 24.6 6 18 6S6 10.2 6 15.5c0 4.7 4.2 8.7 9.8 9.4.4.1.9.3 1 .6.1.3.1.7 0 1l-.2 1c0 .3-.2 1.2 1.1.7C19.1 27.6 27 22.5 27 15.5H30z" fill="white"/>
+        </svg>
+      </div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:12px">セラピスト用ログイン</div>
+      <div style="color:var(--muted);font-size:13px;line-height:1.8;margin-bottom:24px">
+        LINEで <strong style="color:var(--text)">「ログイン」</strong> と送信すると<br>
+        ログイン用URLが届きます
+      </div>
+      <div id="login-status" style="font-size:13px;color:var(--accent);min-height:20px;white-space:pre-wrap;line-height:1.6"></div>
+      <div id="login-loading" style="display:none;align-items:center;justify-content:center;gap:10px;color:var(--muted);font-size:13px;margin-top:12px">
+        <div class="spinner" style="width:20px;height:20px;border-width:2px"></div>
+        確認中...
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- メイン -->
+<div id="main-app" style="display:none">
+  <!-- ボトムナビ（セラピストモード時のみ表示） -->
+  <div id="bottom-nav">
+    <button onclick="showPage('my-reservations')" id="bnav-my-reservations">
+      <span class="icon">📋</span>予約確認
+    </button>
+    <button onclick="showPage('shift-submit')" id="bnav-shift-submit">
+      <span class="icon">📆</span>シフト
+    </button>
+    <button onclick="showPage('photo-diary')" id="bnav-photo-diary">
+      <span class="icon">📸</span>写メ日記
+    </button>
+    <button onclick="showPage('sales-input')" id="bnav-sales-input">
+      <span class="icon">📝</span>売上入力
+    </button>
+  </div>
+  <div id="nav">
+    <button onclick="showPage('payroll')" id="tab-payroll">💰 給料</button>
+    <button onclick="showPage('reservation')" id="tab-reservation">📅 予約</button>
+    <button onclick="showPage('history')" id="tab-history">🔍 履歴</button>
+    <button onclick="showPage('shift-submit')" id="tab-shift-submit">📆 シフト提出</button>
+    <button onclick="showPage('shift-admin')" id="tab-shift-admin">✅ シフト承認</button>
+    <button onclick="showPage('my-reservations')" id="tab-my-reservations">📋 予約確認</button>
+    <button onclick="showPage('photo-diary')" id="tab-photo-diary">📸 写メ日記</button>
+    <button onclick="showPage('sales-input')" id="tab-sales-input">📝 売上入力</button>
+    <button onclick="showPage('line-mgmt')" id="tab-line-mgmt">💬 LINE管理</button>
+  </div>
+
+  <!-- ===== 給料計算ページ ===== -->
+  <div id="page-payroll" class="page">
+    <div class="date-nav">
+      <button onclick="changePayrollDay(-1)">◀</button>
+      <span id="payroll-day-label"></span>
+      <button onclick="changePayrollDay(1)">▶</button>
+      <button class="btn btn-secondary btn-sm" onclick="goToday()">今日</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadPayroll()">更新</button>
+    </div>
+    <div id="payroll-cards" class="grid2"></div>
+    <div id="payroll-details"></div>
+  </div>
+
+  <!-- ===== 予約登録ページ ===== -->
+  <div id="page-reservation" class="page">
+    <div class="date-nav">
+      <button onclick="changeResvDate(-1)">◀</button>
+      <span id="resv-date-label"></span>
+      <button onclick="changeResvDate(1)">▶</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadReservations()">更新</button>
+    </div>
+    <div id="resv-list" class="card" style="margin-bottom:16px">
+      <div id="resv-table-wrap">読み込み中...</div>
+    </div>
+
+    <div class="card">
+      <div class="sec-title" style="margin-bottom:14px">予約登録</div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>日時</label>
+          <input type="datetime-local" id="resv-date">
+        </div>
+        <div class="form-group">
+          <label>セラピスト</label>
+          <select id="resv-therapist" onchange="checkInterval()"></select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>コース（分）</label>
+          <select id="resv-course" onchange="calcCoursePrice()">
+            <option value="60">60分</option>
+            <option value="90">90分</option>
+            <option value="120">120分</option>
+            <option value="150">150分</option>
+            <option value="180">180分</option>
+            <option value="custom">その他（手入力）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>コース時間（分・その他の場合）</label>
+          <input type="number" id="resv-custom-minutes" placeholder="例: 210" style="display:none" oninput="calcCustomPrice()">
+          <div id="course-price-display"></div>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>指名種別</label>
+          <select id="resv-nomination">
+            <option value="free">フリー ¥0</option>
+            <option value="nomination">指名 ¥1,000</option>
+            <option value="honshimei">本指名 ¥1,000</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>割引（円）</label>
+          <input type="number" id="resv-discount" value="0" min="0">
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>お客様番号</label>
+          <input type="text" id="resv-customer-no" placeholder="例: 001">
+        </div>
+        <div class="form-group">
+          <label>お客様名</label>
+          <input type="text" id="resv-customer-name" placeholder="お名前">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="submitReservation()">保存</button>
+        <button class="btn btn-line" onclick="saveAndSendLine()">保存 + LINE送信</button>
+        <button class="btn btn-secondary" onclick="resetResvForm()">リセット</button>
+      </div>
+      <div id="interval-warning" style="color:var(--warning);margin-top:10px;display:none">⚠ インターバル重複の可能性があります</div>
+    </div>
+  </div>
+
+  <!-- ===== 履歴検索ページ ===== -->
+  <div id="page-history" class="page">
+    <div class="filter-bar">
+      <div class="form-group">
+        <label>開始日</label>
+        <input type="date" id="hist-start">
+      </div>
+      <div class="form-group">
+        <label>終了日</label>
+        <input type="date" id="hist-end">
+      </div>
+      <div class="form-group">
+        <label>セラピスト</label>
+        <select id="hist-therapist">
+          <option value="">全員</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="loadHistory()">検索</button>
+    </div>
+    <div class="card">
+      <div id="history-table-wrap">検索条件を選択してください</div>
+    </div>
+  </div>
+
+  <!-- ===== シフト提出ページ ===== -->
+  <div id="page-shift-submit" class="page">
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="sec-title">シフト提出</div>
+        <div style="font-size:13px;color:var(--muted)">担当: <strong id="shift-my-name">-</strong></div>
+      </div>
+      <!-- 入力行 -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:130px">
+          <label>出勤希望日</label>
+          <input type="date" id="shift-date">
+        </div>
+        <div class="form-group" style="margin-bottom:0;width:100px">
+          <label>開始</label>
+          <input type="time" id="shift-start" value="10:00">
+        </div>
+        <div class="form-group" style="margin-bottom:0;width:100px">
+          <label>終了</label>
+          <input type="time" id="shift-end" value="20:00">
+        </div>
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:120px">
+          <label>メモ（任意）</label>
+          <input type="text" id="shift-memo" placeholder="例：午前のみ">
+        </div>
+        <button class="btn btn-secondary" style="white-space:nowrap" onclick="addShiftItem()">＋ 追加</button>
+      </div>
+      <!-- 追加リスト -->
+      <div id="shift-pending-list" style="margin-bottom:12px"></div>
+      <!-- 提出ボタン -->
+      <button class="btn btn-primary" onclick="submitAllShifts()" id="shift-submit-btn" disabled style="opacity:.4">まとめて提出</button>
+      <span id="shift-pending-count" style="margin-left:10px;font-size:13px;color:var(--muted)"></span>
+    </div>
+    <!-- 提出済みシフト（未来のみ） -->
+    <div class="card">
+      <div class="sec-title" style="margin-bottom:12px">提出済みシフト（今日以降）</div>
+      <div id="shift-submit-list">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- ===== シフト承認ページ（管理者用） ===== -->
+  <div id="page-shift-admin" class="page">
+
+    <!-- 未提出者パネル -->
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div class="sec-title" style="margin-bottom:2px">翌週 未提出者</div>
+          <div id="shift-week-label" style="font-size:12px;color:var(--muted)"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="loadUnsubmitted()">更新</button>
+          <button class="btn btn-line btn-sm" onclick="sendReminderAll()">📩 全員に送信</button>
+        </div>
+      </div>
+      <div id="unsubmitted-list">読み込み中...</div>
+    </div>
+
+    <!-- シフト一覧 -->
+    <div class="filter-bar" style="margin-bottom:14px">
+      <div class="form-group" style="margin-bottom:0;flex:1">
+        <label>対象月</label>
+        <input type="month" id="shift-admin-month">
+      </div>
+      <div class="form-group" style="margin-bottom:0;flex:1">
+        <label>ステータス</label>
+        <select id="shift-admin-status">
+          <option value="">すべて</option>
+          <option value="pending">未承認</option>
+          <option value="approved">承認済</option>
+          <option value="rejected">却下</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="loadAdminShifts()">表示</button>
+    </div>
+    <div id="shift-admin-list">表示ボタンを押してください</div>
+  </div>
+
+  <!-- ===== 売上入力ページ（セラピスト用） ===== -->
+  <!-- ===== セラピスト用予約確認ページ ===== -->
+  <div id="page-my-reservations" class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="sec-title">予約確認 — <span id="my-resv-therapist-name"></span></div>
+      <button class="btn btn-secondary btn-sm" onclick="loadMyReservations()">更新</button>
+    </div>
+    <div id="my-reservations-list">読み込み中...</div>
+  </div>
+
+  <!-- ===== 写メ日記ページ ===== -->
+  <div id="page-photo-diary" class="page">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div class="sec-title">写メ日記</div>
+        <div style="font-size:13px;color:var(--muted)"><span id="diary-therapist-name"></span></div>
+      </div>
+
+      <!-- ローディング -->
+      <div id="diary-loading" style="text-align:center;padding:32px;color:var(--muted);font-size:14px">
+        <div class="spinner" style="width:24px;height:24px;border-width:2px;margin:0 auto 12px"></div>
+        メールアドレスを確認中...
+      </div>
+
+      <!-- メール未設定エラー -->
+      <div id="diary-no-email" style="display:none;background:var(--color-background-warning);border-left:4px solid var(--color-border-warning);border-radius:8px;padding:14px;color:var(--color-text-warning);font-size:14px">
+        送信先メールアドレスが設定されていません。<br>管理者にLINE管理ページでのメールアドレス設定をお願いしてください。
+      </div>
+
+      <!-- メイン入力エリア -->
+      <div id="diary-form" style="display:none">
+        <!-- 送信先 -->
+        <div style="background:var(--bg);border-radius:8px;padding:12px 14px;margin-bottom:20px;font-size:13px;display:flex;align-items:center;gap:8px">
+          <span style="color:var(--muted)">送信先</span>
+          <span id="diary-email-display" style="font-weight:600;color:var(--text)"></span>
+        </div>
+
+        <!-- 件名（非表示・任意） -->
+        <input type="hidden" id="diary-subject" value="">
+
+        <!-- メールアプリを開くボタン -->
+        <button class="btn btn-primary" style="width:100%;padding:16px;font-size:16px;margin-top:4px" onclick="openMailApp()">
+          📧 メールアプリを開く
+        </button>
+
+        <!-- 補足説明 -->
+        <div style="margin-top:16px;padding:12px 14px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--muted);line-height:1.8">
+          <div style="font-weight:600;margin-bottom:6px;color:var(--text)">📌 メールアプリが開いたら</div>
+          <div>① 宛先・件名は自動でセットされます</div>
+          <div>② 本文を入力してください</div>
+          <div>③ 写真を添付してください</div>
+          <div>④ 送信ボタンを押してください</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="page-sales-input" class="page">
+    <div id="sales-login-notice" class="card" style="display:none">
+      <p style="color:var(--muted)">このページはセラピストがLINEログイン後に使用します。</p>
+    </div>
+    <div id="sales-form-wrap">
+      <!-- 予約からの引き継ぎバナー -->
+      <div id="sales-prefilled-banner" style="display:none;background:var(--color-background-info);border-left:4px solid var(--color-border-info);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--color-text-info)">
+        予約情報を引き継ぎました
+        <button onclick="clearSalesPrefill()" style="float:right;background:none;border:none;cursor:pointer;color:var(--color-text-info);font-size:16px">✕</button>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="sec-title" style="margin-bottom:14px">売上入力 — <span id="sales-therapist-name"></span></div>
+        <div class="grid2">
+          <div class="form-group">
+            <label>日時</label>
+            <input type="datetime-local" id="sales-date">
+          </div>
+          <div class="form-group">
+            <label>コース（分）</label>
+            <select id="sales-course" onchange="calcSalesCoursePrice()">
+              <option value="60">60分</option>
+              <option value="90">90分</option>
+              <option value="120">120分</option>
+              <option value="150">150分</option>
+              <option value="180">180分</option>
+              <option value="custom">その他</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="form-group">
+            <label>コース時間（その他の場合）</label>
+            <input type="number" id="sales-custom-minutes" placeholder="例: 210" style="display:none" oninput="calcSalesCustomPrice()">
+            <div id="sales-price-display" style="font-size:18px;font-weight:700;color:var(--accent);margin-top:4px"></div>
+          </div>
+          <div class="form-group">
+            <label>指名種別</label>
+            <select id="sales-nomination">
+              <option value="free">フリー ¥0</option>
+              <option value="nomination">指名 ¥1,000</option>
+              <option value="honshimei">本指名 ¥1,000</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="form-group">
+            <label>割引（円）</label>
+            <input type="number" id="sales-discount" value="0" min="0">
+          </div>
+          <div class="form-group">
+            <label>お客様番号</label>
+            <input type="text" id="sales-customer-no" placeholder="例: 001">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>お客様名</label>
+          <input type="text" id="sales-customer-name">
+        </div>
+
+        <!-- オプション選択 -->
+        <div style="border:1.5px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px">
+          <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:12px">オプション</div>
+
+          <!-- 衣装チェンジ -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin:0">
+              <input type="checkbox" id="opt-costume" onchange="calcOptionsTotal()" style="width:18px;height:18px;margin:0">
+              衣装チェンジ
+            </label>
+            <span style="color:var(--muted);font-size:13px">¥2,000</span>
+          </div>
+
+          <!-- ホイップ -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin:0">
+              <input type="checkbox" id="opt-whip" onchange="calcOptionsTotal()" style="width:18px;height:18px;margin:0">
+              ホイップ
+            </label>
+            <span style="color:var(--muted);font-size:13px">¥2,000</span>
+          </div>
+
+          <!-- ディープリンパ -->
+          <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin:0">
+                <input type="checkbox" id="opt-lymph-check" onchange="toggleLymph();calcOptionsTotal()" style="width:18px;height:18px;margin:0">
+                ディープリンパ
+              </label>
+              <span id="opt-lymph-price" style="color:var(--muted);font-size:13px">¥0</span>
+            </div>
+            <div id="opt-lymph-wrap" style="display:none;margin-left:26px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="range" id="opt-lymph-min" min="10" max="100" step="10" value="10"
+                  oninput="calcOptionsTotal()"
+                  style="flex:1">
+                <span id="opt-lymph-label" style="font-size:13px;min-width:50px;text-align:right">10分</span>
+              </div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">10分 ¥1,000（10分刻み）</div>
+            </div>
+          </div>
+
+          <!-- 極液 -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin:0">
+              <input type="checkbox" id="opt-gokueki" onchange="calcOptionsTotal()" style="width:18px;height:18px;margin:0">
+              極液
+            </label>
+            <span style="color:var(--muted);font-size:13px">¥2,000</span>
+          </div>
+
+          <!-- その他 -->
+          <div style="padding:8px 0">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;margin:0">
+                <input type="checkbox" id="opt-other-check" onchange="toggleOtherOpt();calcOptionsTotal()" style="width:18px;height:18px;margin:0">
+                その他
+              </label>
+              <span id="opt-other-price" style="color:var(--muted);font-size:13px">¥0</span>
+            </div>
+            <div id="opt-other-wrap" style="display:none;margin-left:26px">
+              <input type="number" id="opt-other-amount" placeholder="金額を入力" min="0" step="100"
+                oninput="calcOptionsTotal()"
+                style="width:160px;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:14px">
+            </div>
+          </div>
+
+          <!-- オプション合計 -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1.5px solid var(--border);margin-top:4px">
+            <span style="font-size:13px;font-weight:600">オプション合計</span>
+            <span id="opt-total-display" style="font-size:18px;font-weight:700;color:var(--accent)">¥0</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>メモ</label>
+          <textarea id="sales-memo" rows="2"></textarea>
+        </div>
+
+        <!-- 登録前合計 -->
+        <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;color:var(--muted)">売上合計（コース＋オプション−割引）</span>
+          <span id="sales-total-display" style="font-size:20px;font-weight:700;color:var(--text)">¥0</span>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="submitSalesEntry()">売上を登録</button>
+      </div>
+      <div class="card">
+        <div class="sec-title" style="margin-bottom:12px">自分の売上履歴</div>
+        <div id="my-sales-table">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== LINE管理ページ ===== -->
+  <div id="page-line-mgmt" class="page">
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-title" style="margin-bottom:14px">手動登録</div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>セラピスト名</label>
+          <input type="text" id="line-name">
+        </div>
+        <div class="form-group">
+          <label>LINE ユーザーID</label>
+          <input type="text" id="line-userid" placeholder="U...">
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>コースバック率（例: 0.5 = 50%）</label>
+          <input type="number" id="line-courseback" value="0.5" min="0" max="1" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>インターバル（分）</label>
+          <input type="number" id="line-interval" value="0" min="0">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="saveLineEntry()">登録</button>
+    </div>
+    <div class="card">
+      <div class="sec-title" style="margin-bottom:12px">登録済みセラピスト</div>
+      <div id="line-users-table">読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 定数
+// ============================================================
+// GAS_URL不要 — google.script.run で直接通信
+
+const COURSE_PRICES = { 60:12000, 90:15000, 120:20000, 150:25000, 180:30000 };
+const COURSE_STEP_MIN = 30;
+const COURSE_STEP_PRC = 5000;
+const COURSE_BASE_MIN = 180;
+
+const NOMINATION_FEE   = { free:0, nomination:1000, honshimei:1000 };
+const NOMINATION_LABEL = { free:'フリー', nomination:'指名', honshimei:'本指名' };
+
+// ============================================================
+// 状態
+// ============================================================
+let currentPayrollDate = new Date();
+let currentResvDate    = new Date();
+let therapists         = [];
+let loggedInTherapist  = null; // セラピストLINEログイン用
+let isAdminMode        = true; // 管理者 or セラピスト
+
+// ============================================================
+// コース価格計算
+// ============================================================
+function calcPrice(minutes) {
+  if (COURSE_PRICES[minutes]) return COURSE_PRICES[minutes];
+  if (minutes <= COURSE_BASE_MIN) return COURSE_PRICES[COURSE_BASE_MIN];
+  const extra = Math.ceil((minutes - COURSE_BASE_MIN) / COURSE_STEP_MIN);
+  return COURSE_PRICES[COURSE_BASE_MIN] + extra * COURSE_STEP_PRC;
+}
+
+function calcCoursePrice() {
+  const sel = document.getElementById('resv-course').value;
+  const customWrap = document.getElementById('resv-custom-minutes');
+  if (sel === 'custom') {
+    customWrap.style.display = '';
+    document.getElementById('course-price-display').textContent = '';
+  } else {
+    customWrap.style.display = 'none';
+    const price = calcPrice(Number(sel));
+    document.getElementById('course-price-display').textContent = '¥' + price.toLocaleString();
+  }
+}
+
+function calcCustomPrice() {
+  const mins  = Number(document.getElementById('resv-custom-minutes').value);
+  const price = mins ? calcPrice(mins) : 0;
+  document.getElementById('course-price-display').textContent = mins ? '¥' + price.toLocaleString() : '';
+}
+
+function calcSalesCoursePrice() {
+  const sel = document.getElementById('sales-course').value;
+  const customWrap = document.getElementById('sales-custom-minutes');
+  if (sel === 'custom') {
+    customWrap.style.display = '';
+    document.getElementById('sales-price-display').textContent = '';
+  } else {
+    customWrap.style.display = 'none';
+    const price = calcPrice(Number(sel));
+    document.getElementById('sales-price-display').textContent = '¥' + price.toLocaleString();
+  }
+  calcSalesTotal();
+}
+
+function calcSalesCustomPrice() {
+  const mins  = Number(document.getElementById('sales-custom-minutes').value);
+  const price = mins ? calcPrice(mins) : 0;
+  document.getElementById('sales-price-display').textContent = mins ? '¥' + price.toLocaleString() : '';
+  calcSalesTotal();
+}
+
+function getCourseMinutes(prefix) {
+  const sel = document.getElementById(prefix + '-course').value;
+  if (sel === 'custom') return Number(document.getElementById(prefix + '-custom-minutes').value) || 0;
+  return Number(sel);
+}
+
+function getCoursePrice(prefix) {
+  const mins = getCourseMinutes(prefix);
+  return mins ? calcPrice(mins) : 0;
+}
+
+// ============================================================
+// API通信（fetch - Vercel配信用）
+// ============================================================
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzSYMmPg_FkhpjZyuDrb5HH2KSUtveL1MJ1ylQm44lgZRiLSPp0y1i5rBY5_B5Hbd92/exec';
+
+function apiGet(action, params = {}) {
+  const qs  = new URLSearchParams({ action, params: JSON.stringify(params) }).toString();
+  const url = GAS_URL + '?' + qs;
+  return fetch(url)
+    .then(r => r.json())
+    .then(json => {
+      if (json.success) return json.data;
+      throw new Error(json.error || 'GAS error');
+    });
+}
+// ============================================================
+// ページ切替
+// ============================================================
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#bottom-nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  const topTab    = document.getElementById('tab-' + name);
+  const bottomTab = document.getElementById('bnav-' + name);
+  if (topTab)    topTab.classList.add('active');
+  if (bottomTab) bottomTab.classList.add('active');
+
+  if (name === 'payroll')       loadPayroll();
+  if (name === 'reservation')   { setNowToResvDate(); loadReservations(); populateTherapistSelect(); }
+  if (name === 'history')       populateHistoryTherapists();
+  if (name === 'shift-submit')     initShiftSubmit();
+  if (name === 'shift-admin')      initShiftAdmin();
+  if (name === 'my-reservations')  initMyReservations();
+  if (name === 'photo-diary')      initPhotoDiary();
+  if (name === 'line-mgmt')        loadLineUsers();
+  if (name === 'sales-input')      initSalesInput();
+}
+
+// ============================================================
+// 初期化
+// ============================================================
+// ============================================================
+// LIFF ID（LINEデベロッパーコンソールで取得して設定）
+// ============================================================
+const LIFF_ID = '2009634621-bFdHnlgp';
+
+async function init() {
+  // URLパラメータを取得（Vercel配信ではlocation.searchが正常に動作）
+  const urlParams     = new URLSearchParams(location.search);
+  const token         = urlParams.get('token') || '';
+  const page          = urlParams.get('page')  || '';
+  const mode          = urlParams.get('mode')  || '';
+  window._startPage   = page || 'my-reservations';
+
+  // デバッグ表示
+  const dbgEl = document.getElementById('debug-url');
+  if (dbgEl) dbgEl.textContent = 'token=' + (token ? token.slice(0,8)+'...' : 'none') + ' mode=' + mode;
+
+  if (token) {
+    // トークンをGASで検証
+    isAdminMode = false;
+    showLoginPage();
+    setLoginState('loading', '確認中...');
+    try {
+      const result = await apiGet('verifyTokenAction', { token });
+      if (result && result.ok) {
+        loggedInTherapist = result.name;
+        enterTherapistMode();
+      } else {
+        setLoginState('error', 'リンクの有効期限が切れています。\nLINEでもう一度「ログイン」と送信してください。');
+      }
+    } catch(e) {
+      setLoginState('error', 'エラーが発生しました。\n' + e.message);
+    }
+    return;
+  }
+
+  if (mode === 'therapist') {
+    isAdminMode = false;
+    showLoginPage();
+    return;
+  }
+
+  // 管理者モード
+  startAdminMode();
+}
+
+function startAdminMode() {
+  showMainApp();
+  Promise.resolve().then(async () => {
+    try { therapists = await apiGet('getTherapists'); } catch(e) { console.warn(e); }
+  });
+  currentPayrollDate = new Date();
+  currentResvDate    = new Date();
+  showPage('payroll');
+  updatePayrollDayLabel();
+  setNowToResvDate();
+  calcCoursePrice();
+  calcSalesCoursePrice();
+}
+
+// ============================================================
+// LIFF関連（廃止 - トークン方式に移行）
+// ============================================================
+async function resolveTherapistFromLiff() {
+  setLoginState('checking', 'アカウントを確認中...');
+
+  // userIdの取得: IDToken → getProfile の順で試みる
+  let userId = null;
+  let displayName = '';
+
+  // まずIDTokenから取得（LINEアプリ内では高速）
+  try {
+    const idToken = liff.getDecodedIDToken();
+    if (idToken && idToken.sub) {
+      userId      = idToken.sub;
+      displayName = idToken.name || '';
+      setLoginState('checking', 'IDToken取得成功: ' + displayName);
+    }
+  } catch(e) {
+    console.warn('IDToken失敗:', e.message);
+  }
+
+  // IDTokenで取れなければgetProfileを試みる（タイムアウト付き）
+  if (!userId) {
+    try {
+      setLoginState('checking', 'プロフィール取得中...');
+      const profile = await Promise.race([
+        liff.getProfile(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('getProfile timeout')), 8000))
+      ]);
+      userId      = profile.userId;
+      displayName = profile.displayName;
+    } catch(e) {
+      setLoginState('error', 'ユーザー情報取得に失敗しました。\n' + e.message + '\n\nLINEアプリを再起動して開き直してください。');
+      return;
+    }
+  }
+
+  setLoginState('checking', displayName + ' さんを確認中...');
+
+  // GASでuserIdをセラピストと照合
+  let therapistList;
+  try {
+    therapistList = await apiGet('getTherapists');
+    therapists    = therapistList;
+  } catch(e) {
+    setLoginState('error', 'サーバー接続エラー。\n' + e.message + '\n\n再度お試しください。');
+    return;
+  }
+
+  const matched = therapistList.find(t => t.userId === userId);
+
+  if (!matched || !matched.name) {
+    setLoginState('error',
+      (displayName || 'このアカウント') + ' は登録されていません。\n\n' +
+      'userID: ' + userId + '\n\n' +
+      'LINE Botを友達追加して源氏名を送信してください。'
+    );
+    return;
+  }
+
+  loggedInTherapist = matched.name;
+  enterTherapistMode();
+}
+
+
+function showLoginPage() {
+  document.getElementById('init-loading').style.display = 'none';
+  document.getElementById('login-page').style.display   = '';
+  document.getElementById('main-app').style.display     = 'none';
+}
+
+function showMainApp() {
+  document.getElementById('init-loading').style.display = 'none';
+  document.getElementById('login-page').style.display   = 'none';
+  document.getElementById('main-app').style.display     = '';
+}
+
+function enterTherapistMode() {
+  showMainApp();
+
+  // 上部ナビを完全に非表示
+  document.getElementById('nav').style.display = 'none';
+
+  // ボトムナビを表示
+  document.getElementById('bottom-nav').classList.add('show');
+
+  // bodyにセラピストモードクラスを付与（パディング調整用）
+  document.body.classList.add('therapist-mode');
+
+  // URLのpageパラメータで開くページを指定（デフォルト: 予約確認）
+  const validPages = ['my-reservations', 'shift-submit', 'photo-diary', 'sales-input'];
+  const startPage  = validPages.includes(window._startPage) ? window._startPage : 'my-reservations';
+  showPage(startPage);
+}
+
+// ============================================================
+// 給料計算（日単位）
+// ============================================================
+function fmtDate(dt) {
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth()+1).padStart(2,'0');
+  const d = String(dt.getDate()).padStart(2,'0');
+  return y + '-' + m + '-' + d;
+}
+
+function updatePayrollDayLabel() {
+  const d    = currentPayrollDate;
+  const days = ['日','月','火','水','木','金','土'];
+  document.getElementById('payroll-day-label').textContent =
+    d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate() + '(' + days[d.getDay()] + ')';
+}
+
+function changePayrollDay(delta) {
+  currentPayrollDate.setDate(currentPayrollDate.getDate() + delta);
+  updatePayrollDayLabel();
+  loadPayroll();
+}
+
+function goToday() {
+  currentPayrollDate = new Date();
+  currentPayrollDate.setHours(0,0,0,0);
+  updatePayrollDayLabel();
+  loadPayroll();
+}
+
+async function loadPayroll() {
+  const dateStr = fmtDate(currentPayrollDate);
+  try {
+    const data = await apiGet('getPayrollData', { startDate: dateStr, endDate: dateStr });
+    renderPayrollCards(data);
+  } catch(e) {
+    document.getElementById('payroll-cards').innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+function renderPayrollCards(data) {
+  const cardsEl   = document.getElementById('payroll-cards');
+  const detailsEl = document.getElementById('payroll-details');
+
+  if (!data || !data.length) {
+    cardsEl.innerHTML = '<p style="color:var(--muted)">この日の予約データはありません</p>';
+    detailsEl.innerHTML = '';
+    return;
+  }
+
+  // 日付でグループ化
+  const byDate = {};
+  data.forEach(t => {
+    if (!byDate[t.dateLabel]) byDate[t.dateLabel] = [];
+    byDate[t.dateLabel].push(t);
+  });
+
+  const days = ['日','月','火','水','木','金','土'];
+
+  cardsEl.className = ''; // grid2を外してフル幅に
+  cardsEl.innerHTML = Object.keys(byDate).sort().map(dateLabel => {
+    const list    = byDate[dateLabel];
+    const dt      = new Date(dateLabel);
+    const dow     = days[dt.getDay()];
+    const dateStr = dateLabel.replace(/-/g,'/') + '(' + dow + ')';
+
+    const dayPay   = list.reduce((s, t) => s + t.pay, 0);
+    const dayStore = list.reduce((s, t) => s + t.storeDrop, 0);
+
+    return `
+    <div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:0 2px">
+        <span style="font-size:15px;font-weight:700;color:var(--text)">${dateStr}</span>
+        <span style="font-size:12px;color:var(--muted)">日計 給料 ¥${dayPay.toLocaleString()} / 店落ち ¥${dayStore.toLocaleString()}</span>
+      </div>
+      <div class="grid2">
+        ${list.map(t => {
+          const uid = dateLabel + '_' + t.name;
+          return `
+          <div class="card therapist-card">
+            <div style="font-weight:700;font-size:15px;margin-bottom:12px">${t.name}</div>
+            <div class="grid3" style="margin-bottom:14px">
+              <div>
+                <div class="card-title">給料</div>
+                <div class="card-value pay">¥${t.pay.toLocaleString()}</div>
+              </div>
+              <div>
+                <div class="card-title">店落ち</div>
+                <div class="card-value store">¥${t.storeDrop.toLocaleString()}</div>
+              </div>
+              <div>
+                <div class="card-title">件数</div>
+                <div class="card-value">${t.count}件</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-secondary btn-sm" onclick="toggleDetail('detail-${uid.replace(/[^a-zA-Z0-9]/g,'_')}')">明細</button>
+              <button class="btn btn-secondary btn-sm" onclick="copyPayroll('${t.name}','${dateLabel}',${t.pay},${t.storeDrop})">📋 コピー</button>
+              <button class="btn btn-line btn-sm" onclick="sendPayrollLine('${t.name}','${dateLabel}',${t.pay},${t.storeDrop})">LINE送信</button>
+            </div>
+            <div id="detail-${uid.replace(/[^a-zA-Z0-9]/g,'_')}" style="display:none;margin-top:14px">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>時間</th><th>コース</th><th>お客様</th><th>金額</th><th>割引</th><th>給料</th><th>店落ち</th></tr></thead>
+                  <tbody>
+                    ${t.details.map(d => `
+                    <tr>
+                      <td>${d.date}</td>
+                      <td>${d.course}分</td>
+                      <td>${d.customer}</td>
+                      <td>¥${d.price.toLocaleString()}</td>
+                      <td>¥${d.discount.toLocaleString()}</td>
+                      <td style="color:var(--success)">¥${d.therapistPay.toLocaleString()}</td>
+                      <td style="color:var(--accent2)">¥${d.storeDrop.toLocaleString()}</td>
+                    </tr>`).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+  detailsEl.innerHTML = '';
+}
+
+function toggleDetail(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+// 給料・店落ちをクリップボードにコピー
+async function copyPayroll(name, dateLabel, pay, storeDrop) {
+  const text = `${dateLabel} ${name}\n給料：¥${pay.toLocaleString()}\n店落ち：¥${storeDrop.toLocaleString()}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('コピーしました');
+  } catch(e) {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('コピーしました');
+  }
+}
+
+// LINEで給料・店落ちを送信
+async function sendPayrollLine(name, dateLabel, pay, storeDrop) {
+  const message = `${dateLabel}の給与明細\n\n給料：¥${pay.toLocaleString()}\n店落ち：¥${storeDrop.toLocaleString()}`;
+
+  // セラピストのuserIdを取得
+  const t = therapists.find(th => th.name === name);
+  if (!t || !t.userId) {
+    alert(name + ' さんのLINEが登録されていません');
+    return;
+  }
+  try {
+    showOverlay();
+    await apiGet('sendLineMessage', { userId: t.userId, message });
+    showToast('LINEを送信しました');
+  } catch(e) {
+    alert('送信エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+// ============================================================
+// シフト提出
+// ============================================================
+// 追加待ちリスト（まだ提出していないシフト）
+let pendingShifts = [];
+
+async function initShiftSubmit() {
+  if (!therapists.length) therapists = await apiGet('getTherapists');
+
+  // 名前表示
+  document.getElementById('shift-my-name').textContent = loggedInTherapist || '（管理者）';
+
+  // 今日以降の日付のみ選択可能にするため、min属性をセット
+  const todayStr = new Date().toISOString().split('T')[0];
+  document.getElementById('shift-date').min = todayStr;
+  document.getElementById('shift-date').value = todayStr;
+
+  // 追加待ちリストをリセット
+  pendingShifts = [];
+  renderPendingList();
+
+  // 提出済みシフトを読み込む
+  loadMyShifts();
+}
+
+// 「＋ 追加」ボタン押下
+function addShiftItem() {
+  const date      = document.getElementById('shift-date').value;
+  const startTime = document.getElementById('shift-start').value;
+  const endTime   = document.getElementById('shift-end').value;
+  const memo      = document.getElementById('shift-memo').value;
+
+  if (!date) { alert('出勤希望日を選択してください'); return; }
+  if (!startTime || !endTime) { alert('開始・終了時間を入力してください'); return; }
+
+  // 過去日付チェック
+  const today = new Date(); today.setHours(0,0,0,0);
+  const selected = new Date(date + 'T00:00:00');
+  if (selected < today) { alert('過去の日付は提出できません'); return; }
+
+  // 開始＜終了チェック
+  if (startTime >= endTime) { alert('終了時間は開始時間より後にしてください'); return; }
+
+  // 重複チェック
+  if (pendingShifts.some(s => s.date === date)) {
+    if (!confirm(date + ' はすでに追加されています。続けて追加しますか？')) return;
+  }
+
+  pendingShifts.push({ date, startTime, endTime, memo });
+  pendingShifts.sort((a, b) => a.date.localeCompare(b.date));
+  renderPendingList();
+
+  // メモだけリセット（日付・時間はそのままで連続入力しやすく）
+  document.getElementById('shift-memo').value = '';
+}
+
+// 追加待ちリストを描画
+function renderPendingList() {
+  const el    = document.getElementById('shift-pending-list');
+  const btn   = document.getElementById('shift-submit-btn');
+  const count = document.getElementById('shift-pending-count');
+  const WDAYS = ['日','月','火','水','木','金','土'];
+
+  if (!pendingShifts.length) {
+    el.innerHTML = '';
+    btn.disabled = true;
+    btn.style.opacity = '.4';
+    count.textContent = '';
+    return;
+  }
+
+  btn.disabled = false;
+  btn.style.opacity = '1';
+  count.textContent = pendingShifts.length + '件を追加中';
+
+  el.innerHTML = `
+    <div style="border:1.5px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:4px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--bg)">
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">日付</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">時間</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">メモ</th>
+            <th style="padding:8px;width:40px"></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${pendingShifts.map((s, i) => {
+            const dt  = new Date(s.date + 'T00:00:00');
+            const dow = WDAYS[dt.getDay()];
+            const isHol = dt.getDay() === 0 || dt.getDay() === 6;
+            return `
+            <tr style="border-top:1px solid var(--border)">
+              <td style="padding:8px;font-weight:600;${isHol ? 'color:var(--accent)' : ''}">${s.date}（${dow}）</td>
+              <td style="padding:8px">${s.startTime} 〜 ${s.endTime}</td>
+              <td style="padding:8px;color:var(--muted)">${s.memo || '-'}</td>
+              <td style="padding:8px;text-align:center">
+                <button onclick="removePendingItem(${i})"
+                  style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px">✕</button>
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function removePendingItem(idx) {
+  pendingShifts.splice(idx, 1);
+  renderPendingList();
+}
+
+// まとめて提出
+async function submitAllShifts() {
+  if (!pendingShifts.length) return;
+  const therapist = loggedInTherapist;
+  if (!therapist) { alert('ログインしてください'); return; }
+
+  try {
+    showOverlay();
+    await apiGet('submitShiftBulk', { therapist, items: pendingShifts });
+    showToast(pendingShifts.length + '件のシフトを提出しました');
+    pendingShifts = [];
+    renderPendingList();
+    loadMyShifts();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+// 提出済みシフト（今日以降のみ）
+async function loadMyShifts() {
+  const el = document.getElementById('shift-submit-list');
+  el.innerHTML = '読み込み中...';
+  try {
+    let data = await apiGet('getShifts', { therapist: loggedInTherapist, futureOnly: true });
+    renderShiftList(el, data, false);
+  } catch(e) {
+    el.innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+// ============================================================
+// シフト承認（管理者）
+// ============================================================
+async function initShiftAdmin() {
+  const now = new Date();
+  const ym  = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  document.getElementById('shift-admin-month').value = ym;
+  loadUnsubmitted();   // 未提出者パネルも自動読み込み
+  loadAdminShifts();
+}
+
+// 未提出者一覧を読み込んで表示
+async function loadUnsubmitted() {
+  const listEl  = document.getElementById('unsubmitted-list');
+  const labelEl = document.getElementById('shift-week-label');
+  listEl.innerHTML = '確認中...';
+  try {
+    const data = await apiGet('getUnsubmittedTherapists');
+    labelEl.textContent = data.weekLabel ? '対象期間: ' + data.weekLabel : '';
+
+    if (!data.unsubmitted.length) {
+      listEl.innerHTML = '<p style="color:var(--success);font-size:13px">全員提出済みです ✓</p>';
+      return;
+    }
+
+    listEl.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        ${data.unsubmitted.map(t => `
+          <div style="display:flex;align-items:center;gap:6px;background:var(--bg);border-radius:8px;padding:6px 10px">
+            <span style="font-size:13px;font-weight:600">${t.name}</span>
+            <button class="btn btn-line btn-sm"
+              style="padding:4px 10px;font-size:12px"
+              onclick="sendReminderOne('${t.userId}','${t.name}',this)">
+              送信
+            </button>
+          </div>`).join('')}
+      </div>
+      <div style="margin-top:8px;font-size:12px;color:var(--muted)">
+        提出済み: ${data.submitted.length}名 / 未提出: ${data.unsubmitted.length}名
+      </div>`;
+  } catch(e) {
+    listEl.innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+// 全未提出者に一括送信
+async function sendReminderAll() {
+  if (!confirm('未提出のセラピスト全員にLINEを送信しますか？')) return;
+  try {
+    showOverlay();
+    const result = await apiGet('sendShiftReminder');
+    showToast('リマインダーを ' + result.sent + '件 送信しました');
+    loadUnsubmitted();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+// 個別に1人だけ送信
+async function sendReminderOne(userId, name, btn) {
+  try {
+    btn.disabled = true;
+    btn.textContent = '送信中';
+    await apiGet('sendReminderToOne', { userId, name });
+    btn.textContent = '送信済';
+    btn.style.background = '#888';
+    showToast(name + ' に送信しました');
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '送信';
+    alert('エラー: ' + e.message);
+  }
+}
+
+async function loadAdminShifts() {
+  const month  = document.getElementById('shift-admin-month').value;
+  const status = document.getElementById('shift-admin-status').value;
+  const el     = document.getElementById('shift-admin-list');
+  el.innerHTML = '読み込み中...';
+  try {
+    let data = await apiGet('getShifts', { month });
+    if (status) data = data.filter(r => r.status === status);
+    // 提出日時降順（新しい順）
+    data.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+    renderShiftList(el, data, true);
+  } catch(e) {
+    el.innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+async function approveShift(row) {
+  if (!confirm('このシフトを承認しますか？\nLINEで通知します。')) return;
+  try {
+    showOverlay();
+    await apiGet('approveShift', { row });
+    showToast('承認しました');
+    loadAdminShifts();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function rejectShift(row) {
+  const reason = prompt('却下理由を入力してください（空白でも可）');
+  if (reason === null) return; // キャンセル
+  try {
+    showOverlay();
+    await apiGet('rejectShift', { row, reason });
+    showToast('却下しました');
+    loadAdminShifts();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function deleteShiftRow(row) {
+  if (!confirm('このシフト申請を削除しますか？')) return;
+  try {
+    await apiGet('deleteShift', { row });
+    showToast('削除しました');
+    loadAdminShifts();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  }
+}
+
+// ============================================================
+// シフト共通レンダリング
+// ============================================================
+const SHIFT_STATUS = {
+  pending:  { label: '未承認', cls: 'badge-gray' },
+  approved: { label: '承認済', cls: 'badge-green' },
+  rejected: { label: '却下',   cls: 'badge-red' }
+};
+const WEEK_DAYS = ['日','月','火','水','木','金','土'];
+
+function renderShiftList(el, data, isAdmin) {
+  if (!data.length) {
+    el.innerHTML = '<p style="color:var(--muted)">データがありません</p>';
+    return;
+  }
+
+  // 出勤日でグループ化
+  const byDate = {};
+  data.forEach(r => {
+    if (!byDate[r.date]) byDate[r.date] = [];
+    byDate[r.date].push(r);
+  });
+
+  el.innerHTML = Object.keys(byDate).sort().map(date => {
+    const list = byDate[date];
+    const dt   = new Date(date + 'T00:00:00');
+    const dow  = WEEK_DAYS[dt.getDay()];
+    const isHoliday = dt.getDay() === 0 || dt.getDay() === 6;
+    const dateColor = isHoliday ? 'color:var(--accent)' : '';
+
+    return `
+    <div style="margin-bottom:16px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px;padding:6px 0;border-bottom:1.5px solid var(--border);${dateColor}">
+        ${date}（${dow}）
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              ${isAdmin ? '<th>セラピスト</th>' : ''}
+              <th>時間</th>
+              <th>状態</th>
+              <th>メモ</th>
+              <th>提出日時</th>
+              ${isAdmin ? '<th>操作</th>' : ''}
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map(r => {
+              const s = SHIFT_STATUS[r.status] || SHIFT_STATUS.pending;
+              return `
+              <tr>
+                ${isAdmin ? `<td style="font-weight:600">${r.therapist}</td>` : ''}
+                <td>${r.startTime} 〜 ${r.endTime}</td>
+                <td><span class="badge ${s.cls}">${s.label}</span></td>
+                <td style="color:var(--muted);font-size:12px">${r.memo || '-'}</td>
+                <td style="font-size:11px;color:var(--muted)">${r.submittedAt}</td>
+                ${isAdmin ? `
+                <td>
+                  <div style="display:flex;gap:6px">
+                    ${r.status === 'pending' ? `
+                    <button class="btn btn-primary btn-sm" onclick="approveShift(${r.row})">承認</button>
+                    <button class="btn btn-danger btn-sm" onclick="rejectShift(${r.row})">却下</button>
+                    ` : ''}
+                    <button class="btn btn-secondary btn-sm" onclick="deleteShiftRow(${r.row})">削除</button>
+                  </div>
+                </td>` : ''}
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// 写メ日記
+// ============================================================
+// 取得したメールアドレスを保持
+let _diaryEmail = '';
+
+async function initPhotoDiary() {
+  document.getElementById('diary-therapist-name').textContent = loggedInTherapist || '';
+  _diaryEmail = '';
+
+  document.getElementById('diary-subject').value = '';
+
+  // 表示状態リセット
+  document.getElementById('diary-loading').style.display  = '';
+  document.getElementById('diary-form').style.display     = 'none';
+  document.getElementById('diary-no-email').style.display = 'none';
+
+  // メールアドレス取得
+  try {
+    const res = await apiGet('getTherapistEmail', { therapist: loggedInTherapist });
+    document.getElementById('diary-loading').style.display = 'none';
+
+    if (res.email) {
+      _diaryEmail = res.email;
+      document.getElementById('diary-email-display').textContent = res.email;
+      document.getElementById('diary-form').style.display = '';
+    } else {
+      document.getElementById('diary-no-email').style.display = '';
+    }
+  } catch(e) {
+    document.getElementById('diary-loading').style.display = 'none';
+    document.getElementById('diary-no-email').style.display = '';
+  }
+}
+
+function openMailApp() {
+  if (!_diaryEmail) {
+    alert('送信先メールアドレスが取得できていません');
+    return;
+  }
+  const subject = document.getElementById('diary-subject').value.trim();
+  // mailto:リンクを生成して開く（件名は任意）
+  const mailto = 'mailto:' + encodeURIComponent(_diaryEmail)
+    + (subject ? '?subject=' + encodeURIComponent(subject) : '');
+
+  // LINEアプリ内ブラウザでもmailto:は外部アプリに渡される
+  location.href = mailto;
+}
+
+// トースト通知
+function showToast(msg) {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#fff;padding:10px 24px;border-radius:20px;font-size:14px;z-index:9998;opacity:0;transition:opacity .2s';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  setTimeout(() => { el.style.opacity = '0'; }, 2000);
+}
+
+// ============================================================
+// 予約
+// ============================================================
+function setNowToResvDate() {
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const str = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate())
+            + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+  document.getElementById('resv-date').value = str;
+  currentResvDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  updateResvDateLabel();
+}
+
+function updateResvDateLabel() {
+  const d = currentResvDate;
+  const days = ['日','月','火','水','木','金','土'];
+  document.getElementById('resv-date-label').textContent =
+    d.getFullYear() + '/' + (d.getMonth()+1) + '/' + d.getDate() + '(' + days[d.getDay()] + ')';
+}
+
+function changeResvDate(delta) {
+  currentResvDate.setDate(currentResvDate.getDate() + delta);
+  updateResvDateLabel();
+  loadReservations();
+}
+
+async function loadReservations() {
+  const d   = currentResvDate;
+  const fmt = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  try {
+    const data = await apiGet('getReservations', { date: fmt });
+    renderResvTable(data);
+  } catch(e) {
+    document.getElementById('resv-table-wrap').innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+function renderResvTable(data) {
+  const el = document.getElementById('resv-table-wrap');
+  if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">予約なし</p>'; return; }
+  el.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>時間</th><th>セラピスト</th><th>コース</th><th>お客様</th><th>金額</th><th>割引</th><th>指名</th><th>操作</th></tr></thead>
+        <tbody>
+          ${data.map(r => `
+          <tr>
+            <td>${r.date.split(' ')[1]}</td>
+            <td>${r.therapist}</td>
+            <td>${r.course}分</td>
+            <td>${r.customer}</td>
+            <td>¥${Number(r.price).toLocaleString()}</td>
+            <td>¥${Number(r.discount).toLocaleString()}</td>
+            <td>${NOMINATION_LABEL[r.nomination] || r.nomination}</td>
+            <td>
+              <button class="btn btn-danger btn-sm" onclick="deleteResv(${r.row})">削除</button>
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+async function populateTherapistSelect() {
+  if (!therapists.length) therapists = await apiGet('getTherapists');
+  const sel = document.getElementById('resv-therapist');
+  sel.innerHTML = therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+}
+
+async function checkInterval() {
+  document.getElementById('interval-warning').style.display = 'none';
+}
+
+async function submitReservation() {
+  const mins   = getCourseMinutes('resv');
+  const price  = getCoursePrice('resv');
+  const nomFee = NOMINATION_FEE[document.getElementById('resv-nomination').value] || 0;
+  const params = {
+    date:       document.getElementById('resv-date').value,
+    therapist:  document.getElementById('resv-therapist').value,
+    course:     String(mins),
+    customer:   document.getElementById('resv-customer-name').value,
+    customerNo: document.getElementById('resv-customer-no').value,
+    price:      price + nomFee,
+    discount:   Number(document.getElementById('resv-discount').value) || 0,
+    nomination: document.getElementById('resv-nomination').value
+  };
+  try {
+    showOverlay();
+    await apiGet('addReservation', params);
+    loadReservations();
+    resetResvForm();
+  } catch(e) { alert('エラー: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
+async function saveAndSendLine() {
+  showOverlay();
+  try {
+    const mins   = getCourseMinutes('resv');
+    const price  = getCoursePrice('resv');
+    const nomFee = NOMINATION_FEE[document.getElementById('resv-nomination').value] || 0;
+    const therapistName = document.getElementById('resv-therapist').value;
+    const dateVal = document.getElementById('resv-date').value;
+    const params  = {
+      date:       dateVal,
+      therapist:  therapistName,
+      course:     String(mins),
+      customer:   document.getElementById('resv-customer-name').value,
+      customerNo: document.getElementById('resv-customer-no').value,
+      price:      price + nomFee,
+      discount:   Number(document.getElementById('resv-discount').value) || 0,
+      nomination: document.getElementById('resv-nomination').value
+    };
+    await apiGet('addReservation', params);
+
+    // LINE送信
+    const t = therapists.find(t => t.name === therapistName);
+    if (t && t.userId) {
+      const dateStr = new Date(dateVal).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+      const msg = `【予約確定】\n日時: ${dateStr}\nコース: ${mins}分\nお客様: ${params.customer}\n金額: ¥${(price+nomFee).toLocaleString()}`;
+      await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+    }
+    loadReservations();
+    resetResvForm();
+  } catch(e) { alert('エラー: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
+function resetResvForm() {
+  setNowToResvDate();
+  document.getElementById('resv-course').value    = '60';
+  document.getElementById('resv-discount').value  = '0';
+  document.getElementById('resv-customer-no').value = '';
+  document.getElementById('resv-customer-name').value = '';
+  document.getElementById('resv-nomination').value = 'free';
+  document.getElementById('resv-custom-minutes').style.display = 'none';
+  calcCoursePrice();
+}
+
+async function deleteResv(row) {
+  if (!confirm('削除しますか？')) return;
+  try {
+    await apiGet('deleteReservation', { row });
+    loadReservations();
+  } catch(e) { alert('エラー: ' + e.message); }
+}
+
+// ============================================================
+// 履歴
+// ============================================================
+async function populateHistoryTherapists() {
+  if (!therapists.length) therapists = await apiGet('getTherapists');
+  const sel = document.getElementById('hist-therapist');
+  sel.innerHTML = '<option value="">全員</option>' +
+    therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+}
+
+async function loadHistory() {
+  const params = {
+    startDate:  document.getElementById('hist-start').value,
+    endDate:    document.getElementById('hist-end').value,
+    therapist:  document.getElementById('hist-therapist').value
+  };
+  try {
+    const data = await apiGet('getHistoryData', params);
+    renderHistoryTable(data);
+  } catch(e) { alert('エラー: ' + e.message); }
+}
+
+function renderHistoryTable(data) {
+  const el = document.getElementById('history-table-wrap');
+  if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">データなし</p>'; return; }
+
+  const total = data.reduce((s, r) => s + Number(r.price) - Number(r.discount), 0);
+  el.innerHTML = `
+    <p style="margin-bottom:10px;color:var(--muted)">合計 ${data.length}件 / 売上合計 ¥${total.toLocaleString()}</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>日時</th><th>セラピスト</th><th>コース</th><th>お客様</th><th>金額</th><th>割引</th><th>指名</th></tr></thead>
+        <tbody>
+          ${data.map(r => `
+          <tr>
+            <td>${r.date}</td>
+            <td>${r.therapist}</td>
+            <td>${r.course}分</td>
+            <td>${r.customer}</td>
+            <td>¥${Number(r.price).toLocaleString()}</td>
+            <td>¥${Number(r.discount).toLocaleString()}</td>
+            <td>${NOMINATION_LABEL[r.nomination] || r.nomination}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// ============================================================
+// 売上入力（セラピスト用）
+// ============================================================
+// ============================================================
+// セラピスト用予約確認
+// ============================================================
+async function initMyReservations() {
+  document.getElementById('my-resv-therapist-name').textContent = loggedInTherapist || '';
+  loadMyReservations();
+}
+
+async function loadMyReservations() {
+  const el = document.getElementById('my-reservations-list');
+  el.innerHTML = '<p style="color:var(--muted)">読み込み中...</p>';
+  try {
+    const data = await apiGet('getMyReservations', { therapist: loggedInTherapist });
+    renderMyReservations(el, data);
+  } catch(e) {
+    el.innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+function renderMyReservations(el, data) {
+  const WDAYS = ['日','月','火','水','木','金','土'];
+  if (!data || !data.length) {
+    el.innerHTML = '<div class="card"><p style="color:var(--muted)">今日以降の予約はありません</p></div>';
+    return;
+  }
+
+  // 日付でグループ化
+  const byDate = {};
+  data.forEach(r => {
+    const d = r.date.split(' ')[0];
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push(r);
+  });
+
+  el.innerHTML = Object.keys(byDate).sort().map(dateKey => {
+    const list  = byDate[dateKey];
+    const dt    = new Date(dateKey + 'T00:00:00');
+    const dow   = WDAYS[dt.getDay()];
+    const isHol = dt.getDay() === 0 || dt.getDay() === 6;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const isToday = dt.getTime() === today.getTime();
+
+    return `
+    <div style="margin-bottom:16px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:8px;padding:6px 0 6px;border-bottom:2px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="${isHol ? 'color:var(--accent)' : ''}">${dateKey}（${dow}）</span>
+        ${isToday ? '<span class="badge badge-green">今日</span>' : ''}
+        <span style="font-size:12px;font-weight:400;color:var(--muted)">${list.length}件</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${list.map(r => `
+        <div class="card" style="cursor:pointer;transition:box-shadow .15s;margin-bottom:0"
+          onclick="goToSalesFromReservation(${JSON.stringify(r).replace(/"/g,'&quot;')})"
+          onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.14)'"
+          onmouseout="this.style.boxShadow=''">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div>
+              <div style="font-size:16px;font-weight:700;margin-bottom:4px">
+                ${r.date.split(' ')[1] || ''} — ${r.course}分
+              </div>
+              <div style="font-size:13px;color:var(--muted)">
+                ${r.customer || ''}
+                ${r.nomination !== 'free' ? '<span class="badge badge-gray" style="margin-left:6px">' + (r.nomination === 'nomination' ? '指名' : '本指名') + '</span>' : ''}
+              </div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:15px;font-weight:700;color:var(--accent)">¥${Number(r.price).toLocaleString()}</div>
+              ${Number(r.discount) > 0 ? '<div style="font-size:12px;color:var(--muted)">割引 -¥' + Number(r.discount).toLocaleString() + '</div>' : ''}
+            </div>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--color-text-info)">タップして売上入力へ →</div>
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// 予約から売上入力へ遷移（情報を引き継ぐ）
+function goToSalesFromReservation(resv) {
+  // 売上入力ページを開く
+  showPage('sales-input');
+
+  // フォームに予約情報をセット
+  prefillSalesFromReservation(resv);
+}
+
+function prefillSalesFromReservation(resv) {
+  // 日時
+  const dt = resv.date.replace(' ', 'T').substring(0, 16);
+  document.getElementById('sales-date').value = dt;
+
+  // コース
+  const courseMin = String(resv.course);
+  const courseSelect = document.getElementById('sales-course');
+  const validCourses = ['60','90','120','150','180'];
+  if (validCourses.includes(courseMin)) {
+    courseSelect.value = courseMin;
+    document.getElementById('sales-custom-minutes').style.display = 'none';
+  } else {
+    courseSelect.value = 'custom';
+    document.getElementById('sales-custom-minutes').style.display = '';
+    document.getElementById('sales-custom-minutes').value = courseMin;
+  }
+  calcSalesCoursePrice();
+
+  // 指名
+  document.getElementById('sales-nomination').value = resv.nomination || 'free';
+
+  // 割引
+  document.getElementById('sales-discount').value = resv.discount || 0;
+
+  // お客様
+  document.getElementById('sales-customer-name').value = resv.customer || '';
+  document.getElementById('sales-customer-no').value   = resv.customerNo || '';
+
+  // バナー表示
+  document.getElementById('sales-prefilled-banner').style.display = '';
+
+  // オプションリセット
+  resetOptions();
+  calcSalesTotal();
+}
+
+function clearSalesPrefill() {
+  document.getElementById('sales-prefilled-banner').style.display = 'none';
+  initSalesInput();
+}
+
+// ============================================================
+// オプション計算
+// ============================================================
+const OPTIONS = {
+  costume:  { id: 'opt-costume',      price: 2000 },
+  whip:     { id: 'opt-whip',         price: 2000 },
+  gokueki:  { id: 'opt-gokueki',      price: 2000 }
+};
+
+function toggleLymph() {
+  const checked = document.getElementById('opt-lymph-check').checked;
+  document.getElementById('opt-lymph-wrap').style.display = checked ? '' : 'none';
+  calcOptionsTotal();
+}
+
+function toggleOtherOpt() {
+  const checked = document.getElementById('opt-other-check').checked;
+  document.getElementById('opt-other-wrap').style.display = checked ? '' : 'none';
+  calcOptionsTotal();
+}
+
+function calcOptionsTotal() {
+  let total = 0;
+
+  // 固定オプション
+  Object.values(OPTIONS).forEach(opt => {
+    if (document.getElementById(opt.id).checked) total += opt.price;
+  });
+
+  // ディープリンパ（スライダー × 1000円/10分）
+  const lymphCheck = document.getElementById('opt-lymph-check').checked;
+  const lymphMin   = Number(document.getElementById('opt-lymph-min').value) || 10;
+  const lymphPrice = lymphCheck ? Math.round(lymphMin / 10) * 1000 : 0;
+  document.getElementById('opt-lymph-label').textContent = lymphMin + '分';
+  document.getElementById('opt-lymph-price').textContent = lymphCheck ? '¥' + lymphPrice.toLocaleString() : '¥0';
+  total += lymphPrice;
+
+  // その他
+  const otherCheck  = document.getElementById('opt-other-check').checked;
+  const otherAmount = Number(document.getElementById('opt-other-amount').value) || 0;
+  const otherPrice  = otherCheck ? otherAmount : 0;
+  document.getElementById('opt-other-price').textContent = otherCheck ? '¥' + otherPrice.toLocaleString() : '¥0';
+  total += otherPrice;
+
+  document.getElementById('opt-total-display').textContent = '¥' + total.toLocaleString();
+  calcSalesTotal();
+  return total;
+}
+
+function getOptionsTotal() {
+  return calcOptionsTotal();
+}
+
+function getOptionsLabel() {
+  const parts = [];
+  if (document.getElementById('opt-costume').checked)    parts.push('衣装チェンジ');
+  if (document.getElementById('opt-whip').checked)       parts.push('ホイップ');
+  if (document.getElementById('opt-lymph-check').checked) {
+    const min = document.getElementById('opt-lymph-min').value;
+    parts.push('ディープリンパ' + min + '分');
+  }
+  if (document.getElementById('opt-gokueki').checked)    parts.push('極液');
+  if (document.getElementById('opt-other-check').checked) {
+    const amt = document.getElementById('opt-other-amount').value;
+    if (amt) parts.push('その他¥' + Number(amt).toLocaleString());
+  }
+  return parts.join('、');
+}
+
+function calcSalesTotal() {
+  const coursePrice = getCoursePrice('sales');
+  const nomFee  = NOMINATION_FEE[document.getElementById('sales-nomination').value] || 0;
+  const discount = Number(document.getElementById('sales-discount').value) || 0;
+  const optTotal = calcOptionsTotal();
+  const total = coursePrice + nomFee + optTotal - discount;
+  const el = document.getElementById('sales-total-display');
+  if (el) el.textContent = '¥' + Math.max(0, total).toLocaleString();
+  return total;
+}
+
+function resetOptions() {
+  document.getElementById('opt-costume').checked      = false;
+  document.getElementById('opt-whip').checked         = false;
+  document.getElementById('opt-lymph-check').checked  = false;
+  document.getElementById('opt-lymph-wrap').style.display = 'none';
+  document.getElementById('opt-lymph-min').value      = 10;
+  document.getElementById('opt-gokueki').checked       = false;
+  document.getElementById('opt-other-check').checked  = false;
+  document.getElementById('opt-other-wrap').style.display = 'none';
+  document.getElementById('opt-other-amount').value   = '';
+  calcOptionsTotal();
+}
+
+function initSalesInput() {
+  const nameEl = document.getElementById('sales-therapist-name');
+  nameEl.textContent = loggedInTherapist || '（未ログイン）';
+
+  // 日時を現在時刻にセット
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('sales-date').value =
+    now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate())
+    + 'T' + pad(now.getHours()) + ':' + pad(now.getMinutes());
+
+  calcSalesCoursePrice();
+  loadMySales();
+}
+
+async function submitSalesEntry() {
+  const mins     = getCourseMinutes('sales');
+  const price    = getCoursePrice('sales');
+  const nomFee   = NOMINATION_FEE[document.getElementById('sales-nomination').value] || 0;
+  const discount = Number(document.getElementById('sales-discount').value) || 0;
+  const optTotal = calcOptionsTotal();
+  const optLabel = getOptionsLabel();
+  const memo     = document.getElementById('sales-memo').value;
+  const fullMemo = optLabel ? (memo ? optLabel + ' / ' + memo : optLabel) : memo;
+
+  const params = {
+    therapist:  loggedInTherapist || document.getElementById('sales-therapist-name').textContent,
+    date:       document.getElementById('sales-date').value,
+    course:     String(mins),
+    customer:   document.getElementById('sales-customer-name').value,
+    customerNo: document.getElementById('sales-customer-no').value,
+    price:      price + nomFee + optTotal,
+    discount:   discount,
+    nomination: document.getElementById('sales-nomination').value,
+    memo:       fullMemo
+  };
+  try {
+    showOverlay();
+    await apiGet('saveSalesEntry', params);
+    showToast('売上を登録しました');
+    resetOptions();
+    document.getElementById('sales-prefilled-banner').style.display = 'none';
+    initSalesInput();
+    loadMySales();
+  } catch(e) { alert('エラー: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
+async function loadMySales() {
+  if (!loggedInTherapist) return;
+  try {
+    const data = await apiGet('getTherapistSales', { therapist: loggedInTherapist });
+    const el   = document.getElementById('my-sales-table');
+    if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">データなし</p>'; return; }
+    // シンプルなリスト表示
+    const headers = Object.keys(data[0]).filter(k => k !== 'row');
+    el.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${data.slice(-20).reverse().map(r => `
+            <tr>${headers.map(h => `<td>${r[h] ?? ''}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) { console.warn(e); }
+}
+
+// ============================================================
+// LINE管理
+// ============================================================
+async function loadLineUsers() {
+  try {
+    const data = await apiGet('getLineUsers');
+    const el   = document.getElementById('line-users-table');
+    if (!data.length) {
+      el.innerHTML = '<p style="color:var(--muted)">まだ登録されていません。セラピストにLINE Botを友達追加してもらい、源氏名を送ってもらってください。</p>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>源氏名</th>
+              <th>ユーザーID</th>
+              <th>登録日</th>
+              <th>インターバル</th>
+              <th>コースバック率</th>
+              <th>写メ日記メール</th>
+              <th>保存</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.map(u => {
+              const cb = u.courseBack !== '' && u.courseBack !== undefined ? u.courseBack : '';
+              const cbPct = cb !== '' ? Math.round(cb * 100) : '';
+              const registered = cb !== '';
+              return `
+              <tr id="line-row-${u.userId}">
+                <td>
+                  <strong>${u.name || '<span style="color:var(--warning)">未設定</span>'}</strong>
+                </td>
+                <td style="font-size:11px;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis">${u.userId}</td>
+                <td style="font-size:12px">${u.registeredAt ? new Date(u.registeredAt).toLocaleDateString('ja-JP') : '-'}</td>
+                <td>
+                  <input type="number" value="${u.interval ?? 30}" min="0" step="5"
+                    style="width:72px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px"
+                    id="interval-${u.userId}">
+                  <span style="font-size:12px;color:var(--muted)">分</span>
+                </td>
+                <td>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <input type="number" value="${cbPct}" min="0" max="100" step="1" placeholder="未設定"
+                      style="width:72px;padding:6px 8px;border:1.5px solid ${registered ? 'var(--border)' : 'var(--warning)'};border-radius:6px;font-size:13px"
+                      id="cb-${u.userId}">
+                    <span style="font-size:12px;color:var(--muted)">%</span>
+                    ${!registered ? '<span class="badge badge-red">要設定</span>' : ''}
+                  </div>
+                </td>
+                <td>
+                  <input type="email" value="${u.email || ''}" placeholder="メールアドレス"
+                    style="width:180px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:12px"
+                    id="email-${u.userId}">
+                </td>
+                <td>
+                  <button class="btn btn-primary btn-sm" onclick="saveLineUser('${u.userId}', '${u.name}')">保存</button>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) { alert('エラー: ' + e.message); }
+}
+
+async function saveLineUser(userId, name) {
+  const cbInput  = document.getElementById('cb-' + userId);
+  const intInput = document.getElementById('interval-' + userId);
+  const cbVal    = cbInput.value !== '' ? Number(cbInput.value) / 100 : '';
+  const intVal   = Number(intInput.value) || 30;
+
+  if (cbInput.value === '') {
+    alert('コースバック率を入力してください（例: 50）');
+    cbInput.focus();
+    return;
+  }
+  if (cbVal < 0 || cbVal > 1) {
+    alert('コースバック率は0〜100の間で入力してください');
+    return;
+  }
+  const emailInput = document.getElementById('email-' + userId);
+  const emailVal   = emailInput ? emailInput.value.trim() : '';
+  try {
+    await apiGet('updateLineUser', { userId, name, courseBack: cbVal, interval: intVal, email: emailVal });
+    therapists = await apiGet('getTherapists');
+    loadLineUsers();
+    showToast('保存しました');
+  } catch(e) { alert('保存エラー: ' + e.message); }
+}
+
+async function saveLineEntry() {
+  const params = {
+    name:        document.getElementById('line-name').value,
+    userId:      document.getElementById('line-userid').value,
+    courseBack:  Number(document.getElementById('line-courseback').value),
+    interval:    Number(document.getElementById('line-interval').value)
+  };
+  if (!params.name) { alert('名前を入力してください'); return; }
+  try {
+    await apiGet('saveManualLineEntry', params);
+    therapists = await apiGet('getTherapists');
+    loadLineUsers();
+    document.getElementById('line-name').value = '';
+    document.getElementById('line-userid').value = '';
+  } catch(e) { alert('エラー: ' + e.message); }
+}
+
+// ============================================================
+// オーバーレイ
+// ============================================================
+function showOverlay() { document.getElementById('overlay').classList.add('show'); }
+function hideOverlay()  { document.getElementById('overlay').classList.remove('show'); }
+
+// ============================================================
+// 起動
+// ============================================================
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
