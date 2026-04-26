@@ -7788,8 +7788,10 @@ async function copyResvGuideByIdx(idx) {
       '担当セラピスト：' + therapistDisp3,
       'お客様：' + (r.customer || ''),
     ];
-    if (guideText3) { copyParts3.push(''); copyParts3.push(''); copyParts3.push('ーーーーーーーーーーーーーーーー'); copyParts3.push(guideText3); }
-    const copyText3 = copyParts3.join('\n');
+    // コピーテキストはお客様名を除く（最初の3行のみ）
+    const copyBase3 = copyParts3.slice(0, 3);
+    if (guideText3) { copyBase3.push(''); copyBase3.push(''); copyBase3.push('ーーーーーーーーーーーーーーーー'); copyBase3.push(guideText3); }
+    const copyText3 = copyBase3.join('\n');
 
     window._resvGuideText = copyText3;
     const guideWrapEl3  = document.getElementById('resv-complete-guide-wrap');
@@ -8055,12 +8057,19 @@ async function showResvCompleteModal(p) {
     + '（' + WDAYS[dt.getDay()] + '） ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
   const therapistDispM = p.nomination === 'free' ? 'フリー' : p.therapistName;
 
-  // ヘッダー情報（固定表示）
+  // ヘッダー情報（固定表示）お客様名含む
   const infoLines = [
     dateDisp + '～',
     p.mins + '分コース',
     '担当セラピスト：' + therapistDispM,
     'お客様：' + (p.customerName || ''),
+  ].join('\n');
+
+  // コピー用テキストのベース（お客様名を除く）
+  const copyBase = [
+    dateDisp + '～',
+    p.mins + '分コース',
+    '担当セラピスト：' + therapistDispM,
   ].join('\n');
 
   document.getElementById('resv-complete-info').textContent = infoLines;
@@ -8081,10 +8090,10 @@ async function showResvCompleteModal(p) {
     } catch(e) { console.warn(e); }
   }
 
-  // コピー用フルテキスト
+  // コピー用フルテキスト（お客様名を除く）
   const copyText = guideTextM
-    ? infoLines + '\n\n\nーーーーーーーーーーーーーーーー\n' + guideTextM
-    : infoLines;
+    ? copyBase + '\n\n\nーーーーーーーーーーーーーーーー\n' + guideTextM
+    : copyBase;
   window._resvGuideText = copyText;
 
   // 案内文がある場合はスクロールエリアに表示
@@ -8230,8 +8239,10 @@ async function saveAndSendLine() {
         '担当セラピスト：' + therapistDisp,
         'お客様：' + (params.customer || ''),
       ];
-      if (guideText) { copyParts.push(''); copyParts.push(''); copyParts.push('ーーーーーーーーーーーーーーーー'); copyParts.push(guideText); }
-      const copyText = copyParts.join('\n');
+      // コピーテキストはお客様名を除く
+      const copyBase2 = copyParts.slice(0, 3);
+      if (guideText) { copyBase2.push(''); copyBase2.push(''); copyBase2.push('ーーーーーーーーーーーーーーーー'); copyBase2.push(guideText); }
+      const copyText = copyBase2.join('\n');
 
       // テキストをモーダルに表示（iOS Safari対応）
       window._resvGuideText = copyText;
@@ -9461,8 +9472,10 @@ async function confirmHimeApprove() {
         '担当セラピスト：' + therapistDisp4,
         'お客様：' + (approvedCustName || resvFull.customer_name || ''),
       ];
-      if (guideText4) { copyParts4.push(''); copyParts4.push(''); copyParts4.push('ーーーーーーーーーーーーーーーー'); copyParts4.push(guideText4); }
-      const copyText4 = copyParts4.join('\n');
+      // コピーテキストはお客様名を除く
+      const copyBase4 = copyParts4.slice(0, 3);
+      if (guideText4) { copyBase4.push(''); copyBase4.push(''); copyBase4.push('ーーーーーーーーーーーーーーーー'); copyBase4.push(guideText4); }
+      const copyText4 = copyBase4.join('\n');
 
       window._resvGuideText = copyText4;
       const guideWrapEl4  = document.getElementById('resv-complete-guide-wrap');
