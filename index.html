@@ -3017,7 +3017,7 @@ case 'sendReminderToOne': {
 
     // ===== トークン認証 =====
 case 'verifyTokenAction': {
-  const { data, error } = await _sb.from('tokens').select('*, therapists(store_id)').eq('token', params.token).maybeSingle();
+  const { data, error } = await _sb.from('tokens').select('*').eq('token', params.token).maybeSingle();
   if (error || !data) return { ok: false, error: 'not found' };
   if (Date.now() > Number(data.expires_at)) return { ok: false, error: 'expired' };
   // 店舗IDをURLに反映
