@@ -168,7 +168,47 @@ body.therapist-mode textarea:focus {
   box-shadow: 0 0 0 3px rgba(244,114,182,0.2);
 }
 input[type=number] { -moz-appearance: textfield; }
-input[type=range] { padding: 0; border: none; background: none; box-shadow: none; }
+input[type=range] {
+  padding: 0; border: none; background: none; box-shadow: none;
+  -webkit-appearance: none; appearance: none;
+  height: 20px; cursor: pointer;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--accent2) 0px, var(--accent2) 6px,
+    transparent 6px, transparent 10px
+  );
+  border-radius: 2px;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent2);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  margin-top: -7px;
+  cursor: pointer;
+}
+input[type=range]::-moz-range-track {
+  height: 4px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--accent2) 0px, var(--accent2) 6px,
+    transparent 6px, transparent 10px
+  );
+  border-radius: 2px;
+}
+input[type=range]::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent2);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
 select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 13px center; padding-right: 36px;
@@ -5478,12 +5518,8 @@ async function openAdminSalesFromResv(idx) {
       });
       updateCurrentExtensionPrice('sales-edit');
 
-      // オプションをリセット
-      ['se-opt-costume','se-opt-whip','se-opt-gokueki','se-opt-lymph','se-opt-extension','se-opt-other']
-        .forEach(id => { const el = document.getElementById(id); if (el) el.checked = false; });
-      document.getElementById('se-opt-lymph-wrap').style.display     = 'none';
-      document.getElementById('se-opt-extension-wrap').style.display = 'none';
-      document.getElementById('se-opt-other-wrap').style.display     = 'none';
+      // オプションを動的生成
+      renderSalesEditOptions(r.memo || '', r.option_price || 0);
 
       calcSalesEditTotal();
       hideOverlay();
@@ -5530,48 +5566,141 @@ async function openSalesEditModal(rowId, customer, datetime, course, price, disc
     updateCurrentExtensionPrice('sales-edit');
   } catch(e) {}
 
-  // オプションをmemoから復元（メモに含まれるキーワードでON/OFF）
-  const memoStr = memo || '';
-  document.getElementById('se-opt-costume').checked  = memoStr.includes('衣装チェンジ');
-  document.getElementById('se-opt-whip').checked     = memoStr.includes('ホイップ');
-  document.getElementById('se-opt-gokueki').checked  = memoStr.includes('極液');
+  // オプションを動的生成・復元
+  renderSalesEditOptions(memo || '', optionPrice || 0);
 
-  const lymphMatch = memoStr.match(/ディープリンパ(\d+)分/);
-  document.getElementById('se-opt-lymph').checked = !!lymphMatch;
-  document.getElementById('se-opt-lymph-wrap').style.display = lymphMatch ? '' : 'none';
-  if (lymphMatch) document.getElementById('se-opt-lymph-min').value = lymphMatch[1];
-
-  const extMatch = memoStr.match(/延長(\d+)分/);
-  document.getElementById('se-opt-extension').checked = !!extMatch;
-  document.getElementById('se-opt-extension-wrap').style.display = extMatch ? '' : 'none';
-  if (extMatch && EXTENSION_MIN > 0) {
-    const count = Math.round(parseInt(extMatch[1]) / EXTENSION_MIN);
-    document.getElementById('se-opt-extension-count').value = Math.max(1, count);
-  }
-
-  // その他オプション
-  const knownOpts = ['衣装チェンジ', 'ホイップ', '極液', 'ディープリンパ', '延長'];
-  const hasKnown = knownOpts.some(k => memoStr.includes(k));
-  // その他の金額 = optionPrice - 既知オプション合計（簡易復元）
-  const knownOptTotal = (memoStr.includes('衣装チェンジ') ? 2000 : 0)
-    + (memoStr.includes('ホイップ') ? 2000 : 0)
-    + (memoStr.includes('極液') ? 2000 : 0)
-    + (lymphMatch ? Math.round(parseInt(lymphMatch[1]) / 10) * 1000 : 0)
-    + (extMatch && EXTENSION_MIN > 0 ? Math.round(parseInt(extMatch[1]) / EXTENSION_MIN) * _editExtensionPrice : 0);
-  const otherAmt = Math.max(0, optionPrice - knownOptTotal);
-  document.getElementById('se-opt-other').checked = otherAmt > 0;
-  document.getElementById('se-opt-other-wrap').style.display = otherAmt > 0 ? '' : 'none';
-  document.getElementById('se-opt-other-amount').value = otherAmt > 0 ? otherAmt : '';
-
-  toggleSELymph();
-  toggleSEExtension();
   calcSalesEditTotal();
   _showModal('sales-edit-modal');
 }
 
+// 売上編集モーダルのオプションを動的生成・復元
+function renderSalesEditOptions(memoStr, optionPrice) {
+  const wrap = document.getElementById('se-opt-dynamic-list');
+  if (!wrap) return;
+  wrap.innerHTML = _editDynamicOptions.map((opt, i) => {
+    const id = 'se-dyn-opt-' + i;
+    if (opt.optionType === 'fixed') {
+      const checked = memoStr.includes(opt.name);
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
+            <span class="toggle-switch" style="width:34px;height:18px">
+              <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} onchange="calcSalesEditTotal()">
+              <span class="toggle-slider"></span>
+            </span>${opt.name}
+          </label>
+          <span style="font-size:12px;color:var(--muted)">¥${Number(opt.optionPrice).toLocaleString()}</span>
+        </div>`;
+    } else if (opt.optionType === 'time_unit') {
+      const match = memoStr.match(new RegExp(opt.name + '(\\d+)分'));
+      const checked = !!match;
+      const minVal = match ? match[1] : opt.unitMin;
+      return `
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
+              <span class="toggle-switch" style="width:34px;height:18px">
+                <input type="checkbox" id="${id}" ${checked ? 'checked' : ''} onchange="toggleSEDynOpt(${i});calcSalesEditTotal()">
+                <span class="toggle-slider"></span>
+              </span>${opt.name}
+            </label>
+            <span id="${id}-price" style="font-size:12px;color:var(--muted)">¥${checked ? (Math.round(parseInt(minVal)/opt.unitMin)*opt.unitPrice).toLocaleString() : '0'}</span>
+          </div>
+          <div id="${id}-wrap" style="display:${checked ? '' : 'none'};margin-top:6px;margin-left:42px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <input type="range" id="${id}-min" min="${opt.unitMin}" max="${opt.maxMin}" step="${opt.unitMin}" value="${minVal}" style="flex:1" oninput="calcSalesEditTotal()">
+              <span id="${id}-label" style="font-size:12px;min-width:40px;text-align:right">${minVal}分</span>
+            </div>
+          </div>
+        </div>`;
+    } else {
+      // free
+      const match = memoStr.match(new RegExp(opt.name + '[：:](\\d+)'));
+      const amt = match ? match[1] : '';
+      const hasAmt = !!amt;
+      return `
+        <div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
+              <span class="toggle-switch" style="width:34px;height:18px">
+                <input type="checkbox" id="${id}" ${hasAmt ? 'checked' : ''} onchange="toggleSEDynOpt(${i});calcSalesEditTotal()">
+                <span class="toggle-slider"></span>
+              </span>${opt.name}
+            </label>
+            <span id="${id}-price" style="font-size:12px;color:var(--muted)">¥${hasAmt ? Number(amt).toLocaleString() : '0'}</span>
+          </div>
+          <div id="${id}-wrap" style="display:${hasAmt ? '' : 'none'};margin-top:6px;margin-left:42px">
+            <input type="number" id="${id}-amount" placeholder="金額" min="0" step="100" value="${amt}"
+              oninput="calcSalesEditTotal()"
+              style="width:140px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+          </div>
+        </div>`;
+    }
+  }).join('');
+
+  // 延長オプションが_editDynamicOptionsにない場合は追加
+  const hasExtension = _editDynamicOptions.some(o => o.name === '延長' || o.optionType === 'time_unit');
+  if (!hasExtension) {
+    const extMatch = memoStr.match(/延長(\d+)分/);
+    const extChecked = !!extMatch;
+    const extCount = extMatch ? Math.max(1, Math.round(parseInt(extMatch[1]) / (EXTENSION_MIN || 30))) : 1;
+    wrap.innerHTML += `
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
+            <span class="toggle-switch" style="width:34px;height:18px">
+              <input type="checkbox" id="se-opt-extension" ${extChecked ? 'checked' : ''} onchange="toggleSEExtension();calcSalesEditTotal()">
+              <span class="toggle-slider"></span>
+            </span>延長
+          </label>
+          <span id="se-opt-extension-price" style="font-size:12px;color:var(--muted)">¥0</span>
+        </div>
+        <div id="se-opt-extension-wrap" style="display:${extChecked ? '' : 'none'};margin-top:6px;margin-left:42px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <input type="range" id="se-opt-extension-count" min="1" max="6" step="1" value="${extCount}" style="flex:1" oninput="calcSalesEditTotal()">
+            <span id="se-opt-extension-label" style="font-size:12px;min-width:40px;text-align:right">-分</span>
+          </div>
+        </div>
+      </div>`;
+  }
+  // その他
+  const knownTotal = _editDynamicOptions.reduce((s, opt, i) => {
+    const id = 'se-dyn-opt-' + i;
+    return s; // 後でcalcで計算
+  }, 0);
+  wrap.innerHTML += `
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
+          <span class="toggle-switch" style="width:34px;height:18px">
+            <input type="checkbox" id="se-opt-other" onchange="toggleSEOther();calcSalesEditTotal()">
+            <span class="toggle-slider"></span>
+          </span>その他
+        </label>
+        <span id="se-opt-other-price" style="font-size:12px;color:var(--muted)">¥0</span>
+      </div>
+      <div id="se-opt-other-wrap" style="display:none;margin-top:6px;margin-left:42px">
+        <input type="number" id="se-opt-other-amount" placeholder="金額" min="0" step="100"
+          oninput="calcSalesEditTotal()"
+          style="width:140px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+      </div>
+    </div>`;
+  const extEl = document.getElementById('se-opt-extension');
+  if (extEl) toggleSEExtension();
+}
+
+function toggleSEDynOpt(i) {
+  const id = 'se-dyn-opt-' + i;
+  const checked = document.getElementById(id)?.checked;
+  const wrap = document.getElementById(id + '-wrap');
+  if (wrap) wrap.style.display = checked ? '' : 'none';
+}
+
 function toggleSELymph() {
-  const checked = document.getElementById('se-opt-lymph').checked;
-  document.getElementById('se-opt-lymph-wrap').style.display = checked ? '' : 'none';
+  const el = document.getElementById('se-opt-lymph');
+  if (!el) return;
+  const wrap = document.getElementById('se-opt-lymph-wrap');
+  if (wrap) wrap.style.display = el.checked ? '' : 'none';
 }
 function toggleSEExtension() {
   const checked = document.getElementById('se-opt-extension').checked;
@@ -5606,8 +5735,8 @@ function calcSalesEditTotal() {
       const chk = document.getElementById(id);
       if (chk && chk.checked) { optTotal += Number(opt.optionPrice) || 0; optParts.push(opt.name); }
     } else if (opt.optionType === 'time_unit') {
-      const chk = document.getElementById(id + '-check');
-      const rng = document.getElementById(id + '-range');
+      const chk = document.getElementById(id);
+      const rng = document.getElementById(id + '-min');
       const lbl = document.getElementById(id + '-label');
       const priceEl = document.getElementById(id + '-price');
       if (chk && chk.checked && rng) {
@@ -5622,7 +5751,7 @@ function calcSalesEditTotal() {
         if (priceEl) priceEl.textContent = '¥0';
       }
     } else {
-      const chk = document.getElementById(id + '-check');
+      const chk = document.getElementById(id);
       const amt = document.getElementById(id + '-amount');
       const priceEl = document.getElementById(id + '-price');
       if (chk && chk.checked && amt) {
@@ -5635,18 +5764,25 @@ function calcSalesEditTotal() {
     }
   });
 
-  const extOn    = document.getElementById('se-opt-extension').checked;
-  const extCount = parseInt(document.getElementById('se-opt-extension-count').value) || 1;
+  const extEl    = document.getElementById('se-opt-extension');
+  const extOn    = extEl ? extEl.checked : false;
+  const extCountEl = document.getElementById('se-opt-extension-count');
+  const extCount = extCountEl ? (parseInt(extCountEl.value) || 1) : 1;
   const extMin   = EXTENSION_MIN * extCount;
   const extPrice = extOn ? extCount * _editExtensionPrice : 0;
-  document.getElementById('se-opt-extension-label').textContent = extMin + '分';
-  document.getElementById('se-opt-extension-price').textContent = extOn ? '¥' + extPrice.toLocaleString() : '¥0';
+  const extLabelEl = document.getElementById('se-opt-extension-label');
+  const extPriceEl = document.getElementById('se-opt-extension-price');
+  if (extLabelEl) extLabelEl.textContent = extMin + '分';
+  if (extPriceEl) extPriceEl.textContent = extOn ? '¥' + extPrice.toLocaleString() : '¥0';
   if (extOn) { optTotal += extPrice; optParts.push('延長' + extMin + '分'); }
 
-  const otherOn  = document.getElementById('se-opt-other').checked;
-  const otherAmt = Number(document.getElementById('se-opt-other-amount').value) || 0;
+  const otherEl  = document.getElementById('se-opt-other');
+  const otherOn  = otherEl ? otherEl.checked : false;
+  const otherAmtEl = document.getElementById('se-opt-other-amount');
+  const otherAmt = otherAmtEl ? (Number(otherAmtEl.value) || 0) : 0;
   const otherPrice = otherOn ? otherAmt : 0;
-  document.getElementById('se-opt-other-price').textContent = otherOn ? '¥' + otherPrice.toLocaleString() : '¥0';
+  const otherPriceEl = document.getElementById('se-opt-other-price');
+  if (otherPriceEl) otherPriceEl.textContent = otherOn ? '¥' + otherPrice.toLocaleString() : '¥0';
   if (otherOn && otherAmt > 0) optTotal += otherPrice;
 
   const total = coursePrice + nomFee + optTotal - discount;
@@ -10911,88 +11047,7 @@ window.addEventListener('DOMContentLoaded', init);
     <!-- オプション -->
     <div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px">
       <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px">オプション</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-            <span class="toggle-switch" style="width:34px;height:18px">
-              <input type="checkbox" id="se-opt-costume" onchange="calcSalesEditTotal()">
-              <span class="toggle-slider"></span>
-            </span>衣装チェンジ
-          </label>
-          <span style="font-size:12px;color:var(--muted)">¥2,000</span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-            <span class="toggle-switch" style="width:34px;height:18px">
-              <input type="checkbox" id="se-opt-whip" onchange="calcSalesEditTotal()">
-              <span class="toggle-slider"></span>
-            </span>ホイップ
-          </label>
-          <span style="font-size:12px;color:var(--muted)">¥2,000</span>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-            <span class="toggle-switch" style="width:34px;height:18px">
-              <input type="checkbox" id="se-opt-gokueki" onchange="calcSalesEditTotal()">
-              <span class="toggle-slider"></span>
-            </span>極液
-          </label>
-          <span style="font-size:12px;color:var(--muted)">¥2,000</span>
-        </div>
-        <!-- ディープリンパ -->
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-              <span class="toggle-switch" style="width:34px;height:18px">
-                <input type="checkbox" id="se-opt-lymph" onchange="toggleSELymph();calcSalesEditTotal()">
-                <span class="toggle-slider"></span>
-              </span>ディープリンパ
-            </label>
-            <span id="se-opt-lymph-price" style="font-size:12px;color:var(--muted)">¥0</span>
-          </div>
-          <div id="se-opt-lymph-wrap" style="display:none;margin-top:6px;margin-left:42px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <input type="range" id="se-opt-lymph-min" min="10" max="100" step="10" value="10" style="flex:1" oninput="calcSalesEditTotal()">
-              <span id="se-opt-lymph-label" style="font-size:12px;min-width:40px;text-align:right">10分</span>
-            </div>
-          </div>
-        </div>
-        <!-- 延長 -->
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-              <span class="toggle-switch" style="width:34px;height:18px">
-                <input type="checkbox" id="se-opt-extension" onchange="toggleSEExtension();calcSalesEditTotal()">
-                <span class="toggle-slider"></span>
-              </span>延長
-            </label>
-            <span id="se-opt-extension-price" style="font-size:12px;color:var(--muted)">¥0</span>
-          </div>
-          <div id="se-opt-extension-wrap" style="display:none;margin-top:6px;margin-left:42px">
-            <div style="display:flex;align-items:center;gap:8px">
-              <input type="range" id="se-opt-extension-count" min="1" max="6" step="1" value="1" style="flex:1" oninput="calcSalesEditTotal()">
-              <span id="se-opt-extension-label" style="font-size:12px;min-width:40px;text-align:right">-分</span>
-            </div>
-          </div>
-        </div>
-        <!-- その他 -->
-        <div>
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin:0">
-              <span class="toggle-switch" style="width:34px;height:18px">
-                <input type="checkbox" id="se-opt-other" onchange="toggleSEOther();calcSalesEditTotal()">
-                <span class="toggle-slider"></span>
-              </span>その他
-            </label>
-            <span id="se-opt-other-price" style="font-size:12px;color:var(--muted)">¥0</span>
-          </div>
-          <div id="se-opt-other-wrap" style="display:none;margin-top:6px;margin-left:42px">
-            <input type="number" id="se-opt-other-amount" placeholder="金額" min="0" step="100"
-              oninput="calcSalesEditTotal()"
-              style="width:140px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
-          </div>
-        </div>
-      </div>
+      <div id="se-opt-dynamic-list" style="display:flex;flex-direction:column;gap:8px"></div>
     </div>
 
     <!-- 合計プレビュー -->
