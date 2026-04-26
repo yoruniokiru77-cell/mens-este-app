@@ -3244,7 +3244,7 @@ const CACHE_TTL = {
 function apiGetCached(action, params = {}) {
   const ttl = CACHE_TTL[action];
   if (!ttl) return apiGet(action, params);
-  const key = action + JSON.stringify(params);
+  const key = action + '_' + STORE_ID + JSON.stringify(params);
   const cached = _cache[key];
   if (cached && Date.now() - cached.at < ttl) return Promise.resolve(cached.data);
   return apiGet(action, params).then(data => {
