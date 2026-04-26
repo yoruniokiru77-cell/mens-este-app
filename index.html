@@ -5464,7 +5464,7 @@ async function openAdminSalesFromResv(idx) {
       // コースマスタ読み込み
       const courseSel = document.getElementById('sales-edit-course');
       courseSel.innerHTML = '<option value="">選択してください</option>';
-      _editSalesMenus = await apiGetCached('getMenuMaster', {});
+      _editSalesMenus = await apiGet('getMenuMaster');
       _editDynamicOptions = _editSalesMenus.filter(m => m.type === 'option' && m.active !== false);
       _editSalesMenus.filter(m => m.type === 'course').forEach(m => {
         const opt = document.createElement('option');
@@ -5515,7 +5515,7 @@ async function openSalesEditModal(rowId, customer, datetime, course, price, disc
   const courseSel = document.getElementById('sales-edit-course');
   courseSel.innerHTML = '<option value="">選択してください</option>';
   try {
-    _editSalesMenus = await apiGetCached('getMenuMaster', {});
+    _editSalesMenus = await apiGet('getMenuMaster');
     _editDynamicOptions = _editSalesMenus.filter(m => m.type === 'option' && m.active !== false);
     _editSalesMenus.filter(m => m.type === 'course').forEach(m => {
       const opt = document.createElement('option');
@@ -6336,7 +6336,7 @@ function switchMasterTab(tab) {
 
 // コース選択肢をメニューマスタから動的生成
 async function populateCourseSelect() {
-  const menus = await apiGetCached('getMenuMaster', {});
+  const menus = await apiGet('getMenuMaster');
   const active = (menus || []).filter(m => m.active !== false && m.type === 'course' && m.col3 && m.col4);
 
   // resv-course と sales-course を更新
@@ -9069,7 +9069,7 @@ async function openHimeModal() {
 
   // コースをマスタから生成
   try {
-    const menus = await apiGetCached('getMenuMaster', {});
+    const menus = await apiGet('getMenuMaster');
     const courses = (menus || []).filter(m => m.type === 'course' && m.active !== false);
     const sel = document.getElementById('hime-course');
     sel.innerHTML = courses.map(m => `<option value="${m.col3}" data-price="${m.col4}">${m.name}</option>`).join('')
