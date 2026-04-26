@@ -3021,7 +3021,10 @@ case 'verifyTokenAction': {
   if (error || !data) return { ok: false, error: 'not found' };
   if (Date.now() > Number(data.expires_at)) return { ok: false, error: 'expired' };
   // 店舗IDをURLに反映
-  if (data.store_id) STORE_ID = data.store_id;
+  if (data.store_id) {
+    STORE_ID = data.store_id;
+    clearCache(); // 店舗切り替え時にキャッシュを全クリア
+  }
   return { ok: true, name: data.therapist_name };
 }
 
@@ -8669,7 +8672,7 @@ let _dynamicOptions = []; // { id, name, optionType, price, unitPrice, unitMin, 
 
 // オプション入力欄をマスタから動的生成
 async function populateOptionInputs() {
-  const menus = await apiGetCached('getMenuMaster', {});
+  const menus = await apiGet('getMenuMaster');  // キャッシュを使わず常に最新を取得
   const opts  = (menus || []).filter(m => m.type === 'option' && m.active !== false);
   _dynamicOptions = opts;
   const wrap = document.getElementById('opt-dynamic-list');
