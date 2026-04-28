@@ -2714,6 +2714,7 @@ case 'sendReminderToOne': {
 
       const customer = custData ? {
         found: true,
+        id: custData.id,
         customerNo: String(custData.customer_no || ''),
         name: custData.name||'', tel: custData.tel||'',
         status: custData.status||'normal',
@@ -2732,11 +2733,18 @@ case 'sendReminderToOne': {
     }
 
     case 'saveCustomerMemo': {
-      const no = String(params.customerNo || '');
-      const { data: cust } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
+      // customer_id（UUID）を優先使用。なければcustomer_noで検索（後方互換）
+      let customerId = params.customerId || null;
+      if (!customerId) {
+        const no = String(params.customerNo || '');
+        if (no) {
+          const { data: cust } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
+          customerId = cust ? cust.id : null;
+        }
+      }
       const therapistId = await _getTherapistId(params.therapist);
       const { error } = await _sb.from('customer_memos').insert({
-        customer_id:    cust ? cust.id : null,
+        customer_id:    customerId,
         therapist_id:   therapistId,
         therapist_name: params.therapist,
         memo:           params.memo
@@ -6108,9 +6116,15 @@ async function openCustomerDetail(customerNo, tel, customerName) {
     }
 
     document.getElementById('customer-memo-input').dataset.customerNo = resolvedNo;
+    document.getElementById('customer-memo-input').dataset.customerId = '';
     // 管理者モードは全セラピストの履歴、セラピストモードは自分のみ
     const histTherapist = isAdminMode ? '' : loggedInTherapist;
     const res = await apiGet('getCustomerHistory', { customerNo: resolvedNo, tel: resolvedTel, therapist: histTherapist });
+
+    // customer_idをUUIDで保存（メモ保存時に使用）
+    if (res.customer && res.customer.id) {
+      document.getElementById('customer-memo-input').dataset.customerId = res.customer.id;
+    }
 
     // 顧客情報
     const c = res.customer;
@@ -6169,11 +6183,12 @@ function closeCustomerModal() {
 
 async function saveCustomerMemo() {
   const input      = document.getElementById('customer-memo-input');
-  const customerNo = input.dataset.customerNo;
+  const customerId = input.dataset.customerId || '';
+  const customerNo = input.dataset.customerNo || '';
   const memo       = input.value.trim();
   if (!memo) { alert('メモを入力してください'); return; }
   try {
-    await apiGet('saveCustomerMemo', { customerNo, therapist: loggedInTherapist, memo });
+    await apiGet('saveCustomerMemo', { customerId, customerNo, therapist: loggedInTherapist, memo });
     input.value = '';
     showToast('メモを保存しました');
     // 再読み込み
