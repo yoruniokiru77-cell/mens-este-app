@@ -8253,19 +8253,13 @@ async function copyResvGuide() {
 }
 
 async function saveAndSendLine() {
-  // 二重送信防止
-  const lineBtn = document.querySelector('[onclick="saveAndSendLine()"]');
-  if (lineBtn) {
-    if (lineBtn.disabled) return;
-    lineBtn.disabled = true;
-  }
   const customerNo2 = document.getElementById('resv-customer-no').value;
   const therapistName2 = document.getElementById('resv-therapist').value;
   if (customerNo2) {
     try {
       const check = await apiGet('checkCustomerStatus', { customerNo: customerNo2, therapist: therapistName2 });
-      if (!check.allowed) { if (lineBtn) lineBtn.disabled = false; alert('⛔ 予約できません\n' + check.reason); return; }
-      if (check.warning) { if (!confirm('⚠ ' + check.reason + '\n予約を続けますか？')) { if (lineBtn) lineBtn.disabled = false; return; } }
+      if (!check.allowed) { alert('⛔ 予約できません\n' + check.reason); return; }
+      if (check.warning) { if (!confirm('⚠ ' + check.reason + '\n予約を続けますか？')) return; }
     } catch(e) { console.warn(e); }
   }
   showOverlay();
@@ -8311,10 +8305,7 @@ async function saveAndSendLine() {
     const resvResult = await apiGet('addReservation', params);
     const isNewCustomer = resvResult && resvResult.isNewCustomer;
 
-    // LINE送信（therapistsキャッシュが空の場合は再取得）
-    if (!therapists || therapists.length === 0) {
-      try { therapists = await apiGet('getTherapists'); } catch(e) { console.warn('セラピスト再取得失敗:', e); }
-    }
+    // LINE送信
     const t = therapists.find(t => t.name === therapistName);
     if (t && t.userId) {
       const dateStr = new Date(dateVal).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
@@ -8417,12 +8408,7 @@ async function saveAndSendLine() {
     loadReservations();
     resetResvForm();
   } catch(e) { alert('エラー: ' + e.message); }
-  finally {
-    hideOverlay();
-    // 二重送信防止ロックを解除
-    const lineBtnF = document.querySelector('[onclick="saveAndSendLine()"]');
-    if (lineBtnF) lineBtnF.disabled = false;
-  }
+  finally { hideOverlay(); }
 }
 
 function resetResvForm() {
@@ -9688,9 +9674,13 @@ async function _sendHimeApproveLineToTherapist(resvId) {
   try {
     const { data: resv } = await _sb.from('reservations').select('*').eq('id', resvId).single();
     if (!resv) return;
-    if (!therapists.length) therapists = await apiGet('getTherapists');
-    const t = therapists.find(th => th.name === resv.therapist_name);
-    if (!t || !t.userId) return;
+    // DBから直接line_user_idを取得（キャッシュに依存しない）
+    const { data: th } = await _sb.from('therapists').select('line_user_id')
+      .eq('store_id', STORE_ID).eq('name', resv.therapist_name).eq('active', true).maybeSingle();
+    if (!th || !th.line_user_id) {
+      showBanner('⚠ ' + resv.therapist_name + ' さんのLINEが未登録のため承認通知を送れませんでした', 'error');
+      return;
+    }
 
     const dt  = new Date(resv.date);
     const pad = n => String(n).padStart(2,'0');
@@ -9705,17 +9695,22 @@ async function _sendHimeApproveLineToTherapist(resvId) {
       + '指名: ' + (nomLabel[resv.nomination] || resv.nomination || '指名') + '\n'
       + 'お客様: ' + resv.customer_name + '様\n'
       + (resv.memo ? 'メモ: ' + resv.memo : '');
-    await apiGet('sendLineMessage', { userId: t.userId, message: msg });
-  } catch(e) { console.warn('承認LINE通知エラー:', e); }
+    await apiGet('sendLineMessage', { userId: th.line_user_id, message: msg });
+    showBanner('✅ 姫予約承認通知をLINE送信しました', 'success');
+  } catch(e) {
+    console.warn('承認LINE通知エラー:', e);
+    showBanner('❌ 姫予約承認LINE通知エラー：' + (e.message || '送信に失敗しました'), 'error');
+  }
 }
 
 async function _sendHimeRejectLineToTherapist(resvId) {
   try {
     const { data: resv } = await _sb.from('reservations').select('*').eq('id', resvId).single();
     if (!resv) return;
-    if (!therapists.length) therapists = await apiGet('getTherapists');
-    const t = therapists.find(th => th.name === resv.therapist_name);
-    if (!t || !t.userId) return;
+    // DBから直接line_user_idを取得（キャッシュに依存しない）
+    const { data: th } = await _sb.from('therapists').select('line_user_id')
+      .eq('store_id', STORE_ID).eq('name', resv.therapist_name).eq('active', true).maybeSingle();
+    if (!th || !th.line_user_id) return;
 
     const dt  = new Date(resv.date);
     const pad = n => String(n).padStart(2,'0');
@@ -9726,7 +9721,7 @@ async function _sendHimeRejectLineToTherapist(resvId) {
       + '申請した姫予約が却下されました。\n\n'
       + '日時: ' + dateStr + '\n'
       + 'お客様: ' + resv.customer_name + '様';
-    await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+    await apiGet('sendLineMessage', { userId: th.line_user_id, message: msg });
   } catch(e) { console.warn('却下LINE通知エラー:', e); }
 }
 
