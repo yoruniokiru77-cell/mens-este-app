@@ -8253,13 +8253,19 @@ async function copyResvGuide() {
 }
 
 async function saveAndSendLine() {
+  // 二重送信防止
+  const lineBtn = document.querySelector('[onclick="saveAndSendLine()"]');
+  if (lineBtn) {
+    if (lineBtn.disabled) return;
+    lineBtn.disabled = true;
+  }
   const customerNo2 = document.getElementById('resv-customer-no').value;
   const therapistName2 = document.getElementById('resv-therapist').value;
   if (customerNo2) {
     try {
       const check = await apiGet('checkCustomerStatus', { customerNo: customerNo2, therapist: therapistName2 });
-      if (!check.allowed) { alert('⛔ 予約できません\n' + check.reason); return; }
-      if (check.warning) { if (!confirm('⚠ ' + check.reason + '\n予約を続けますか？')) return; }
+      if (!check.allowed) { if (lineBtn) lineBtn.disabled = false; alert('⛔ 予約できません\n' + check.reason); return; }
+      if (check.warning) { if (!confirm('⚠ ' + check.reason + '\n予約を続けますか？')) { if (lineBtn) lineBtn.disabled = false; return; } }
     } catch(e) { console.warn(e); }
   }
   showOverlay();
@@ -8411,7 +8417,12 @@ async function saveAndSendLine() {
     loadReservations();
     resetResvForm();
   } catch(e) { alert('エラー: ' + e.message); }
-  finally { hideOverlay(); }
+  finally {
+    hideOverlay();
+    // 二重送信防止ロックを解除
+    const lineBtnF = document.querySelector('[onclick="saveAndSendLine()"]');
+    if (lineBtnF) lineBtnF.disabled = false;
+  }
 }
 
 function resetResvForm() {
