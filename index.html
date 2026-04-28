@@ -9398,21 +9398,34 @@ async function openHimeApproveModal(resvId) {
     'お客様: <strong>' + resv.customer_name + '様</strong>　' + (resv.customer_tel || '-') + '<br>' +
     (resv.memo ? 'メモ: ' + resv.memo + '<br>' : '');
 
-  // 顧客登録済みかチェック
+  // 顧客名・電話番号を取得して編集フォームに表示（既存・新規共通）
   const newCustWrap = document.getElementById('hime-approve-new-customer');
+  const labelEl     = document.getElementById('hime-approve-new-label');
+  newCustWrap.style.display = '';
+
+  let displayName = resv.customer_name || '';
+  let displayTel  = resv.customer_tel  || '';
+
   if (resv.customer_tel) {
-    const existing = await apiGet('getCustomer', { tel: resv.customer_tel });
-    if (!existing.found) {
-      // 未登録 → 名前入力フォームを表示
-      newCustWrap.style.display = '';
-      document.getElementById('hime-approve-name').value = resv.customer_name || '';
-      document.getElementById('hime-approve-tel').value  = resv.customer_tel  || '';
-    } else {
-      newCustWrap.style.display = 'none';
-    }
-  } else {
-    newCustWrap.style.display = 'none';
+    try {
+      const existing = await apiGet('getCustomer', { tel: resv.customer_tel });
+      if (existing.found) {
+        // 既存顧客 → DBの正式名・電話番号を優先表示
+        displayName = existing.name || resv.customer_name || '';
+        displayTel  = existing.tel  || resv.customer_tel  || '';
+        if (labelEl) labelEl.innerHTML = '👤 お客様名を確認・変更（既存顧客）';
+      } else {
+        // 未登録 → 申請時の名前をそのまま使用
+        if (labelEl) labelEl.innerHTML = '👤 新規顧客として登録';
+      }
+    } catch(e) { console.warn('顧客取得エラー:', e); }
+  } else if (resv.customer_name) {
+    // 電話番号なし・名前のみの場合
+    if (labelEl) labelEl.innerHTML = '👤 お客様名を確認・変更';
   }
+
+  document.getElementById('hime-approve-name').value = displayName;
+  document.getElementById('hime-approve-tel').value  = displayTel;
 
   _showModal('hime-approve-modal');
 }
@@ -9428,28 +9441,33 @@ async function confirmHimeApprove() {
   try {
     showOverlay();
 
-    // 新規顧客フォームが表示されている場合は先に登録
-    const newCustWrap = document.getElementById('hime-approve-new-customer');
+    // フォームの名前・電話番号を取得（常に表示されている）
+    const name = document.getElementById('hime-approve-name').value.trim();
+    const tel  = document.getElementById('hime-approve-tel').value.trim();
+    if (!name) { hideOverlay(); alert('お客様名を入力してください'); return; }
+
     let customerNo = '';
-    let approvedCustName = '';
-    let approvedCustTel  = '';
-    if (newCustWrap.style.display !== 'none') {
-      const name = document.getElementById('hime-approve-name').value.trim();
-      const tel  = document.getElementById('hime-approve-tel').value.trim();
-      if (!name) { hideOverlay(); alert('お客様名を入力してください'); return; }
-      const res = await apiGet('saveCustomer', { name, tel });
-      customerNo = res.customerNo || '';
-      approvedCustName = name;
-      approvedCustTel  = tel;
-      showToast('新規顧客を登録しました（' + name + '様）');
-    } else {
-      // 既存顧客のcustomer_noを取得
-      const { data: resv } = await _sb.from('reservations').select('customer_tel,customer_no').eq('id', resvId).single();
-      if (resv && resv.customer_tel) {
-        const existing = await apiGet('getCustomer', { tel: resv.customer_tel });
-        if (existing.found) customerNo = existing.customerNo;
+    let approvedCustName = name;
+    let approvedCustTel  = tel;
+
+    // 電話番号で顧客を検索
+    if (tel) {
+      const existing = await apiGet('getCustomer', { tel });
+      if (existing.found) {
+        // 既存顧客 → customer_no取得・名前を更新
+        customerNo = existing.customerNo || '';
+        // 名前が変更されている場合はDBを更新
+        if (existing.name !== name) {
+          try {
+            await apiGet('updateCustomer', { customerNo, name });
+          } catch(e) { console.warn('顧客名更新エラー:', e); }
+        }
+      } else {
+        // 未登録 → 新規登録
+        const res = await apiGet('saveCustomer', { name, tel });
+        customerNo = res.customerNo || '';
+        showToast('新規顧客を登録しました（' + name + '様）');
       }
-      if (!customerNo && resv) customerNo = resv.customer_no || '';
     }
 
     // 予約データを取得
@@ -10922,9 +10940,9 @@ window.addEventListener('DOMContentLoaded', init);
     </div>
     <div id="hime-approve-info" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.9"></div>
 
-    <!-- 未登録顧客の場合のみ表示 -->
+    <!-- 顧客名編集（既存・新規共通） -->
     <div id="hime-approve-new-customer" style="display:none;background:#fdf4ff;border:1.5px solid #f0abfc;border-radius:10px;padding:14px;margin-bottom:14px">
-      <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px">👤 新規顧客として登録</div>
+      <div id="hime-approve-new-label" style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px">👤 新規顧客として登録</div>
       <div class="form-group" style="margin-bottom:10px">
         <label>お客様名</label>
         <input type="text" id="hime-approve-name" placeholder="例: サカバ">
