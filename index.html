@@ -5946,18 +5946,34 @@ function lookupCustomerByTel(tel) {
 }
 
 function _fillCustomerFields(res) {
-  document.getElementById('resv-customer-no').value       = res.customerNo || '';
-  document.getElementById('resv-customer-tel').value      = res.tel        || '';
-  // 名前・電話番号は空の場合のみ補完（入力中の値を上書きしない）
+  document.getElementById('resv-customer-no').value  = res.customerNo || '';
+  document.getElementById('resv-customer-tel').value = res.tel        || '';
+
   const nameEl = document.getElementById('resv-customer-name');
   const telEl  = document.getElementById('resv-customer-tel-full');
-  if (!nameEl.value) nameEl.value = res.name || '';
-  if (!telEl.value)  telEl.value  = res.tel  || '';
+
+  // 電話番号は空の場合のみ補完
+  if (!telEl.value) telEl.value = res.tel || '';
+
+  // お客様名：マスタと異なる場合はポップアップで確認してから上書き
+  const masterName = res.name || '';
+  const inputName  = nameEl.value.trim();
+  if (masterName) {
+    if (!inputName) {
+      // 名前未入力 → そのまま補完
+      nameEl.value = masterName;
+    } else if (inputName !== masterName) {
+      // 名前が違う → ポップアップで通知してから上書き
+      alert('顧客マスタに登録されているお客様名「' + masterName + '」に変更します。');
+      nameEl.value = masterName;
+    }
+    // 同じ名前の場合は何もしない
+  }
 
   const infoEl = document.getElementById('resv-customer-info');
-  infoEl.textContent    = '✓ 顧客データを取得できました';
-  infoEl.style.color    = 'var(--success)';
-  infoEl.style.display  = '';
+  infoEl.textContent   = '✓ 顧客データを取得できました';
+  infoEl.style.color   = 'var(--success)';
+  infoEl.style.display = '';
   checkAutoHonshimei(res.customerNo, null);
   setTimeout(() => { infoEl.style.display = 'none'; }, 4000);
 }
