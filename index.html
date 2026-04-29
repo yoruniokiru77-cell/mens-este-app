@@ -3059,12 +3059,7 @@ case 'sendReminderToOne': {
 case 'verifyTokenAction': {
   const { data, error } = await _sb.from('tokens').select('*').eq('token', params.token).maybeSingle();
   if (error || !data) return { ok: false, error: 'not found' };
-  // expires_atはISO文字列（Edge Functions）またはミリ秒数（旧GAS）の両方に対応
-  const expVal = data.expires_at;
-  const expMs = typeof expVal === 'string' && expVal.includes('-')
-    ? new Date(expVal).getTime()  // ISO文字列
-    : Number(expVal);             // ミリ秒数
-  if (Date.now() > expMs) return { ok: false, error: 'expired' };
+  if (Date.now() > Number(data.expires_at)) return { ok: false, error: 'expired' };
   // 店舗IDをURLに反映
   if (data.store_id) {
     STORE_ID = data.store_id;
