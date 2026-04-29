@@ -2527,7 +2527,7 @@ async function apiGet(action, params = {}) {
 
 case 'sendShiftReminder': {
   try {
-    const res = await fetch('https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push?action=sendShiftReminder&storeId=' + encodeURIComponent(STORE_ID));
+    const res = await fetch('https://script.google.com/macros/s/AKfycbyM8dYbt1b4Iyt3llHsZBq8_VdILU_jc1VrFerV7rWjaeqnSdVhZi7RMdHOMHc_2UNKTQ/exec?action=sendShiftReminder&storeId=' + encodeURIComponent(STORE_ID));
     const text = await res.text();
     try { return JSON.parse(text); } catch(e) { return { ok: true }; }
   } catch(e) { return { ok: true }; }
@@ -2535,7 +2535,7 @@ case 'sendShiftReminder': {
 
 case 'sendReminderToOne': {
   try {
-    const res = await fetch('https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push?action=sendReminderToOne&userId=' + encodeURIComponent(params.userId) + '&name=' + encodeURIComponent(params.name || '') + '&storeId=' + encodeURIComponent(STORE_ID));
+    const res = await fetch('https://script.google.com/macros/s/AKfycbyM8dYbt1b4Iyt3llHsZBq8_VdILU_jc1VrFerV7rWjaeqnSdVhZi7RMdHOMHc_2UNKTQ/exec?action=sendReminderToOne&userId=' + encodeURIComponent(params.userId) + '&name=' + encodeURIComponent(params.name || '') + '&storeId=' + encodeURIComponent(STORE_ID));
     const text = await res.text();
     try { return JSON.parse(text); } catch(e) { return { ok: true }; }
   } catch(e) { return { ok: true }; }
@@ -3059,7 +3059,12 @@ case 'sendReminderToOne': {
 case 'verifyTokenAction': {
   const { data, error } = await _sb.from('tokens').select('*').eq('token', params.token).maybeSingle();
   if (error || !data) return { ok: false, error: 'not found' };
-  if (Date.now() > Number(data.expires_at)) return { ok: false, error: 'expired' };
+  // expires_atはISO文字列（Edge Functions）またはミリ秒数（旧GAS）の両方に対応
+  const expVal = data.expires_at;
+  const expMs = typeof expVal === 'string' && expVal.includes('-')
+    ? new Date(expVal).getTime()  // ISO文字列
+    : Number(expVal);             // ミリ秒数
+  if (Date.now() > expMs) return { ok: false, error: 'expired' };
   // 店舗IDをURLに反映
   if (data.store_id) {
     STORE_ID = data.store_id;
@@ -3182,7 +3187,7 @@ case 'verifyTokenAction': {
 
 case 'sendLineMessage': {
   try {
-    const res = await fetch('https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push?action=sendLineMessage&userId=' + encodeURIComponent(params.userId) + '&message=' + encodeURIComponent(params.message || ''));
+    const res = await fetch('https://script.google.com/macros/s/AKfycbyM8dYbt1b4Iyt3llHsZBq8_VdILU_jc1VrFerV7rWjaeqnSdVhZi7RMdHOMHc_2UNKTQ/exec?action=sendLineMessage&userId=' + encodeURIComponent(params.userId) + '&message=' + encodeURIComponent(params.message || ''));
     const text = await res.text();
     try { return JSON.parse(text); } catch(e) { return { ok: true }; }
   } catch(e) {
@@ -5946,34 +5951,18 @@ function lookupCustomerByTel(tel) {
 }
 
 function _fillCustomerFields(res) {
-  document.getElementById('resv-customer-no').value  = res.customerNo || '';
-  document.getElementById('resv-customer-tel').value = res.tel        || '';
-
+  document.getElementById('resv-customer-no').value       = res.customerNo || '';
+  document.getElementById('resv-customer-tel').value      = res.tel        || '';
+  // 名前・電話番号は空の場合のみ補完（入力中の値を上書きしない）
   const nameEl = document.getElementById('resv-customer-name');
   const telEl  = document.getElementById('resv-customer-tel-full');
-
-  // 電話番号は空の場合のみ補完
-  if (!telEl.value) telEl.value = res.tel || '';
-
-  // お客様名：マスタと異なる場合はポップアップで確認してから上書き
-  const masterName = res.name || '';
-  const inputName  = nameEl.value.trim();
-  if (masterName) {
-    if (!inputName) {
-      // 名前未入力 → そのまま補完
-      nameEl.value = masterName;
-    } else if (inputName !== masterName) {
-      // 名前が違う → ポップアップで通知してから上書き
-      alert('顧客マスタに登録されているお客様名「' + masterName + '」に変更します。');
-      nameEl.value = masterName;
-    }
-    // 同じ名前の場合は何もしない
-  }
+  if (!nameEl.value) nameEl.value = res.name || '';
+  if (!telEl.value)  telEl.value  = res.tel  || '';
 
   const infoEl = document.getElementById('resv-customer-info');
-  infoEl.textContent   = '✓ 顧客データを取得できました';
-  infoEl.style.color   = 'var(--success)';
-  infoEl.style.display = '';
+  infoEl.textContent    = '✓ 顧客データを取得できました';
+  infoEl.style.color    = 'var(--success)';
+  infoEl.style.display  = '';
   checkAutoHonshimei(res.customerNo, null);
   setTimeout(() => { infoEl.style.display = 'none'; }, 4000);
 }
@@ -9414,34 +9403,21 @@ async function openHimeApproveModal(resvId) {
     'お客様: <strong>' + resv.customer_name + '様</strong>　' + (resv.customer_tel || '-') + '<br>' +
     (resv.memo ? 'メモ: ' + resv.memo + '<br>' : '');
 
-  // 顧客名・電話番号を取得して編集フォームに表示（既存・新規共通）
+  // 顧客登録済みかチェック
   const newCustWrap = document.getElementById('hime-approve-new-customer');
-  const labelEl     = document.getElementById('hime-approve-new-label');
-  newCustWrap.style.display = '';
-
-  let displayName = resv.customer_name || '';
-  let displayTel  = resv.customer_tel  || '';
-
   if (resv.customer_tel) {
-    try {
-      const existing = await apiGet('getCustomer', { tel: resv.customer_tel });
-      if (existing.found) {
-        // 既存顧客 → DBの正式名・電話番号を優先表示
-        displayName = existing.name || resv.customer_name || '';
-        displayTel  = existing.tel  || resv.customer_tel  || '';
-        if (labelEl) labelEl.innerHTML = '👤 お客様名を確認・変更（既存顧客）';
-      } else {
-        // 未登録 → 申請時の名前をそのまま使用
-        if (labelEl) labelEl.innerHTML = '👤 新規顧客として登録';
-      }
-    } catch(e) { console.warn('顧客取得エラー:', e); }
-  } else if (resv.customer_name) {
-    // 電話番号なし・名前のみの場合
-    if (labelEl) labelEl.innerHTML = '👤 お客様名を確認・変更';
+    const existing = await apiGet('getCustomer', { tel: resv.customer_tel });
+    if (!existing.found) {
+      // 未登録 → 名前入力フォームを表示
+      newCustWrap.style.display = '';
+      document.getElementById('hime-approve-name').value = resv.customer_name || '';
+      document.getElementById('hime-approve-tel').value  = resv.customer_tel  || '';
+    } else {
+      newCustWrap.style.display = 'none';
+    }
+  } else {
+    newCustWrap.style.display = 'none';
   }
-
-  document.getElementById('hime-approve-name').value = displayName;
-  document.getElementById('hime-approve-tel').value  = displayTel;
 
   _showModal('hime-approve-modal');
 }
@@ -9457,33 +9433,28 @@ async function confirmHimeApprove() {
   try {
     showOverlay();
 
-    // フォームの名前・電話番号を取得（常に表示されている）
-    const name = document.getElementById('hime-approve-name').value.trim();
-    const tel  = document.getElementById('hime-approve-tel').value.trim();
-    if (!name) { hideOverlay(); alert('お客様名を入力してください'); return; }
-
+    // 新規顧客フォームが表示されている場合は先に登録
+    const newCustWrap = document.getElementById('hime-approve-new-customer');
     let customerNo = '';
-    let approvedCustName = name;
-    let approvedCustTel  = tel;
-
-    // 電話番号で顧客を検索
-    if (tel) {
-      const existing = await apiGet('getCustomer', { tel });
-      if (existing.found) {
-        // 既存顧客 → customer_no取得・名前を更新
-        customerNo = existing.customerNo || '';
-        // 名前が変更されている場合はDBを更新
-        if (existing.name !== name) {
-          try {
-            await apiGet('updateCustomer', { customerNo, name });
-          } catch(e) { console.warn('顧客名更新エラー:', e); }
-        }
-      } else {
-        // 未登録 → 新規登録
-        const res = await apiGet('saveCustomer', { name, tel });
-        customerNo = res.customerNo || '';
-        showToast('新規顧客を登録しました（' + name + '様）');
+    let approvedCustName = '';
+    let approvedCustTel  = '';
+    if (newCustWrap.style.display !== 'none') {
+      const name = document.getElementById('hime-approve-name').value.trim();
+      const tel  = document.getElementById('hime-approve-tel').value.trim();
+      if (!name) { hideOverlay(); alert('お客様名を入力してください'); return; }
+      const res = await apiGet('saveCustomer', { name, tel });
+      customerNo = res.customerNo || '';
+      approvedCustName = name;
+      approvedCustTel  = tel;
+      showToast('新規顧客を登録しました（' + name + '様）');
+    } else {
+      // 既存顧客のcustomer_noを取得
+      const { data: resv } = await _sb.from('reservations').select('customer_tel,customer_no').eq('id', resvId).single();
+      if (resv && resv.customer_tel) {
+        const existing = await apiGet('getCustomer', { tel: resv.customer_tel });
+        if (existing.found) customerNo = existing.customerNo;
       }
+      if (!customerNo && resv) customerNo = resv.customer_no || '';
     }
 
     // 予約データを取得
@@ -9708,13 +9679,9 @@ async function _sendHimeApproveLineToTherapist(resvId) {
   try {
     const { data: resv } = await _sb.from('reservations').select('*').eq('id', resvId).single();
     if (!resv) return;
-    // DBから直接line_user_idを取得（キャッシュに依存しない）
-    const { data: th } = await _sb.from('therapists').select('line_user_id')
-      .eq('store_id', STORE_ID).eq('name', resv.therapist_name).eq('active', true).maybeSingle();
-    if (!th || !th.line_user_id) {
-      showBanner('⚠ ' + resv.therapist_name + ' さんのLINEが未登録のため承認通知を送れませんでした', 'error');
-      return;
-    }
+    if (!therapists.length) therapists = await apiGet('getTherapists');
+    const t = therapists.find(th => th.name === resv.therapist_name);
+    if (!t || !t.userId) return;
 
     const dt  = new Date(resv.date);
     const pad = n => String(n).padStart(2,'0');
@@ -9729,22 +9696,17 @@ async function _sendHimeApproveLineToTherapist(resvId) {
       + '指名: ' + (nomLabel[resv.nomination] || resv.nomination || '指名') + '\n'
       + 'お客様: ' + resv.customer_name + '様\n'
       + (resv.memo ? 'メモ: ' + resv.memo : '');
-    await apiGet('sendLineMessage', { userId: th.line_user_id, message: msg });
-    showBanner('✅ 姫予約承認通知をLINE送信しました', 'success');
-  } catch(e) {
-    console.warn('承認LINE通知エラー:', e);
-    showBanner('❌ 姫予約承認LINE通知エラー：' + (e.message || '送信に失敗しました'), 'error');
-  }
+    await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+  } catch(e) { console.warn('承認LINE通知エラー:', e); }
 }
 
 async function _sendHimeRejectLineToTherapist(resvId) {
   try {
     const { data: resv } = await _sb.from('reservations').select('*').eq('id', resvId).single();
     if (!resv) return;
-    // DBから直接line_user_idを取得（キャッシュに依存しない）
-    const { data: th } = await _sb.from('therapists').select('line_user_id')
-      .eq('store_id', STORE_ID).eq('name', resv.therapist_name).eq('active', true).maybeSingle();
-    if (!th || !th.line_user_id) return;
+    if (!therapists.length) therapists = await apiGet('getTherapists');
+    const t = therapists.find(th => th.name === resv.therapist_name);
+    if (!t || !t.userId) return;
 
     const dt  = new Date(resv.date);
     const pad = n => String(n).padStart(2,'0');
@@ -9755,7 +9717,7 @@ async function _sendHimeRejectLineToTherapist(resvId) {
       + '申請した姫予約が却下されました。\n\n'
       + '日時: ' + dateStr + '\n'
       + 'お客様: ' + resv.customer_name + '様';
-    await apiGet('sendLineMessage', { userId: th.line_user_id, message: msg });
+    await apiGet('sendLineMessage', { userId: t.userId, message: msg });
   } catch(e) { console.warn('却下LINE通知エラー:', e); }
 }
 
@@ -10956,9 +10918,9 @@ window.addEventListener('DOMContentLoaded', init);
     </div>
     <div id="hime-approve-info" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.9"></div>
 
-    <!-- 顧客名編集（既存・新規共通） -->
+    <!-- 未登録顧客の場合のみ表示 -->
     <div id="hime-approve-new-customer" style="display:none;background:#fdf4ff;border:1.5px solid #f0abfc;border-radius:10px;padding:14px;margin-bottom:14px">
-      <div id="hime-approve-new-label" style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px">👤 新規顧客として登録</div>
+      <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px">👤 新規顧客として登録</div>
       <div class="form-group" style="margin-bottom:10px">
         <label>お客様名</label>
         <input type="text" id="hime-approve-name" placeholder="例: サカバ">
