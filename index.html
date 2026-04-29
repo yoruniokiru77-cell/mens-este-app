@@ -2527,7 +2527,7 @@ async function apiGet(action, params = {}) {
 
 case 'sendShiftReminder': {
   try {
-    const res = await fetch('https://script.google.com/macros/s/AKfycbyM8dYbt1b4Iyt3llHsZBq8_VdILU_jc1VrFerV7rWjaeqnSdVhZi7RMdHOMHc_2UNKTQ/exec?action=sendShiftReminder&storeId=' + encodeURIComponent(STORE_ID));
+    const res = await fetch('https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push?action=sendShiftReminder&storeId=' + encodeURIComponent(STORE_ID));
     const text = await res.text();
     try { return JSON.parse(text); } catch(e) { return { ok: true }; }
   } catch(e) { return { ok: true }; }
@@ -2535,7 +2535,7 @@ case 'sendShiftReminder': {
 
 case 'sendReminderToOne': {
   try {
-    const res = await fetch('https://script.google.com/macros/s/AKfycbyM8dYbt1b4Iyt3llHsZBq8_VdILU_jc1VrFerV7rWjaeqnSdVhZi7RMdHOMHc_2UNKTQ/exec?action=sendReminderToOne&userId=' + encodeURIComponent(params.userId) + '&name=' + encodeURIComponent(params.name || '') + '&storeId=' + encodeURIComponent(STORE_ID));
+    const res = await fetch('https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push?action=sendReminderToOne&userId=' + encodeURIComponent(params.userId) + '&name=' + encodeURIComponent(params.name || '') + '&storeId=' + encodeURIComponent(STORE_ID));
     const text = await res.text();
     try { return JSON.parse(text); } catch(e) { return { ok: true }; }
   } catch(e) { return { ok: true }; }
@@ -3182,7 +3182,7 @@ case 'verifyTokenAction': {
 
 case 'sendLineMessage': {
   try {
-    const res = await fetch('https://script.google.com/macros/s/AKfycbyM8dYbt1b4Iyt3llHsZBq8_VdILU_jc1VrFerV7rWjaeqnSdVhZi7RMdHOMHc_2UNKTQ/exec?action=sendLineMessage&userId=' + encodeURIComponent(params.userId) + '&message=' + encodeURIComponent(params.message || ''));
+    const res = await fetch('https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push?action=sendLineMessage&userId=' + encodeURIComponent(params.userId) + '&message=' + encodeURIComponent(params.message || ''));
     const text = await res.text();
     try { return JSON.parse(text); } catch(e) { return { ok: true }; }
   } catch(e) {
