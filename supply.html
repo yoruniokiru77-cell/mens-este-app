@@ -653,7 +653,7 @@ async function loadSupplyMaster() {
               <td>${s.active ? '✓' : '-'}</td>
               <td style="display:flex;gap:6px">
                 <button class="btn btn-secondary btn-sm" onclick="openSupplyForm('${s.id}','${s.name}','${s.unit||''}','${s.room_name||''}','${(s.purchase_url||'').replace(/'/g,'&#39;')}',${s.delivery_days ?? 1})">編集</button>
-                <button class="btn btn-danger btn-sm" onclick="toggleSupplyActive('${s.id}',${s.active})">${s.active ? '無効化' : '有効化'}</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteSupply('${s.id}', '${s.name}')">削除</button>
               </td>
             </tr>`).join('')}
           </tbody>
@@ -723,13 +723,14 @@ async function saveSupply() {
   }
 }
 
-async function toggleSupplyActive(id, currentActive) {
-  if (!confirm(currentActive ? '無効化しますか？' : '有効化しますか？')) return;
+async function deleteSupply(id, name) {
+  if (!confirm('「' + name + '」を削除しますか？\nこの操作は取り消せません。')) return;
   try {
-    await _sb.from('supplies').update({ active: !currentActive }).eq('id', id);
-    showToast('更新しました');
+    const { error } = await _sb.from('supplies').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+    showToast('削除しました');
     loadSupplyMaster();
-  } catch(e) { alert('エラー: ' + e.message); }
+  } catch(e) { alert('削除エラー: ' + e.message); }
 }
 
 // ============================================================
