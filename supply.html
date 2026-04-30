@@ -593,8 +593,8 @@ function openStatusModal(id, name, currentStatus, requester, room, qty, supplyDe
 
   // 次に遷移できるステータス
   const transitions = {
-    requested: ['ordered', 'purchased'],
-    ordered:   ['purchased'],
+    requested: ['ordered', 'purchased', 'received'],
+    ordered:   ['purchased', 'received'],
     purchased: ['received'],
     received:  ['stocked'],
     stocked:   []
