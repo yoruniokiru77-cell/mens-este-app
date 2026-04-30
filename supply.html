@@ -66,6 +66,8 @@ select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.o
 
 /* テーブル */
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.store-tab-btn { padding: 8px 16px; font-size: 13px; font-weight: 500; border: none; border-bottom: 3px solid transparent; background: none; color: var(--muted); cursor: pointer; }
+.store-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
 th { background: var(--bg); padding: 10px 8px; text-align: left; font-weight: 600; font-size: 11px; color: var(--muted); border-bottom: 1.5px solid var(--border); white-space: nowrap; }
 td { padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
@@ -162,6 +164,12 @@ tr:last-child td { border-bottom: none; }
     <!-- セラピスト用（非表示） -->
     <button onclick="showPage('supply-list')" id="tab-supply-list" style="display:none">📦 備品一覧</button>
     <button onclick="showPage('my-orders')" id="tab-my-orders" style="display:none">📋 申請履歴</button>
+  </div>
+  <!-- 店舗タブ（管理者のみ表示） -->
+  <div id="store-tabs" style="display:none;background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;display:none;gap:0">
+    <button class="store-tab-btn active" data-store="11111111-0000-0000-0000-000000000001" onclick="switchAdminStore('11111111-0000-0000-0000-000000000001',this)">HerRoom</button>
+    <button class="store-tab-btn" data-store="22222222-0000-0000-0000-000000000002" onclick="switchAdminStore('22222222-0000-0000-0000-000000000002',this)">Reメンズエステ</button>
+    <button class="store-tab-btn" data-store="33333333-0000-0000-0000-000000000003" onclick="switchAdminStore('33333333-0000-0000-0000-000000000003',this)">Premium</button>
   </div>
 
   <!-- ===== 管理者: 発注管理 ===== -->
@@ -293,7 +301,7 @@ tr:last-child td { border-bottom: none; }
 // ============================================================
 const SUPABASE_URL  = 'https://rzfprialypdoyklfwpyg.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6ZnByaWFseXBkb3lrbGZ3cHlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMzQ3NzAsImV4cCI6MjA5MDkxMDc3MH0.qRzCmMetxe3tvSlIJx-HX_SHRG5Evos4D9KOEnarNfE';
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbyM8dYbt1b4Iyt3llHsZBq8_VdILU_jc1VrFerV7rWjaeqnSdVhZi7RMdHOMHc_2UNKTQ/exec';
+const GAS_URL = 'https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push';
 
 const DEFAULT_STORE_ID = '11111111-0000-0000-0000-000000000001';
 const STORE_CODE_MAP = {
@@ -379,6 +387,13 @@ async function initAdmin() {
   document.getElementById('tab-supply-list').style.display = 'none';
   document.getElementById('tab-my-orders').style.display = 'none';
   document.getElementById('bottom-nav').classList.remove('show');
+
+  // 店舗タブを表示・アクティブ設定
+  document.getElementById('store-tabs').style.display = 'flex';
+  document.getElementById('store-name-badge').style.display = 'none';
+  document.querySelectorAll('.store-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.store === STORE_ID);
+  });
 
   showPage('admin-orders');
 }
@@ -487,6 +502,22 @@ async function sendTherapistLine(therapistName, message) {
     if (!th || !th.line_user_id) return;
     await fetch(GAS_URL + '?action=sendLineMessage&userId=' + encodeURIComponent(th.line_user_id) + '&message=' + encodeURIComponent(message));
   } catch(e) { console.warn('LINE通知エラー:', e); }
+}
+
+// ============================================================
+// 管理者: 店舗タブ切り替え
+// ============================================================
+function switchAdminStore(storeId, btnEl) {
+  STORE_ID = storeId;
+  document.querySelectorAll('.store-tab-btn').forEach(btn => btn.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
+  // 現在表示中のページを再読み込み
+  const activePage = document.querySelector('.page.active');
+  if (activePage) {
+    const pageId = activePage.id.replace('page-', '');
+    if (pageId === 'admin-orders')  loadAdminOrders();
+    if (pageId === 'supply-master') loadSupplyMaster();
+  }
 }
 
 // ============================================================
