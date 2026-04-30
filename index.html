@@ -6061,7 +6061,7 @@ async function saveCustomerIfNeeded() {
 }
 
 // 顧客詳細モーダルを開く（customerNo または tel で検索）
-async function openCustomerDetail(customerNo, tel, customerName, therapistName) {
+async function openCustomerDetail(customerNo, tel, customerName) {
   const searchTel  = tel || '';
   const searchNo   = customerNo || '';
   const searchName = customerName || '';
@@ -6076,9 +6076,6 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
   document.getElementById('customer-modal-info').innerHTML = '読み込み中...';
   document.getElementById('customer-modal-memos').innerHTML = '';
   document.getElementById('customer-modal-history').innerHTML = '';
-  document.getElementById('customer-modal-ng').innerHTML = '';
-  // 担当セラピスト名をモーダルに保存（NG追加用）
-  document.getElementById('customer-modal').dataset.therapistName = therapistName || '';
   document.getElementById('customer-memo-input').value = '';
   const histTitleEl = document.querySelector('#customer-modal .hist-title');
   if (histTitleEl) histTitleEl.textContent = isAdminMode ? '📅 来店履歴（全セラピスト）' : '📅 来店履歴（自分への来店）';
@@ -6161,43 +6158,6 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
           </tr>`).join('')}
         </tbody></table></div>`;
     }
-    // NG管理セクション（管理者のみ）
-    if (isAdminMode && c.found) {
-      const ngEl = document.getElementById('customer-modal-ng');
-      const currentNGs = c.ngTherapists || [];
-      const tName = document.getElementById('customer-modal').dataset.therapistName || '';
-      const isAlreadyNG = tName && currentNGs.includes(tName);
-
-      // 現在のNG一覧とNG追加ボタンを表示
-      let ngHtml = `<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
-        <div style="font-size:13px;font-weight:600;margin-bottom:8px">🚫 NGセラピスト</div>`;
-
-      if (currentNGs.length) {
-        ngHtml += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">` +
-          currentNGs.map(ng => `
-            <span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:20px;font-size:12px;display:flex;align-items:center;gap:6px">
-              ${ng}
-              <button onclick="removeCustomerModalNG('${ng.replace(/'/g,"\'")}', '${(tel||'').replace(/'/g,"\'")}', '${(customerNo||'').replace(/'/g,"\'")}', '${(c.name||'').replace(/'/g,"\'")}', '${(c.tel||'').replace(/'/g,"\'")}' )" style="border:none;background:none;cursor:pointer;color:#b91c1c;font-size:14px;padding:0;line-height:1">×</button>
-            </span>`).join('') +
-          `</div>`;
-      } else {
-        ngHtml += `<p style="font-size:12px;color:var(--muted);margin-bottom:10px">NGなし</p>`;
-      }
-
-      if (tName) {
-        if (isAlreadyNG) {
-          ngHtml += `<p style="font-size:12px;color:#b91c1c">✓ ${tName} はすでにNGに設定されています</p>`;
-        } else {
-          ngHtml += `<button class="btn btn-danger btn-sm" onclick="addCustomerModalNG('${tName.replace(/'/g,"\'")}', '${(tel||'').replace(/'/g,"\'")}', '${(customerNo||'').replace(/'/g,"\'")}', '${(c.name||'').replace(/'/g,"\'")}', '${(c.tel||'').replace(/'/g,"\'")}')">
-            🚫 ${tName} をNGに追加
-          </button>`;
-        }
-      }
-
-      ngHtml += `</div>`;
-      ngEl.innerHTML = ngHtml;
-    }
-
   } catch(e) {
     document.getElementById('customer-modal-info').innerHTML = '<span style="color:red">エラー: ' + e.message + '</span>';
   }
@@ -6205,54 +6165,6 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
 
 function closeCustomerModal() {
   document.getElementById('customer-modal').style.display = 'none';
-}
-
-// 顧客詳細モーダルからNGセラピストを追加
-async function addCustomerModalNG(therapistName, tel, customerNo, custName, custTel) {
-  if (!confirm(`${therapistName} をNGに追加しますか？`)) return;
-  try {
-    // 顧客マスタを検索（telまたはcustomerNoで）
-    const lookupTel = custTel || tel;
-    let custData = null;
-    if (lookupTel) {
-      const { data } = await _sb.from('customers').select('id,ng_therapists').eq('store_id', STORE_ID).eq('tel', lookupTel).maybeSingle();
-      custData = data;
-    }
-    if (!custData && customerNo) {
-      const { data } = await _sb.from('customers').select('id,ng_therapists').eq('store_id', STORE_ID).eq('customer_no', customerNo).maybeSingle();
-      custData = data;
-    }
-    if (!custData) { alert('顧客マスタが見つかりません'); return; }
-    const newNGs = [...new Set([...(custData.ng_therapists || []), therapistName])];
-    await _sb.from('customers').update({ ng_therapists: newNGs }).eq('id', custData.id);
-    showToast(`${therapistName} をNGに追加しました`);
-    // モーダルを再描画
-    const modalEl = document.getElementById('customer-modal');
-    await openCustomerDetail(customerNo, tel, custName, modalEl.dataset.therapistName);
-  } catch(e) { alert('エラー: ' + e.message); }
-}
-
-// 顧客詳細モーダルからNGセラピストを削除
-async function removeCustomerModalNG(therapistName, tel, customerNo, custName, custTel) {
-  if (!confirm(`${therapistName} のNGを解除しますか？`)) return;
-  try {
-    const lookupTel = custTel || tel;
-    let custData = null;
-    if (lookupTel) {
-      const { data } = await _sb.from('customers').select('id,ng_therapists').eq('store_id', STORE_ID).eq('tel', lookupTel).maybeSingle();
-      custData = data;
-    }
-    if (!custData && customerNo) {
-      const { data } = await _sb.from('customers').select('id,ng_therapists').eq('store_id', STORE_ID).eq('customer_no', customerNo).maybeSingle();
-      custData = data;
-    }
-    if (!custData) { alert('顧客マスタが見つかりません'); return; }
-    const newNGs = (custData.ng_therapists || []).filter(n => n !== therapistName);
-    await _sb.from('customers').update({ ng_therapists: newNGs }).eq('id', custData.id);
-    showToast(`${therapistName} のNGを解除しました`);
-    const modalEl = document.getElementById('customer-modal');
-    await openCustomerDetail(customerNo, tel, custName, modalEl.dataset.therapistName);
-  } catch(e) { alert('エラー: ' + e.message); }
 }
 
 async function saveCustomerMemo() {
@@ -7673,7 +7585,7 @@ function renderResvByTherapist(data, el) {
                            <button class="btn btn-danger btn-sm" onclick="cancelResvLine(${globalIdx})">キャンセル</button>
                            <button class="btn btn-secondary btn-sm" onclick="copyResvGuideByIdx(${globalIdx})">📋 案内</button>
                            <button class="btn btn-secondary btn-sm" onclick="openAdminSalesFromResv(${globalIdx})">💴 売上入力</button>`}
-                      ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" data-therapist="${r.therapist||''}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name,this.dataset.therapist)">👤 顧客詳細</button>` : ''}
+                      ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name)">👤 顧客詳細</button>` : ''}
                     </div>
                   </div>`;
                 }).join('')}
@@ -7723,7 +7635,7 @@ function renderResvTable(data) {
                  <button class="btn btn-danger btn-sm" onclick="cancelResvLine(${i})">キャンセル</button>
                  <button class="btn btn-secondary btn-sm" onclick="copyResvGuideByIdx(${i})">📋 案内</button>
                  <button class="btn btn-secondary btn-sm" onclick="openAdminSalesFromResv(${i})">💴 売上入力</button>`}
-            ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" data-therapist="${r.therapist||''}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name,this.dataset.therapist)">👤 顧客詳細</button>` : ''}
+            ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name)">👤 顧客詳細</button>` : ''}
           </div>
         </div>`;
       }).join('')}
@@ -7794,9 +7706,19 @@ async function openEditResv(idx) {
   }
 
   const sel = document.getElementById('resv-therapist');
-  // セラピストリストを最新化してから値をセット
-  await populateTherapistSelect();
-  if (sel) sel.value = r.therapist;
+  // セラピストリストを最新化・変更前のセラピスト名を保持して渡す
+  await populateTherapistSelect(r.therapist);
+  // 変更前のセラピストが選択肢にない場合は先頭に追加
+  if (r.therapist && sel) {
+    const exists = Array.from(sel.options).some(o => o.value === r.therapist);
+    if (!exists) {
+      const opt = document.createElement('option');
+      opt.value = r.therapist;
+      opt.textContent = r.therapist + '（現在の担当）';
+      sel.insertBefore(opt, sel.firstChild);
+      sel.value = r.therapist;
+    }
+  }
 
   const saveBtn = document.querySelector('[onclick="submitReservation()"]');
   if (saveBtn) {
@@ -8076,9 +7998,11 @@ async function cancelResvLine(idx) {
   finally { hideOverlay(); }
 }
 
-async function populateTherapistSelect() {
+async function populateTherapistSelect(keepValue) {
   if (!therapists.length) therapists = await apiGet('getTherapists');
   const sel = document.getElementById('resv-therapist');
+  // keepValueが指定されている場合は選択値を保持
+  const savedValue = keepValue || sel.value || null;
 
   const dateVal = document.getElementById('resv-date').value;
   if (dateVal) {
@@ -8124,12 +8048,23 @@ async function populateTherapistSelect() {
           .filter(t => onDuty.includes(t.name))
           .map(t => `<option value="${t.name}">${t.name}</option>`).join('');
         sel.title = '※ 選択した日時にシフトが確定しているセラピストのみ表示';
+        // 保存値を復元（選択肢になければ先頭）
+        if (savedValue) {
+          const exists = Array.from(sel.options).some(o => o.value === savedValue);
+          if (exists) { sel.value = savedValue; }
+        }
         return;
       } else {
         // シフトなし → 全員表示（注記付き）
         sel.innerHTML = `<option value="" disabled style="color:var(--muted)">── シフト確定なし（全員表示）──</option>` +
           therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
-        sel.selectedIndex = 1;
+        // 保存値を復元
+        if (savedValue) {
+          const exists = Array.from(sel.options).some(o => o.value === savedValue);
+          if (exists) { sel.value = savedValue; } else { sel.selectedIndex = 1; }
+        } else {
+          sel.selectedIndex = 1;
+        }
         sel.title = '※ 選択した日時にシフトが確定しているセラピストがいません';
         return;
       }
@@ -10708,8 +10643,6 @@ window.addEventListener('DOMContentLoaded', init);
       <div class="memo-title" style="font-size:13px;font-weight:600;margin-bottom:8px">📝 自分のメモ</div>
       <div id="customer-modal-memos"></div>
     </div>
-    <!-- NG管理（管理者のみ） -->
-    <div id="customer-modal-ng"></div>
     <!-- 来店履歴 -->
     <div>
       <div class="hist-title" style="font-size:13px;font-weight:600;margin-bottom:8px">📅 来店履歴</div>
