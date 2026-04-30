@@ -6061,7 +6061,7 @@ async function saveCustomerIfNeeded() {
 }
 
 // 顧客詳細モーダルを開く（customerNo または tel で検索）
-async function openCustomerDetail(customerNo, tel, customerName) {
+async function openCustomerDetail(customerNo, tel, customerName, therapistName) {
   const searchTel  = tel || '';
   const searchNo   = customerNo || '';
   const searchName = customerName || '';
@@ -6076,6 +6076,8 @@ async function openCustomerDetail(customerNo, tel, customerName) {
   document.getElementById('customer-modal-info').innerHTML = '読み込み中...';
   document.getElementById('customer-modal-memos').innerHTML = '';
   document.getElementById('customer-modal-history').innerHTML = '';
+  document.getElementById('customer-modal-ng') && (document.getElementById('customer-modal-ng').innerHTML = '');
+  document.getElementById('customer-modal').dataset.therapistName = therapistName || '';
   document.getElementById('customer-memo-input').value = '';
   const histTitleEl = document.querySelector('#customer-modal .hist-title');
   if (histTitleEl) histTitleEl.textContent = isAdminMode ? '📅 来店履歴（全セラピスト）' : '📅 来店履歴（自分への来店）';
@@ -6158,6 +6160,43 @@ async function openCustomerDetail(customerNo, tel, customerName) {
           </tr>`).join('')}
         </tbody></table></div>`;
     }
+    // NG管理セクション（管理者のみ）
+    if (isAdminMode && c && c.found) {
+      const ngEl = document.getElementById('customer-modal-ng');
+      if (ngEl) {
+        const currentNGs = c.ngTherapists || [];
+        const tName = document.getElementById('customer-modal').dataset.therapistName || '';
+        const isAlreadyNG = tName && currentNGs.includes(tName);
+        const custTel = c.tel || tel || '';
+        const custNo  = c.customerNo || customerNo || '';
+        const custName = c.name || customerName || '';
+
+        let ngHtml = `<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">🚫 NGセラピスト</div>`;
+
+        if (currentNGs.length) {
+          ngHtml += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">` +
+            currentNGs.map(ng => `
+              <span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:20px;font-size:12px;display:flex;align-items:center;gap:6px">
+                ${ng}
+                <button onclick="removeCustomerModalNG('${ng.replace(/'/g,"\'")}','${custTel.replace(/'/g,"\'")}','${custNo.replace(/'/g,"\'")}','${custName.replace(/'/g,"\'")}','${therapistName||''}'.replace(/'/g,"\\'")" style="border:none;background:none;cursor:pointer;color:#b91c1c;font-size:14px;padding:0;line-height:1">×</button>
+              </span>`).join('') + `</div>`;
+        } else {
+          ngHtml += `<p style="font-size:12px;color:var(--muted);margin-bottom:10px">NGなし</p>`;
+        }
+
+        if (tName) {
+          if (isAlreadyNG) {
+            ngHtml += `<p style="font-size:12px;color:#b91c1c">✓ ${tName} はすでにNGに設定されています</p>`;
+          } else {
+            ngHtml += `<button class="btn btn-danger btn-sm" onclick="addCustomerModalNG('${tName.replace(/'/g,"\'")}','${custTel.replace(/'/g,"\'")}','${custNo.replace(/'/g,"\'")}','${custName.replace(/'/g,"\'")}')">🚫 ${tName} をNGに追加</button>`;
+          }
+        }
+        ngHtml += `</div>`;
+        ngEl.innerHTML = ngHtml;
+      }
+    }
+
   } catch(e) {
     document.getElementById('customer-modal-info').innerHTML = '<span style="color:red">エラー: ' + e.message + '</span>';
   }
@@ -6165,6 +6204,48 @@ async function openCustomerDetail(customerNo, tel, customerName) {
 
 function closeCustomerModal() {
   document.getElementById('customer-modal').style.display = 'none';
+}
+
+async function addCustomerModalNG(therapistName, tel, customerNo, custName) {
+  if (!confirm(therapistName + ' をNGに追加しますか？')) return;
+  try {
+    let custData = null;
+    if (tel) {
+      const { data } = await _sb.from('customers').select('id,ng_therapists').eq('store_id', STORE_ID).eq('tel', tel).maybeSingle();
+      custData = data;
+    }
+    if (!custData && customerNo) {
+      const { data } = await _sb.from('customers').select('id,ng_therapists').eq('store_id', STORE_ID).eq('customer_no', customerNo).maybeSingle();
+      custData = data;
+    }
+    if (!custData) { alert('顧客マスタが見つかりません'); return; }
+    const newNGs = [...new Set([...(custData.ng_therapists || []), therapistName])];
+    await _sb.from('customers').update({ ng_therapists: newNGs }).eq('id', custData.id);
+    showToast(therapistName + ' をNGに追加しました');
+    const tName = document.getElementById('customer-modal').dataset.therapistName || '';
+    await openCustomerDetail(customerNo, tel, custName, tName);
+  } catch(e) { alert('エラー: ' + e.message); }
+}
+
+async function removeCustomerModalNG(therapistName, tel, customerNo, custName, currentTherapist) {
+  if (!confirm(therapistName + ' のNGを解除しますか？')) return;
+  try {
+    let custData = null;
+    if (tel) {
+      const { data } = await _sb.from('customers').select('id,ng_therapists').eq('store_id', STORE_ID).eq('tel', tel).maybeSingle();
+      custData = data;
+    }
+    if (!custData && customerNo) {
+      const { data } = await _sb.from('customers').select('id,ng_therapists').eq('store_id', STORE_ID).eq('customer_no', customerNo).maybeSingle();
+      custData = data;
+    }
+    if (!custData) { alert('顧客マスタが見つかりません'); return; }
+    const newNGs = (custData.ng_therapists || []).filter(n => n !== therapistName);
+    await _sb.from('customers').update({ ng_therapists: newNGs }).eq('id', custData.id);
+    showToast(therapistName + ' のNGを解除しました');
+    const tName = document.getElementById('customer-modal').dataset.therapistName || '';
+    await openCustomerDetail(customerNo, tel, custName, tName);
+  } catch(e) { alert('エラー: ' + e.message); }
 }
 
 async function saveCustomerMemo() {
@@ -7585,7 +7666,7 @@ function renderResvByTherapist(data, el) {
                            <button class="btn btn-danger btn-sm" onclick="cancelResvLine(${globalIdx})">キャンセル</button>
                            <button class="btn btn-secondary btn-sm" onclick="copyResvGuideByIdx(${globalIdx})">📋 案内</button>
                            <button class="btn btn-secondary btn-sm" onclick="openAdminSalesFromResv(${globalIdx})">💴 売上入力</button>`}
-                      ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name)">👤 顧客詳細</button>` : ''}
+                      ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" data-therapist="${r.therapist||''}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name,this.dataset.therapist)">👤 顧客詳細</button>` : ''}
                     </div>
                   </div>`;
                 }).join('')}
@@ -7635,7 +7716,7 @@ function renderResvTable(data) {
                  <button class="btn btn-danger btn-sm" onclick="cancelResvLine(${i})">キャンセル</button>
                  <button class="btn btn-secondary btn-sm" onclick="copyResvGuideByIdx(${i})">📋 案内</button>
                  <button class="btn btn-secondary btn-sm" onclick="openAdminSalesFromResv(${i})">💴 売上入力</button>`}
-            ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name)">👤 顧客詳細</button>` : ''}
+            ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" data-therapist="${r.therapist||''}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name,this.dataset.therapist)">👤 顧客詳細</button>` : ''}
           </div>
         </div>`;
       }).join('')}
@@ -10643,6 +10724,8 @@ window.addEventListener('DOMContentLoaded', init);
       <div class="memo-title" style="font-size:13px;font-weight:600;margin-bottom:8px">📝 自分のメモ</div>
       <div id="customer-modal-memos"></div>
     </div>
+    <!-- NG管理（管理者のみ） -->
+    <div id="customer-modal-ng"></div>
     <!-- 来店履歴 -->
     <div>
       <div class="hist-title" style="font-size:13px;font-weight:600;margin-bottom:8px">📅 来店履歴</div>
