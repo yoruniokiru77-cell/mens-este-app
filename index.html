@@ -575,6 +575,9 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <button class="btn btn-secondary btn-sm" onclick="loadReservations()">更新</button>
     </div>
 
+    <!-- 承認待ち姫予約バナー（日付をまたいだ分） -->
+    <div id="hime-pending-banner" style="margin-bottom:8px"></div>
+
     <div id="resv-list" class="card" style="margin-bottom:16px">
       <div id="resv-table-wrap">読み込み中...</div>
     </div>
@@ -3075,7 +3078,16 @@ case 'verifyTokenAction': {
         .eq('store_id', STORE_ID).eq('therapist_name', params.therapist)
         .gte('date', today.toISOString()).neq('status', 'cancelled').order('date');
       if (error) throw new Error(error.message);
-      const rows = data || [];
+
+      // 未承認の姫予約は日付に関係なく追加取得（月またぎ対応）
+      const { data: pendingHime } = await _sb.from('reservations').select('*')
+        .eq('store_id', STORE_ID).eq('therapist_name', params.therapist)
+        .eq('is_hime', true).eq('is_hime_approved', false)
+        .neq('status', 'cancelled').lt('date', today.toISOString());
+      // 重複を除いてマージ
+      const existingIds = new Set((data || []).map(r => r.id));
+      const extraHime = (pendingHime || []).filter(r => !existingIds.has(r.id));
+      const rows = [...extraHime, ...(data || [])].sort((a,b) => new Date(a.date) - new Date(b.date));
 
       // customer_no と customer_tel を収集
       const custNos  = [...new Set(rows.map(r => r.customer_no).filter(Boolean))];
@@ -7601,6 +7613,40 @@ async function loadReservations() {
   const fmt = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
   try {
     const data = await apiGet('getReservations', { date: fmt });
+
+    // 承認待ち姫予約を日付に関係なく別途取得（今日以外の分）
+    const todayIso = new Date(); todayIso.setHours(0,0,0,0);
+    const { data: pendingHimeAll } = await _sb.from('reservations').select('*')
+      .eq('store_id', STORE_ID)
+      .eq('is_hime', true).eq('is_hime_approved', false)
+      .neq('status', 'cancelled');
+
+    // 今日分と重複しないものを抽出
+    const existingIds = new Set(data.map(r => r.id));
+    const extraPending = (pendingHimeAll || []).filter(r => !existingIds.has(r.id));
+
+    // 承認待ちバナーを表示
+    const bannerEl = document.getElementById('hime-pending-banner');
+    if (extraPending.length > 0) {
+      const bannerHtml = extraPending.map(r => {
+        const dt = new Date(r.date);
+        const m = dt.getMonth()+1, day = dt.getDate();
+        const h = dt.getHours(), min = dt.getMinutes();
+        const dateLabel = m + '/' + day + ' ' + String(h).padStart(2,'0') + ':' + String(min).padStart(2,'0');
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#fff7ed;border:1.5px solid #fb923c;border-radius:8px;margin-bottom:6px">
+          <div>
+            <span style="font-size:12px;font-weight:700;color:#ea580c">🌸 承認待ち姫予約</span>
+            <span style="font-size:12px;margin-left:8px;color:#7c3aed">${dateLabel}</span>
+            <span style="font-size:12px;margin-left:8px">${r.therapist_name} / ${r.customer_name}様</span>
+          </div>
+          <button class="btn btn-sm" style="background:#ea580c;color:#fff;font-size:11px;padding:3px 10px" onclick="openHimeApproveModal('${r.id}')">承認</button>
+        </div>`;
+      }).join('');
+      if (bannerEl) bannerEl.innerHTML = bannerHtml;
+    } else {
+      if (bannerEl) bannerEl.innerHTML = '';
+    }
+
     renderResvTable(data);
   } catch(e) {
     document.getElementById('resv-table-wrap').innerHTML = '<p style="color:red">' + e.message + '</p>';
