@@ -4384,8 +4384,225 @@ async function submitShiftChangeRequest() {
   }
 }
 
+// ============================================================
+// シフト変更申請承認モーダル
+// ============================================================
+let _scaRow = null, _scaTherapist = '';
+
+async function openShiftChangeApproveModal(row, therapist, curStart, curEnd, reqStart, reqEnd, reqMemo, date, roomName, roomId) {
+  _scaRow       = row;
+  _scaTherapist = therapist;
+  document.getElementById('sca-row').value       = row;
+  document.getElementById('sca-therapist').value = therapist;
+
+  // 変更前→変更後表示
+  document.getElementById('sca-before').textContent  = curStart + '〜' + curEnd + (roomName ? ' 🚪' + roomName : '');
+  document.getElementById('sca-request').textContent = reqStart + '〜' + reqEnd;
+
+  // 申請理由
+  const memoWrap = document.getElementById('sca-memo-wrap');
+  if (reqMemo) {
+    memoWrap.style.display = '';
+    document.getElementById('sca-memo').textContent = reqMemo;
+  } else {
+    memoWrap.style.display = 'none';
+  }
+
+  // 時間セレクト（申請時間をデフォルト）
+  function _to26(t) {
+    if (!t) return '10:00';
+    const [h] = t.split(':').map(Number);
+    return (h >= 0 && h < 3) ? String(h+24).padStart(2,'0') + ':' + t.split(':')[1] : t.substring(0,5);
+  }
+  document.getElementById('sca-start').innerHTML = _buildTimeOptions(_to26(reqStart));
+  document.getElementById('sca-end').innerHTML   = _buildTimeOptions(_to26(reqEnd));
+
+  // ルームマスタ読み込み（現在のルームをデフォルト）
+  const roomSel = document.getElementById('sca-room');
+  roomSel.innerHTML = '<option value="">ルームを選択してください（必須）</option>';
+  try {
+    const rooms = await apiGetCached('getRoomMaster', {});
+    rooms.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id + '|' + r.name;
+      opt.textContent = r.name;
+      if (r.name === roomName) opt.selected = true;
+      roomSel.appendChild(opt);
+    });
+  } catch(e) {}
+
+  // ルーム重複チェック
+  const dateSlash = (date||'').replace(/-/g,'/');
+  const conflictEl = document.getElementById('sca-conflict-msg');
+  conflictEl.style.display = 'none';
+  conflictEl.textContent = '';
+  await _scaCheckConflict(dateSlash, reqStart, reqEnd, row, roomName);
+
+  _showModal('shift-change-approve-modal');
+}
+
+async function _scaCheckConflict(date, startTime, endTime, excludeRow, roomNameOverride) {
+  const conflictEl = document.getElementById('sca-conflict-msg');
+  const val = document.getElementById('sca-room').value;
+  const roomName = roomNameOverride || (val ? val.split('|')[1] : '');
+  if (!roomName) return false;
+  try {
+    const rooms = await apiGetCached('getRoomMaster', {});
+    const roomData = rooms.find(r => r.name === roomName);
+    const intervalMin = roomData ? (roomData.intervalMin || 0) : 0;
+    const month = (date||'').slice(0,7).replace(/\//g,'-');
+    const data = await apiGet('getShifts', { month });
+    const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+    const startMin = toMin(startTime);
+    const endMin   = toMin(endTime);
+    const conflicts = data.filter(s => {
+      if (s.status !== 'approved') return false;
+      if (s.row === excludeRow) return false;
+      if (s.roomName !== roomName) return false;
+      const d1 = (s.date||'').replace(/\//g,'-');
+      const d2 = (date||'').replace(/\//g,'-');
+      if (d1 !== d2) return false;
+      const sStart = toMin(s.startTime);
+      const sEnd   = toMin(s.endTime) + intervalMin;
+      return startMin < sEnd && endMin > toMin(s.startTime);
+    });
+    if (conflicts.length) {
+      conflictEl.style.display = '';
+      conflictEl.innerHTML = '⚠ <strong>' + roomName + '</strong> に時間帯の重複があります：' +
+        conflicts.map(c => c.therapist + ' ' + c.startTime + '〜' + c.endTime).join('、');
+      return true;
+    }
+    conflictEl.style.display = 'none';
+    return false;
+  } catch(e) { return false; }
+}
+
+async function submitShiftChangeApprove() {
+  const row          = document.getElementById('sca-row').value;
+  const therapistName = document.getElementById('sca-therapist').value;
+  const val          = document.getElementById('sca-room').value;
+  const roomId       = val ? val.split('|')[0] : '';
+  const roomName     = val ? val.split('|')[1] : '';
+  const newStart     = document.getElementById('sca-start').value;
+  const newEnd       = document.getElementById('sca-end').value;
+
+  if (!roomId) { alert('ルームを選択してください'); return; }
+
+  // 正規化（26時→02:00）
+  const normalizeT = t => {
+    const [h, m] = t.split(':').map(Number);
+    return h >= 24 ? String(h-24).padStart(2,'0') + ':' + String(m).padStart(2,'0') : t;
+  };
+  const normStart = normalizeT(newStart);
+  const normEnd   = normalizeT(newEnd);
+
+  try {
+    showOverlay();
+    const { error } = await _sb.from('shifts').update({
+      start_time:           normStart,
+      end_time:             normEnd,
+      room_id:              roomId,
+      room_name:            roomName,
+      has_change_request:   false,
+      change_request_start: null,
+      change_request_end:   null,
+      change_request_memo:  null
+    }).eq('id', row);
+    if (error) throw new Error(error.message);
+
+    // セラピストにLINE通知（DB直接取得）
+    const { data: th } = await _sb.from('therapists').select('line_user_id')
+      .eq('store_id', STORE_ID).eq('name', therapistName).eq('active', true).maybeSingle();
+    if (th && th.line_user_id) {
+      const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
+      const storeName = storeData ? storeData.name : '';
+      const msg = '【シフト変更 承認のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
+        '\n申請したシフト変更が承認されました。\n変更後: ' + newStart + '〜' + newEnd +
+        (roomName ? '\nルーム: ' + roomName : '');
+      await apiGet('sendLineMessage', { userId: th.line_user_id, message: msg });
+    }
+
+    _hideModal('shift-change-approve-modal');
+    showToast('シフト変更を承認しました');
+    loadShiftCalendar();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function submitShiftChangeReject() {
+  const row          = document.getElementById('sca-row').value;
+  const therapistName = document.getElementById('sca-therapist').value;
+  if (!confirm('シフト変更申請を却下しますか？')) return;
+  try {
+    showOverlay();
+    const { error } = await _sb.from('shifts').update({
+      has_change_request:   false,
+      change_request_start: null,
+      change_request_end:   null,
+      change_request_memo:  null
+    }).eq('id', row);
+    if (error) throw new Error(error.message);
+
+    // セラピストにLINE通知（DB直接取得）
+    const { data: th } = await _sb.from('therapists').select('line_user_id')
+      .eq('store_id', STORE_ID).eq('name', therapistName).eq('active', true).maybeSingle();
+    if (th && th.line_user_id) {
+      const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
+      const storeName = storeData ? storeData.name : '';
+      const msg = '【シフト変更 却下のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
+        '\n申請したシフト変更は却下されました。\n現在のシフトが継続されます。';
+      await apiGet('sendLineMessage', { userId: th.line_user_id, message: msg });
+    }
+
+    _hideModal('shift-change-approve-modal');
+    showToast('変更申請を却下しました');
+    loadShiftCalendar();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
 // シフト変更申請の承認（管理者）
 async function approveShiftChangeRequest(row, newStart, newEnd, therapistName) {
+  // 現在のシフト情報を取得（ルーム・日付を確認するため）
+  const { data: currentShift } = await _sb.from('shifts').select('*').eq('id', row).single();
+  if (currentShift && currentShift.room_id) {
+    // 同じルームの他のセラピストのシフトと重複チェック
+    const { data: roomShifts } = await _sb.from('shifts')
+      .select('*')
+      .eq('store_id', STORE_ID)
+      .eq('date', currentShift.date)
+      .eq('room_id', currentShift.room_id)
+      .eq('status', 'approved')
+      .neq('id', row);
+
+    const _toMin27 = t => {
+      if (!t) return 0;
+      const [h, m] = t.substring(0,5).split(':').map(Number);
+      return (h < 3 ? h + 24 : h) * 60 + (m || 0);
+    };
+
+    const newStartMin = _toMin27(newStart);
+    const newEndMin   = _toMin27(newEnd);
+
+    const conflict = (roomShifts || []).find(s => {
+      const sStart = _toMin27(s.start_time);
+      const sEnd   = _toMin27(s.end_time);
+      return newStartMin < sEnd && newEndMin > sStart;
+    });
+
+    if (conflict) {
+      alert('⚠ 変更後の時間が ' + conflict.therapist_name + ' のシフトと重複しています。\n' +
+        conflict.therapist_name + ': ' + (conflict.start_time||'').substring(0,5) + '〜' + (conflict.end_time||'').substring(0,5) + '\n' +
+        '承認できません。却下してください。');
+      return;
+    }
+  }
   if (!confirm('シフト変更を承認しますか？\n変更後: ' + newStart + '〜' + newEnd)) return;
   try {
     showOverlay();
@@ -4453,71 +4670,6 @@ async function rejectShiftChangeRequest(row, therapistName) {
 // ============================================================
 // シフト承認（管理者）
 // ============================================================
-// シフト変更申請の承認（管理者）
-async function approveShiftChangeRequest(row, newStart, newEnd, therapistName) {
-  if (!confirm('シフト変更を承認しますか？\n変更後: ' + newStart + '〜' + newEnd)) return;
-  try {
-    showOverlay();
-    const { error } = await _sb.from('shifts').update({
-      start_time:           newStart,
-      end_time:             newEnd,
-      has_change_request:   false,
-      change_request_start: null,
-      change_request_end:   null,
-      change_request_memo:  null
-    }).eq('id', row);
-    if (error) throw new Error(error.message);
-
-    // セラピストにLINE通知
-    if (!therapists.length) therapists = await apiGet('getTherapists');
-    const t = therapists.find(th => th.name === therapistName);
-    if (t && t.userId) {
-      const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
-      const storeName = storeData ? storeData.name : '';
-      const msg = '【シフト変更 承認のお知らせ】' + (storeName ? '（' + storeName + '）' : '') + '\n申請したシフト変更が承認されました。\n変更後: ' + newStart + '〜' + newEnd;
-      await apiGet('sendLineMessage', { userId: t.userId, message: msg });
-    }
-
-    showToast('シフト変更を承認しました');
-    loadAdminShifts();
-  } catch(e) {
-    alert('エラー: ' + e.message);
-  } finally {
-    hideOverlay();
-  }
-}
-
-// シフト変更申請の却下（管理者）
-async function rejectShiftChangeRequest(row, therapistName) {
-  if (!confirm('シフト変更申請を却下しますか？')) return;
-  try {
-    showOverlay();
-    const { error } = await _sb.from('shifts').update({
-      has_change_request:   false,
-      change_request_start: null,
-      change_request_end:   null,
-      change_request_memo:  null
-    }).eq('id', row);
-    if (error) throw new Error(error.message);
-
-    // セラピストにLINE通知
-    if (!therapists.length) therapists = await apiGet('getTherapists');
-    const t = therapists.find(th => th.name === therapistName);
-    if (t && t.userId) {
-      const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
-      const storeName = storeData ? storeData.name : '';
-      const msg = '【シフト変更 却下のお知らせ】' + (storeName ? '（' + storeName + '）' : '') + '\n申請したシフト変更は却下されました。\n現在のシフトが継続されます。';
-      await apiGet('sendLineMessage', { userId: t.userId, message: msg });
-    }
-
-    showToast('変更申請を却下しました');
-    loadAdminShifts();
-  } catch(e) {
-    alert('エラー: ' + e.message);
-  } finally {
-    hideOverlay();
-  }
-}
 
 // ============================================================
 // シフト承認（管理者）
@@ -7263,9 +7415,7 @@ async function _calMenuEdit() {
 async function _calMenuChangeApprove() {
   _closeCalMenu();
   const s = _calMenuShift;
-  if (!confirm('変更申請を承認しますか？\n' + (s.changeReqStart||'') + '〜' + (s.changeReqEnd||''))) return;
-  await approveShiftChangeRequest(s.row, s.changeReqStart, s.changeReqEnd, s.therapist);
-  loadShiftCalendar();
+  await openShiftChangeApproveModal(s.row, s.therapist, s.startTime, s.endTime, s.changeReqStart, s.changeReqEnd, s.changeReqMemo, s.date, s.roomName, s.roomId);
 }
 
 async function _calMenuChangeReject() {
@@ -10927,6 +11077,61 @@ window.addEventListener('DOMContentLoaded', init);
   </div>
 </div>
 <!-- シフト変更申請モーダル（セラピスト用） -->
+<!-- 管理者: シフト変更申請承認モーダル -->
+<div id="shift-change-approve-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9500;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:440px;padding:20px;margin:auto">
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px">✏️ シフト変更申請 承認</div>
+
+    <!-- 変更前→変更後表示 -->
+    <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px">
+      <div style="margin-bottom:8px">
+        <span style="color:var(--muted);font-size:12px">変更前</span><br>
+        <span id="sca-before" style="font-weight:500"></span>
+      </div>
+      <div style="text-align:center;font-size:18px;color:var(--muted);margin-bottom:8px">↓</div>
+      <div>
+        <span style="color:#7c3aed;font-size:12px">変更希望</span><br>
+        <span id="sca-request" style="font-weight:500;color:#7c3aed"></span>
+      </div>
+    </div>
+
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">承認する時間・ルームを確認・調整してください</div>
+
+    <!-- 時間調整 -->
+    <div class="grid2" style="margin-bottom:12px">
+      <div class="form-group">
+        <label>開始時間</label>
+        <select id="sca-start"></select>
+      </div>
+      <div class="form-group">
+        <label>終了時間</label>
+        <select id="sca-end"></select>
+      </div>
+    </div>
+
+    <!-- ルーム選択 -->
+    <div class="form-group" style="margin-bottom:16px">
+      <label>ルーム</label>
+      <select id="sca-room"></select>
+    </div>
+
+    <!-- 変更申請メモ -->
+    <div id="sca-memo-wrap" style="display:none;background:#fff3cd;border-left:3px solid var(--warning);border-radius:6px;padding:10px 12px;font-size:12px;color:#856404;margin-bottom:14px">
+      <span style="font-weight:600">申請理由: </span><span id="sca-memo"></span>
+    </div>
+
+    <div id="sca-conflict-msg" style="display:none;background:#fee2e2;border-left:3px solid #ef4444;border-radius:6px;padding:10px 12px;font-size:12px;color:#b91c1c;margin-bottom:14px"></div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="submitShiftChangeApprove()">承認して保存</button>
+      <button class="btn btn-danger btn-sm" onclick="submitShiftChangeReject()">却下</button>
+      <button class="btn btn-secondary btn-sm" onclick="_hideModal('shift-change-approve-modal')">閉じる</button>
+    </div>
+    <input type="hidden" id="sca-row">
+    <input type="hidden" id="sca-therapist">
+  </div>
+</div>
+
 <div id="shift-change-request-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9400;padding:16px">
   <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:420px;padding:20px">
     <div style="font-size:16px;font-weight:700;margin-bottom:4px">✏️ シフト変更申請</div>
