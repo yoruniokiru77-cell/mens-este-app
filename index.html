@@ -2303,23 +2303,46 @@ async function apiGet(action, params = {}) {
     // ===== 経費 =====
     case 'getExpenses': {
       let q = _sb.from('expenses').select('*').eq('store_id', STORE_ID).order('date', { ascending: false });
-      if (params.startDate) q = q.gte('date', params.startDate);
-      if (params.endDate)   q = q.lte('date', params.endDate);
+      if (params.startDate)  q = q.gte('date', params.startDate);
+      if (params.endDate)    q = q.lte('date', params.endDate);
+      if (params.therapist)  q = q.eq('therapist_name', params.therapist);
+      if (params.date)       q = q.eq('date', params.date);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       return (data || []).map(r => ({ ...r, row: r.id }));
     }
 
     case 'saveExpense': {
-      const { error } = await _sb.from('expenses').insert({
-        store_id:      STORE_ID,
-        date:          params.date,
-        category:      params.category,
-        amount:        Number(params.amount),
-        memo:          params.memo || null,
-        therapist_name:params.therapist || null
-      });
-      if (error) throw new Error(error.message);
+      // 同じ日付・カテゴリ・セラピストのレコードがあればUPDATE、なければINSERT
+      const { data: existing } = await _sb.from('expenses')
+        .select('id').eq('store_id', STORE_ID)
+        .eq('date', params.date).eq('category', params.category)
+        .eq('therapist_name', params.therapist || '').maybeSingle();
+      if (existing) {
+        const { error } = await _sb.from('expenses').update({
+          amount: Number(params.amount), memo: params.memo || null
+        }).eq('id', existing.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await _sb.from('expenses').insert({
+          store_id:       STORE_ID,
+          date:           params.date,
+          category:       params.category,
+          amount:         Number(params.amount),
+          memo:           params.memo || null,
+          therapist_name: params.therapist || null
+        });
+        if (error) throw new Error(error.message);
+      }
+      return { ok: true };
+    }
+
+    case 'deleteExpenseByCategory': {
+      await _sb.from('expenses').delete()
+        .eq('store_id', STORE_ID)
+        .eq('date', params.date)
+        .eq('category', params.category)
+        .eq('therapist_name', params.therapist || '');
       return { ok: true };
     }
 
@@ -3618,6 +3641,19 @@ async function loadPayroll() {
       (balances || []).forEach(b => { _storeDropBalances[b.therapist_name] = b.balance || 0; });
     } catch(e) { console.warn('繰越残高取得エラー:', e); }
 
+    // 雑費・宿泊費・その他をDBから取得
+    window._payrollExpenses = {};
+    try {
+      const { data: expData } = await _sb.from('expenses')
+        .select('therapist_name, category, amount')
+        .eq('store_id', STORE_ID)
+        .eq('date', dateStr);
+      (expData || []).forEach(e => {
+        if (!window._payrollExpenses[e.therapist_name]) window._payrollExpenses[e.therapist_name] = {};
+        window._payrollExpenses[e.therapist_name][e.category] = e.amount;
+      });
+    } catch(e) { console.warn('雑費取得エラー:', e); }
+
     renderPayrollCards(data);
   } catch(e) {
     document.getElementById('payroll-cards').innerHTML = '<p style="color:red">' + e.message + '</p>';
@@ -3727,8 +3763,11 @@ function renderPayrollCards(data) {
                 </span>
                 <span style="font-size:13px;flex-shrink:0">その他</span>
                 <div style="display:flex;align-items:center;gap:4px;margin-left:auto">
+                  <button type="button" id="other-sign-${uid}"
+                    onclick="toggleOtherSign('${uid}')"
+                    style="width:32px;height:32px;border:1.5px solid var(--border);border-radius:6px;font-size:16px;font-weight:700;background:var(--surface);cursor:pointer;color:var(--text);flex-shrink:0">+</button>
                   <input type="number" id="other-amt-${uid}" value="0" step="100"
-                    inputmode="numeric"
+                    inputmode="numeric" min="0"
                     style="width:80px;padding:4px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;text-align:right"
                     oninput="recalcPayroll('${uid}','${t.name}','${dateLabel}')">
                   <span style="font-size:12px;color:var(--muted);flex-shrink:0">円</span>
@@ -3839,6 +3878,46 @@ function renderPayrollCards(data) {
   // payrollDataをグローバルに保存（再計算用）
   window._payrollData = data;
   detailsEl.innerHTML = '';
+
+  // DBから取得した雑費・宿泊費・その他を入力欄に復元
+  if (window._payrollExpenses) {
+    data.forEach(t => {
+      const uid  = t.uid;
+      const exps = window._payrollExpenses[t.name] || {};
+
+      // 雑費
+      const miscAmt = exps['misc'];
+      if (miscAmt !== undefined && miscAmt !== 0) {
+        const miscChk = document.getElementById('misc-' + uid);
+        const miscAmtEl = document.getElementById('misc-amt-' + uid);
+        if (miscChk)  { miscChk.checked = true; miscChk.dispatchEvent(new Event('change')); }
+        if (miscAmtEl) miscAmtEl.value = miscAmt;
+      }
+
+      // 宿泊費
+      const accomAmt = exps['accommodation'];
+      if (accomAmt !== undefined && accomAmt !== 0) {
+        const accomChk = document.getElementById('accom-' + uid);
+        const accomAmtEl = document.getElementById('accom-amt-' + uid);
+        if (accomChk)  { accomChk.checked = true; accomChk.dispatchEvent(new Event('change')); }
+        if (accomAmtEl) accomAmtEl.value = accomAmt;
+      }
+
+      // その他
+      const otherAmt = exps['other'];
+      if (otherAmt !== undefined && otherAmt !== 0) {
+        const otherAmtEl  = document.getElementById('other-amt-' + uid);
+        const otherSignEl = document.getElementById('other-sign-' + uid);
+        if (otherAmtEl) {
+          otherAmtEl.value = Math.abs(otherAmt);
+          if (otherAmt < 0 && otherSignEl && otherSignEl.textContent === '+') {
+            otherSignEl.click(); // マイナスに切り替え
+          }
+          otherAmtEl.dispatchEvent(new Event('input'));
+        }
+      }
+    });
+  }
 }
 
 // 雑費・宿泊費・保証を反映した給料再計算
@@ -4013,6 +4092,47 @@ async function sendPayrollLine(uid, name, dateLabel) {
       sent_at: new Date().toISOString(),
       confirmed_at: null
     });
+
+    // 雑費・宿泊費・その他をDBに保存（LINE送信時にupsert）
+    const miscChkEl  = document.getElementById('misc-'  + uid);
+    const accomChkEl = document.getElementById('accom-' + uid);
+    const miscAmtEl  = document.getElementById('misc-amt-'  + uid);
+    const accomAmtEl = document.getElementById('accom-amt-' + uid);
+    const otherAmtEl = document.getElementById('other-amt-' + uid);
+    const otherSignEl = document.getElementById('other-sign-' + uid);
+    const dateStr = dateLabel.replace(/\//g, '-');
+
+    const miscAmt  = miscChkEl?.checked  ? (Number(miscAmtEl?.value)  || 0) : 0;
+    const accomAmt = accomChkEl?.checked ? (Number(accomAmtEl?.value) || 0) : 0;
+    const otherRaw = Number(otherAmtEl?.value) || 0;
+    const otherAmt = otherSignEl && otherSignEl.textContent === '-' ? -Math.abs(otherRaw) : Math.abs(otherRaw);
+
+    // 各カテゴリをupsert（amount=0なら削除）
+    for (const { category, amount } of [
+      { category: 'misc',          amount: miscAmt  },
+      { category: 'accommodation', amount: accomAmt },
+      { category: 'other',         amount: otherAmt }
+    ]) {
+      // 既存レコードを確認
+      const { data: existing } = await _sb.from('expenses')
+        .select('id').eq('store_id', STORE_ID)
+        .eq('date', dateStr).eq('category', category)
+        .eq('therapist_name', name).maybeSingle();
+
+      if (amount !== 0) {
+        if (existing) {
+          await _sb.from('expenses').update({ amount }).eq('id', existing.id);
+        } else {
+          await _sb.from('expenses').insert({
+            store_id: STORE_ID, date: dateStr,
+            category, amount, therapist_name: name
+          });
+        }
+      } else if (existing) {
+        // amount=0 かつ既存レコードがあれば削除
+        await _sb.from('expenses').delete().eq('id', existing.id);
+      }
+    }
 
     // UI即時更新
     const confEl = document.getElementById('payconf-' + uid);
@@ -5446,8 +5566,18 @@ async function loadSalesReport() {
 
   try {
     showOverlay();
-    const data = await apiGet('getPayrollData', { startDate, endDate });
-    renderSalesReport(data, therapist);
+    const [data, expData] = await Promise.all([
+      apiGet('getPayrollData', { startDate, endDate }),
+      apiGet('getExpenses', { startDate, endDate })
+    ]);
+    // セラピスト名・日付 → 雑費マップを作成
+    const expMap = {};
+    (expData || []).forEach(e => {
+      const key = e.therapist_name + '|' + e.date;
+      if (!expMap[key]) expMap[key] = {};
+      expMap[key][e.category] = e.amount;
+    });
+    renderSalesReport(data, therapist, expMap);
   } catch(e) {
     document.getElementById('report-table').innerHTML = '<p style="color:red">' + e.message + '</p>';
   } finally {
@@ -5455,7 +5585,8 @@ async function loadSalesReport() {
   }
 }
 
-function renderSalesReport(data, filterTherapist) {
+function renderSalesReport(data, filterTherapist, expMap) {
+  expMap = expMap || {};
   const summaryEl = document.getElementById('report-summary');
   const tableEl   = document.getElementById('report-table');
 
@@ -5582,6 +5713,26 @@ function renderSalesReport(data, filterTherapist) {
                     }).join('')}
                   </tbody>
                 </table>
+                ${(() => {
+                  // 雑費・宿泊費・その他の内訳を表示
+                  const dateKey = r.dateLabel.replace(/\//g, '-');
+                  const exps = expMap[r.name + '|' + dateKey] || {};
+                  const miscAmt  = exps['misc']          || 0;
+                  const accomAmt = exps['accommodation'] || 0;
+                  const otherAmt = exps['other']         || 0;
+                  const totalExp = miscAmt + accomAmt + otherAmt;
+                  if (totalExp === 0) return '';
+                  const netStore = r.storeDrop + totalExp;
+                  return `<div style="padding:8px 10px;background:#fff7ed;border-top:1px solid #fed7aa;font-size:12px">
+                    <div style="font-weight:600;color:#c2410c;margin-bottom:4px">💸 雑費・経費内訳</div>
+                    ${miscAmt  ? `<div style="color:var(--muted)">雑費：¥${miscAmt.toLocaleString()}</div>` : ''}
+                    ${accomAmt ? `<div style="color:var(--muted)">宿泊費：¥${accomAmt.toLocaleString()}</div>` : ''}
+                    ${otherAmt ? `<div style="color:var(--muted)">その他：${otherAmt < 0 ? '-' : ''}¥${Math.abs(otherAmt).toLocaleString()}</div>` : ''}
+                    <div style="font-weight:600;color:#c2410c;margin-top:4px;padding-top:4px;border-top:1px solid #fed7aa">
+                      雑費込み店落ち：¥${netStore.toLocaleString()}
+                    </div>
+                  </div>`;
+                })()}
               </td>
             </tr>`;
           }).join('')}
@@ -6368,6 +6519,20 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
 
 function closeCustomerModal() {
   document.getElementById('customer-modal').style.display = 'none';
+}
+
+// その他入力欄の+/-切り替え
+function toggleOtherSign(uid) {
+  const input  = document.getElementById('other-amt-' + uid);
+  const btn    = document.getElementById('other-sign-' + uid);
+  const val    = Math.abs(Number(input.value) || 0);
+  const isPlus = btn.textContent === '+';
+  btn.textContent    = isPlus ? '-' : '+';
+  btn.style.color    = isPlus ? '#ef4444' : 'var(--text)';
+  btn.style.borderColor = isPlus ? '#ef4444' : 'var(--border)';
+  input.value = isPlus ? -val : val;
+  // recalcPayrollを発火
+  input.dispatchEvent(new Event('input'));
 }
 
 async function addCustomerModalNG(therapistName, tel, customerNo, custName) {
