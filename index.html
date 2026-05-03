@@ -10811,15 +10811,39 @@ async function loadCheckoutPage() {
   el.innerHTML = '<p style="color:var(--muted)">読み込み中...</p>';
 
   try {
-    // 今日のシフトからルームを取得
-    const today = new Date();
+    // 今日のシフトからルームを取得（27時ルール：0〜2時台は前日扱い）
+    const now = new Date();
     const pad = n => String(n).padStart(2,'0');
-    const todayStr = today.getFullYear() + '-' + pad(today.getMonth()+1) + '-' + pad(today.getDate());
-    const month = todayStr.slice(0, 7);
-    const shifts = await apiGet('getShifts', { therapist: loggedInTherapist, month, status: 'approved' });
-    const todayShifts = shifts.filter(s => s.date.replace(/\//g, '-') === todayStr && s.roomName);
 
-    if (!todayShifts.length) {
+    // 当日の日付
+    const todayBase = new Date(now);
+    if (todayBase.getHours() < 3) todayBase.setDate(todayBase.getDate() - 1);
+    const todayStr = todayBase.getFullYear() + '-' + pad(todayBase.getMonth()+1) + '-' + pad(todayBase.getDate());
+
+    // 前日の日付
+    const yesterday = new Date(todayBase);
+    yesterday.setDate(todayBase.getDate() - 1);
+    const yesterdayStr = yesterday.getFullYear() + '-' + pad(yesterday.getMonth()+1) + '-' + pad(yesterday.getDate());
+
+    // 当月・前月のシフトを取得（月またぎ対応）
+    const months = [...new Set([todayStr.slice(0,7), yesterdayStr.slice(0,7)])];
+    const allShifts = (await Promise.all(months.map(m => apiGet('getShifts', { therapist: loggedInTherapist, month: m, status: 'approved' })))).flat();
+
+    // 当日 + 前日のシフトを取得（前日は宿泊対応）
+    const todayShifts = allShifts.filter(s => {
+      const sd = s.date.replace(/\//g, '-');
+      return (sd === todayStr || sd === yesterdayStr) && s.roomName;
+    });
+
+    // ルームの重複を除く（前日・当日で同じルームは1つにまとめる）
+    const seenRooms = new Set();
+    const uniqueShifts = todayShifts.filter(s => {
+      if (seenRooms.has(s.roomName)) return false;
+      seenRooms.add(s.roomName);
+      return true;
+    });
+
+    if (!uniqueShifts.length) {
       el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)"><div style="font-size:32px;margin-bottom:12px">📋</div>今日の承認済みシフトがありません</div>';
       return;
     }
@@ -10828,13 +10852,13 @@ async function loadCheckoutPage() {
     const allItems = await apiGet('getChecklistByStore');
 
     // ルームごとにチェックリストを表示
-    const roomNames = [...new Set(todayShifts.map(s => s.roomName))];
+    const roomNames = [...new Set(uniqueShifts.map(s => s.roomName))];
     let html = '';
     window._checkoutItems = allItems; // 詳細表示用にグローバル保持
 
     roomNames.forEach(room => {
       const items = allItems.filter(i => i.roomName === room).sort((a,b) => a.order - b.order);
-      const shift = todayShifts.find(s => s.roomName === room);
+      const shift = uniqueShifts.find(s => s.roomName === room);
 
       html += `
       <div class="card" style="margin-bottom:14px">
@@ -10884,7 +10908,9 @@ async function submitCheckout() {
 
   try {
     showOverlay();
+    // 27時ルール：0〜2時台は前日扱い
     const today = new Date();
+    if (today.getHours() < 3) today.setDate(today.getDate() - 1);
     const pad = n => String(n).padStart(2,'0');
     const workDate = today.getFullYear() + '-' + pad(today.getMonth()+1) + '-' + pad(today.getDate());
 

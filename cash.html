@@ -590,14 +590,21 @@ async function loadClosingData(log) {
 
   const today = todayStr();
 
-  // index.htmlのsalesテーブルから本日の売上・給料を取込
+  // index.htmlのsalesテーブルから本日の売上・給料を取込（27時ルール：当日03:00〜翌日02:59）
   try {
+    const todayParts = today.split('-');
+    const todayObj   = new Date(Number(todayParts[0]), Number(todayParts[1])-1, Number(todayParts[2]));
+    const nextDayObj = new Date(todayObj); nextDayObj.setDate(todayObj.getDate() + 1);
+    const _pad = n => String(n).padStart(2,'0');
+    const todayStart = today + 'T03:00:00+09:00';
+    const todayEnd   = nextDayObj.getFullYear() + '-' + _pad(nextDayObj.getMonth()+1) + '-' + _pad(nextDayObj.getDate()) + 'T02:59:59+09:00';
+
     const { data: sales } = await _sb.from('sales')
       .select('price, discount, course_price, option_price, nomination_fee, course_min, therapist_name')
       .eq('store_id', STORE_ID)
       .eq('therapist_name', log.therapist_name)
-      .gte('date', today + 'T00:00:00+09:00')
-      .lte('date', today + 'T23:59:59+09:00')
+      .gte('date', todayStart)
+      .lte('date', todayEnd)
       .neq('is_guarantee', true);
 
     // セラピストのバック率を取得
@@ -1016,13 +1023,20 @@ async function recalcCashLog(logId, therapistName, workDate) {
   try {
     showOverlay();
 
-    // 売上データを再取得
+    // 売上データを再取得（27時ルール：当日03:00〜翌日02:59）
+    const wdParts = workDate.split('-');
+    const wdObj   = new Date(Number(wdParts[0]), Number(wdParts[1])-1, Number(wdParts[2]));
+    const nextDay = new Date(wdObj); nextDay.setDate(wdObj.getDate() + 1);
+    const pad = n => String(n).padStart(2,'0');
+    const startStr = workDate + 'T03:00:00+09:00';
+    const endStr   = nextDay.getFullYear() + '-' + pad(nextDay.getMonth()+1) + '-' + pad(nextDay.getDate()) + 'T02:59:59+09:00';
+
     const { data: sales } = await _sb.from('sales')
       .select('price, discount, course_price, option_price, nomination_fee')
       .eq('store_id', STORE_ID)
       .eq('therapist_name', therapistName)
-      .gte('date', workDate + 'T00:00:00+09:00')
-      .lte('date', workDate + 'T23:59:59+09:00')
+      .gte('date', startStr)
+      .lte('date', endStr)
       .neq('is_guarantee', true);
 
     // バック率を取得
@@ -1136,6 +1150,8 @@ function showToast(msg) {
 
 function todayStr() {
   const d = new Date();
+  // 27時ルール：0〜2時台は前日扱い
+  if (d.getHours() < 3) d.setDate(d.getDate() - 1);
   const pad = n => String(n).padStart(2,'0');
   return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
 }
