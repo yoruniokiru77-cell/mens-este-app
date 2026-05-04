@@ -3096,7 +3096,10 @@ case 'verifyTokenAction': {
 
     // ===== セラピスト用予約 =====
     case 'getMyReservations': {
-      const today = new Date(); today.setHours(0,0,0,0);
+      // 27時ルール：当日03:00〜を取得（00:00〜02:59は前日扱いのため除外）
+      const today = new Date();
+      if (today.getHours() < 3) today.setDate(today.getDate() - 1);
+      today.setHours(3,0,0,0);
       const { data, error } = await _sb.from('reservations').select('*')
         .eq('store_id', STORE_ID).eq('therapist_name', params.therapist)
         .gte('date', today.toISOString()).neq('status', 'cancelled').order('date');
