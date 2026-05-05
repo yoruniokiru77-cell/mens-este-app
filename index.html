@@ -543,6 +543,16 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
 
   <!-- ===== 給料計算ページ ===== -->
   <div id="page-payroll" class="page">
+    <!-- サブタブ -->
+    <div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid var(--border)">
+      <button id="ptab-payroll" onclick="switchPayrollTab('payroll')"
+        style="padding:8px 18px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-2px">💰 給料計算</button>
+      <button id="ptab-collection" onclick="switchPayrollTab('collection')"
+        style="padding:8px 18px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px">💵 回収管理</button>
+    </div>
+
+    <!-- 給料計算エリア -->
+    <div id="payroll-area">
     <div class="date-nav">
       <button onclick="changePayrollDay(-1)">◀</button>
       <span id="payroll-day-label"></span>
@@ -564,6 +574,16 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     </div>
     <div id="payroll-cards" class="grid2"></div>
     <div id="payroll-details"></div>
+    </div><!-- /payroll-area -->
+
+    <!-- 回収管理エリア -->
+    <div id="collection-area" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <button class="btn btn-secondary btn-sm" onclick="loadCollection()">更新</button>
+        <span id="collection-summary" style="font-size:13px;color:var(--muted)"></span>
+      </div>
+      <div id="collection-content"></div>
+    </div>
   </div>
 
   <!-- ===== 予約登録ページ ===== -->
@@ -4137,6 +4157,17 @@ async function sendPayrollLine(uid, name, dateLabel) {
       }
     }
 
+    // cash_logsの該当レコードをis_collected=falseで回収管理対象にマーク
+    try {
+      await _sb.from('cash_logs')
+        .update({ is_collected: false })
+        .eq('store_id', STORE_ID)
+        .eq('therapist_name', name)
+        .eq('work_date', dateStr)
+        .eq('status', 'closed')
+        .is('is_collected', null);  // 未マーク分のみ更新
+    } catch(e) { console.warn('cash_logs更新エラー:', e); }
+
     // UI即時更新
     const confEl = document.getElementById('payconf-' + uid);
     if (confEl) confEl.innerHTML = '<span style="font-size:11px;color:var(--warning);font-weight:600">⏳ 未確認</span>';
@@ -6517,6 +6548,137 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
 
   } catch(e) {
     document.getElementById('customer-modal-info').innerHTML = '<span style="color:red">エラー: ' + e.message + '</span>';
+  }
+}
+
+
+// ============================================================
+// 給料ページ サブタブ切り替え
+// ============================================================
+function switchPayrollTab(tab) {
+  const payrollArea    = document.getElementById('payroll-area');
+  const collectionArea = document.getElementById('collection-area');
+  const ptabPayroll    = document.getElementById('ptab-payroll');
+  const ptabCollection = document.getElementById('ptab-collection');
+
+  if (tab === 'payroll') {
+    payrollArea.style.display    = '';
+    collectionArea.style.display = 'none';
+    ptabPayroll.style.color      = 'var(--accent)';
+    ptabPayroll.style.borderBottomColor = 'var(--accent)';
+    ptabCollection.style.color   = 'var(--muted)';
+    ptabCollection.style.borderBottomColor = 'transparent';
+  } else {
+    payrollArea.style.display    = 'none';
+    collectionArea.style.display = '';
+    ptabPayroll.style.color      = 'var(--muted)';
+    ptabPayroll.style.borderBottomColor = 'transparent';
+    ptabCollection.style.color   = 'var(--accent)';
+    ptabCollection.style.borderBottomColor = 'var(--accent)';
+    loadCollection();
+  }
+}
+
+// ============================================================
+// 回収管理
+// ============================================================
+const IWAKI_STORE_ID_COL = '11111111-0000-0000-0000-000000000001';
+
+async function loadCollection() {
+  const el = document.getElementById('collection-content');
+  const sumEl = document.getElementById('collection-summary');
+  el.innerHTML = '<p style="color:var(--muted)">読み込み中...</p>';
+
+  try {
+    // is_collected=falseの未回収レコードを取得
+    const { data: uncollected } = await _sb.from('cash_logs')
+      .select('*')
+      .eq('store_id', STORE_ID)
+      .eq('is_collected', false)
+      .eq('status', 'closed')
+      .order('work_date', { ascending: true });
+
+    const rows = uncollected || [];
+
+    // ルーム別にグループ化
+    const roomGroups = {};
+    rows.forEach(r => {
+      if (!roomGroups[r.room_name]) roomGroups[r.room_name] = [];
+      roomGroups[r.room_name].push(r);
+    });
+
+    // 金額計算（いわき=万札投函額、水戸・神栖=店落ち）
+    const isIwaki = STORE_ID === IWAKI_STORE_ID_COL;
+    const getAmt = r => isIwaki ? (r.ten_thousand_deposited || 0) : (r.store_drop || 0);
+
+    const totalUncollected = rows.reduce((sum, r) => sum + getAmt(r), 0);
+    sumEl.textContent = `未回収合計：¥${totalUncollected.toLocaleString()}`;
+
+    if (!rows.length) {
+      el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">未回収の店落ちはありません</div>';
+      return;
+    }
+
+    let html = '';
+    Object.entries(roomGroups).forEach(([room, items]) => {
+      const roomTotal = items.reduce((sum, r) => sum + getAmt(r), 0);
+      const latestDate = items[items.length - 1].work_date;
+
+      html += `
+      <div class="card" style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div>
+            <span style="font-size:14px;font-weight:600">🚪 ${room}</span>
+            <span style="font-size:13px;color:var(--muted);margin-left:8px">${items.length}件</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:16px;font-weight:600;color:#E24B4A">¥${roomTotal.toLocaleString()}</span>
+            <button class="btn btn-primary btn-sm" onclick="markCollected('${room}', '${latestDate}')">✅ 回収済みにする</button>
+          </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:12px">
+          <thead>
+            <tr style="background:var(--bg)">
+              <th style="padding:6px;text-align:left;border-bottom:1px solid var(--border)">日付</th>
+              <th style="padding:6px;text-align:left;border-bottom:1px solid var(--border)">セラピスト</th>
+              <th style="padding:6px;text-align:right;border-bottom:1px solid var(--border)">${isIwaki ? '万札投函額' : '店落ち'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map(r => `
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid var(--border)">${r.work_date}</td>
+              <td style="padding:6px;border-bottom:1px solid var(--border)">${r.therapist_name || '-'}</td>
+              <td style="padding:6px;text-align:right;border-bottom:1px solid var(--border)">¥${getAmt(r).toLocaleString()}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    });
+
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<p style="color:red">エラー: ' + e.message + '</p>';
+  }
+}
+
+async function markCollected(roomName, upToDate) {
+  if (!confirm(`🚪 ${roomName}\n${upToDate}以前の未回収分を全て回収済みにしますか？`)) return;
+  try {
+    showOverlay();
+    const { error } = await _sb.from('cash_logs')
+      .update({ is_collected: true, collected_at: new Date().toISOString() })
+      .eq('store_id', STORE_ID)
+      .eq('room_name', roomName)
+      .eq('is_collected', false)
+      .lte('work_date', upToDate);
+    if (error) throw new Error(error.message);
+    showToast(`${roomName} の回収済み登録が完了しました`);
+    loadCollection();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
   }
 }
 
