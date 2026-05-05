@@ -8889,7 +8889,13 @@ async function saveAndSendLine() {
 
 function resetResvForm() {
   setNowToResvDate();
-  document.getElementById('resv-course').value    = '60';
+  // セラピスト選択をリセット（先頭に戻す）
+  const therapistSel = document.getElementById('resv-therapist');
+  if (therapistSel) {
+    therapistSel.selectedIndex = 0;
+    populateNominationSelects('');
+  }
+  document.getElementById('resv-course').value    = '';
   document.getElementById('resv-discount').value  = '0';
   document.getElementById('resv-customer-no').value = '';
   document.getElementById('resv-customer-name').value = '';
@@ -8901,6 +8907,9 @@ function resetResvForm() {
   document.getElementById('resv-custom-minutes').style.display = 'none';
   const memoElR = document.getElementById('resv-memo');
   if (memoElR) memoElR.value = '';
+  // 重複チェック警告をクリア
+  const warnEl = document.getElementById('resv-overlap-warning');
+  if (warnEl) warnEl.style.display = 'none';
   calcCoursePrice();
   window._editResvRow = null;
   // ボタンを新規登録モードに戻す
