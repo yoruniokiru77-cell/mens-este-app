@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>ランキング — 管理システム</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg:       #f8fafc;
+  --surface:  #ffffff;
+  --primary:  #0f172a;
+  --accent:   #e94560;
+  --accent2:  #3b82f6;
+  --text:     #0f172a;
+  --muted:    #64748b;
+  --border:   #e2e8f0;
+  --input-bg: #ffffff;
+  --success:  #10b981;
+  --warning:  #f59e0b;
+  --radius:   8px;
+  --radius-lg:12px;
+  --shadow:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --nav-h:    52px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); font-size: 15px;
+  min-height: 100%; -webkit-text-size-adjust: 100%;
+  width: 100%; overflow-x: hidden;
+}
+
+/* ===== ナビ ===== */
+#nav {
+  background: var(--primary);
+  display: flex; align-items: center;
+  position: sticky; top: 0; z-index: 100; height: var(--nav-h);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 0 16px; gap: 12px;
+}
+#nav .nav-title {
+  color: #fff; font-size: 15px; font-weight: 600; white-space: nowrap;
+}
+#nav .nav-sep { color: rgba(255,255,255,.3); font-size: 16px; }
+#nav a {
+  color: rgba(255,255,255,.6); text-decoration: none;
+  font-size: 13px; font-weight: 500;
+  padding: 6px 10px; border-radius: var(--radius);
+  transition: background .15s, color .15s;
+}
+#nav a:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+/* ===== コンテンツ ===== */
+.container { max-width: 900px; margin: 0 auto; padding: 20px 16px 40px; }
+
+/* ===== フィルターバー ===== */
+.filter-bar {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 14px 16px;
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  margin-bottom: 20px;
+}
+.filter-bar label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.filter-bar select, .filter-bar input[type="date"] {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 7px 10px; font-size: 13px; background: var(--input-bg);
+  color: var(--text); cursor: pointer;
+}
+.filter-bar select:focus, .filter-bar input[type="date"]:focus {
+  outline: none; border-color: var(--accent2);
+}
+.period-btns { display: flex; gap: 6px; }
+.period-btn {
+  padding: 6px 12px; border-radius: var(--radius); font-size: 12px;
+  font-weight: 500; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted);
+  cursor: pointer; transition: all .15s;
+}
+.period-btn.active {
+  background: var(--primary); color: #fff; border-color: var(--primary);
+}
+.period-btn:hover:not(.active) { background: var(--bg); }
+.custom-range { display: none; align-items: center; gap: 8px; }
+.custom-range.show { display: flex; }
+.btn-load {
+  padding: 7px 18px; background: var(--accent); color: #fff;
+  border: none; border-radius: var(--radius); font-size: 13px;
+  font-weight: 600; cursor: pointer; transition: opacity .15s;
+  margin-left: auto;
+}
+.btn-load:hover { opacity: .85; }
+.btn-load:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ===== ランキングタブ ===== */
+.rank-tabs {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.rank-tab {
+  padding: 8px 16px; border-radius: var(--radius); font-size: 13px;
+  font-weight: 500; border: 1px solid var(--border);
+  background: var(--surface); color: var(--muted);
+  cursor: pointer; transition: all .15s;
+}
+.rank-tab.active {
+  background: var(--primary); color: #fff; border-color: var(--primary);
+}
+.rank-tab:hover:not(.active) { background: var(--bg); }
+
+/* ===== サマリーカード ===== */
+.summary-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px; margin-bottom: 20px;
+}
+.summary-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 12px 14px;
+}
+.summary-card .s-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.summary-card .s-value { font-size: 20px; font-weight: 700; color: var(--text); }
+.summary-card .s-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* ===== ランキングリスト ===== */
+.rank-list { display: flex; flex-direction: column; gap: 8px; }
+.rank-item {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 14px 16px;
+  display: flex; align-items: center; gap: 14px;
+  transition: box-shadow .15s;
+}
+.rank-item:hover { box-shadow: var(--shadow); }
+.rank-num {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; flex-shrink: 0;
+  background: var(--bg); color: var(--muted); border: 1.5px solid var(--border);
+}
+.rank-num.gold   { background: #fef3c7; color: #92400e; border-color: #fbbf24; }
+.rank-num.silver { background: #f1f5f9; color: #475569; border-color: #94a3b8; }
+.rank-num.bronze { background: #fdf2e9; color: #92400e; border-color: #d97706; }
+.rank-name { font-size: 15px; font-weight: 600; flex: 1; min-width: 0; }
+.rank-metrics { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.rank-main { font-size: 18px; font-weight: 700; }
+.rank-sub { font-size: 12px; color: var(--muted); }
+.rank-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 20px; padding: 3px 10px; font-size: 11px; color: var(--muted);
+}
+.rank-badge-row { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+
+/* ===== 棒グラフバー ===== */
+.bar-wrap { flex: 1; min-width: 80px; max-width: 200px; }
+.bar-track {
+  height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden;
+}
+.bar-fill {
+  height: 100%; border-radius: 3px; transition: width .4s ease;
+}
+
+/* ===== ローディング・空 ===== */
+.loading {
+  text-align: center; padding: 40px; color: var(--muted); font-size: 14px;
+}
+.empty {
+  text-align: center; padding: 40px;
+  color: var(--muted); font-size: 14px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.spinner {
+  width: 28px; height: 28px; border: 3px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .7s linear infinite; margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== 期間ラベル ===== */
+.period-label {
+  font-size: 13px; color: var(--muted); margin-bottom: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.period-label strong { color: var(--text); }
+
+/* ===== レスポンシブ ===== */
+@media (max-width: 600px) {
+  .filter-bar { flex-direction: column; align-items: stretch; }
+  .btn-load { margin-left: 0; }
+  .bar-wrap { display: none; }
+  .rank-item { gap: 10px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ナビ -->
+<div id="nav">
+  <span class="nav-title">ランキング</span>
+  <span class="nav-sep">|</span>
+  <a href="/">管理画面へ</a>
+</div>
+
+<div class="container">
+
+  <!-- フィルターバー -->
+  <div class="filter-bar">
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <label>店舗</label>
+      <select id="sel-store">
+        <option value="11111111-0000-0000-0000-000000000001">HerRoom（いわき）</option>
+        <option value="22222222-0000-0000-0000-000000000002">Reメンズエステ（水戸）</option>
+        <option value="33333333-0000-0000-0000-000000000003">Premium（神栖）</option>
+      </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <label>期間</label>
+      <div class="period-btns">
+        <button class="period-btn active" data-period="month">当月</button>
+        <button class="period-btn" data-period="lastmonth">先月</button>
+        <button class="period-btn" data-period="week">当週</button>
+        <button class="period-btn" data-period="custom">カスタム</button>
+      </div>
+    </div>
+    <div class="custom-range" id="custom-range">
+      <input type="date" id="date-from">
+      <span style="color:var(--muted);">〜</span>
+      <input type="date" id="date-to">
+    </div>
+    <button class="btn-load" id="btn-load" onclick="loadRanking()">読み込む</button>
+  </div>
+
+  <!-- ランキングタブ -->
+  <div class="rank-tabs">
+    <button class="rank-tab active" data-tab="sales" onclick="switchTab('sales',this)">💰 売上</button>
+    <button class="rank-tab" data-tab="pay" onclick="switchTab('pay',this)">💴 給料</button>
+    <button class="rank-tab" data-tab="honshimei" onclick="switchTab('honshimei',this)">⭐ 本指名数</button>
+    <button class="rank-tab" data-tab="honratio" onclick="switchTab('honratio',this)">📊 本指名率</button>
+    <button class="rank-tab" data-tab="drop" onclick="switchTab('drop',this)">🏪 店落ち</button>
+  </div>
+
+  <!-- コンテンツエリア -->
+  <div id="rank-content">
+    <div class="empty">期間と店舗を選択して「読み込む」を押してください</div>
+  </div>
+
+</div>
+
+<script>
+const SUPABASE_URL  = 'https://rzfprialypdoyklfwpyg.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6ZnByaWFseXBkb3lrbGZ3cHlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMzQ3NzAsImV4cCI6MjA5MDkxMDc3MH0.qRzCmMetxe3tvSlIJx-HX_SHRG5Evos4D9KOEnarNfE';
+const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+let currentTab = 'sales';
+let rankData = []; // 集計済みデータ
+let currentPeriodLabel = '';
+
+// ===== 期間ボタン =====
+document.querySelectorAll('.period-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const cr = document.getElementById('custom-range');
+    cr.classList.toggle('show', btn.dataset.period === 'custom');
+  });
+});
+
+function getDateRange() {
+  const period = document.querySelector('.period-btn.active').dataset.period;
+  const now = new Date();
+  let startDate, endDate;
+  if (period === 'month') {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    endDate   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    currentPeriodLabel = now.getFullYear() + '年' + (now.getMonth()+1) + '月';
+  } else if (period === 'lastmonth') {
+    startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    endDate   = new Date(now.getFullYear(), now.getMonth(), 0);
+    const y = startDate.getFullYear(), m = startDate.getMonth()+1;
+    currentPeriodLabel = y + '年' + m + '月';
+  } else if (period === 'week') {
+    const dow = now.getDay() === 0 ? 6 : now.getDay() - 1;
+    startDate = new Date(now); startDate.setDate(now.getDate() - dow);
+    endDate   = new Date(startDate); endDate.setDate(startDate.getDate() + 6);
+    currentPeriodLabel = fmt(startDate) + '〜' + fmt(endDate);
+  } else {
+    const f = document.getElementById('date-from').value;
+    const t = document.getElementById('date-to').value;
+    if (!f || !t) { alert('日付を入力してください'); return null; }
+    startDate = new Date(f); endDate = new Date(t);
+    currentPeriodLabel = f + '〜' + t;
+  }
+  return {
+    start: fmtISO(startDate),
+    end:   fmtISO(endDate)
+  };
+}
+
+function fmtISO(d) {
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+function fmt(d) {
+  return (d.getMonth()+1) + '/' + d.getDate();
+}
+function fmtYen(n) {
+  return '¥' + Math.round(n).toLocaleString();
+}
+
+// ===== 給料計算（index.htmlの_calcPayrollを移植） =====
+function calcPayroll(row, ss) {
+  const mode = (ss && ss.discount_mode) || 'deduct_then_back';
+  const courseBack = (row.therapist_course_back !== undefined && row.therapist_course_back !== null)
+    ? Number(row.therapist_course_back)
+    : Number(ss ? (ss.default_course_back || 0.5) : 0.5);
+  const optionBack = (row.therapist_option_back !== undefined && row.therapist_option_back !== null)
+    ? Number(row.therapist_option_back)
+    : Number(ss ? (ss.default_option_back ?? 1.0) : 1.0);
+  const price       = Number(row.price       || 0);
+  const coursePrice = Number(row.course_price || price);
+  const optPrice    = Number(row.option_price || 0);
+  const nomFee      = Number(row.nomination_fee || 0);
+  const discount    = Number(row.discount || 0);
+  const fixedBack   = (row.fixed_back_amount !== undefined && row.fixed_back_amount !== null)
+    ? Number(row.fixed_back_amount) : null;
+  let storeDrop, therapistCoursePay;
+  if (fixedBack !== null) {
+    therapistCoursePay = fixedBack;
+    storeDrop = coursePrice - fixedBack - discount;
+  } else if (mode === 'store_bears') {
+    storeDrop          = Math.round(coursePrice * (1 - courseBack)) - discount;
+    therapistCoursePay = Math.round(coursePrice * courseBack);
+  } else {
+    const net          = coursePrice - discount;
+    storeDrop          = Math.round(net * (1 - courseBack));
+    therapistCoursePay = Math.round(net * courseBack);
+  }
+  const therapistOptPay = Math.round(optPrice * optionBack);
+  const therapistPay    = therapistCoursePay + therapistOptPay + nomFee;
+  return { storeDrop, therapistPay };
+}
+
+// ===== データ読み込み =====
+async function loadRanking() {
+  const range = getDateRange();
+  if (!range) return;
+  const storeId = document.getElementById('sel-store').value;
+  const btn = document.getElementById('btn-load');
+  btn.disabled = true;
+  btn.textContent = '読み込み中...';
+
+  document.getElementById('rank-content').innerHTML = `
+    <div class="loading"><div class="spinner"></div>データを取得中...</div>`;
+
+  try {
+    // 27時ルール: startDate T03:00〜endDate翌日 T02:59
+    const endDt = new Date(range.end + 'T00:00:00+09:00');
+    endDt.setDate(endDt.getDate() + 1);
+    endDt.setHours(2, 59, 59, 0);
+
+    const [salesRes, therapistRes, settingsRes] = await Promise.all([
+      _sb.from('sales').select('*')
+        .eq('store_id', storeId)
+        .gte('date', range.start + 'T03:00:00+09:00')
+        .lte('date', endDt.toISOString())
+        .order('date'),
+      _sb.from('therapists').select('id,name,course_back,option_back')
+        .eq('store_id', storeId).eq('active', true),
+      _sb.from('store_settings').select('*').eq('store_id', storeId).single()
+    ]);
+
+    const ss = settingsRes.data || {};
+    const tMap = {};
+    (therapistRes.data || []).forEach(t => { tMap[t.name] = t; });
+
+    // 固定バックマップ
+    const tIds = (therapistRes.data || []).map(t => t.id).filter(Boolean);
+    let menuBackMap = {};
+    if (tIds.length) {
+      const { data: mbs } = await _sb.from('therapist_menu_backs')
+        .select('*').eq('store_id', storeId).in('therapist_id', tIds);
+      (mbs || []).forEach(b => { menuBackMap[b.therapist_id + '_' + b.menu_id] = b.back_amount; });
+    }
+    // メニューマスタ(course_min→menu_id)
+    const { data: menuData } = await _sb.from('menus').select('id,duration_min')
+      .eq('store_id', storeId).eq('type', 'course').eq('active', true);
+    const menuByMin = {};
+    (menuData || []).forEach(m => { menuByMin[m.duration_min] = m.id; });
+
+    // セラピスト別集計
+    const agg = {};
+    (salesRes.data || []).forEach(r => {
+      const name = r.therapist_name;
+      if (!name) return;
+      if (!agg[name]) {
+        agg[name] = {
+          name,
+          sales: 0, pay: 0, drop: 0,
+          total: 0, nom: 0, honshimei: 0
+        };
+      }
+      const tInfo = tMap[name] || {};
+      const menuId = menuByMin[r.course_min];
+      const fixedBack = (tInfo.id && menuId && menuBackMap[tInfo.id + '_' + menuId] !== undefined)
+        ? menuBackMap[tInfo.id + '_' + menuId] : null;
+      const row = {
+        ...r,
+        therapist_course_back: tInfo.course_back,
+        therapist_option_back: tInfo.option_back,
+        fixed_back_amount: fixedBack
+      };
+      const { storeDrop, therapistPay } = calcPayroll(row, ss);
+      agg[name].sales += Number(r.price || 0);
+      agg[name].pay   += therapistPay;
+      agg[name].drop  += storeDrop;
+      agg[name].total += 1;
+      if (r.nomination !== 'free') agg[name].nom += 1;
+      if (r.nomination === 'honshimei') agg[name].honshimei += 1;
+    });
+
+    rankData = Object.values(agg).map(a => ({
+      ...a,
+      honratio: a.total > 0 ? (a.honshimei / a.total * 100) : 0
+    }));
+
+    renderRanking();
+  } catch(e) {
+    document.getElementById('rank-content').innerHTML =
+      `<div class="empty">エラー: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '読み込む';
+  }
+}
+
+// ===== タブ切り替え =====
+function switchTab(tab, el) {
+  currentTab = tab;
+  document.querySelectorAll('.rank-tab').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  if (rankData.length) renderRanking();
+}
+
+// ===== ランキング描画 =====
+function renderRanking() {
+  if (!rankData.length) {
+    document.getElementById('rank-content').innerHTML =
+      `<div class="empty">データがありません</div>`;
+    return;
+  }
+
+  // ソート設定
+  const cfg = {
+    sales:     { key: 'sales',     label: '売上',       color: '#3b82f6', fmt: fmtYen },
+    pay:       { key: 'pay',       label: '給料',       color: '#10b981', fmt: fmtYen },
+    honshimei: { key: 'honshimei', label: '本指名数',   color: '#f59e0b', fmt: n => n + '件' },
+    honratio:  { key: 'honratio',  label: '本指名率',   color: '#e94560', fmt: n => n.toFixed(1) + '%' },
+    drop:      { key: 'drop',      label: '店落ち',     color: '#8b5cf6', fmt: fmtYen }
+  }[currentTab];
+
+  const sorted = [...rankData].sort((a, b) => b[cfg.key] - a[cfg.key]);
+  const maxVal = sorted[0] ? sorted[0][cfg.key] : 1;
+
+  // サマリー
+  const totalSales = rankData.reduce((s, r) => s + r.sales, 0);
+  const totalPay   = rankData.reduce((s, r) => s + r.pay, 0);
+  const totalDrop  = rankData.reduce((s, r) => s + r.drop, 0);
+  const totalHon   = rankData.reduce((s, r) => s + r.honshimei, 0);
+  const totalCnt   = rankData.reduce((s, r) => s + r.total, 0);
+
+  let html = `
+  <div class="period-label">
+    期間: <strong>${currentPeriodLabel}</strong>
+    <span style="color:var(--muted);">（${rankData.length}名）</span>
+  </div>
+  <div class="summary-grid">
+    <div class="summary-card">
+      <div class="s-label">総売上</div>
+      <div class="s-value" style="font-size:16px;">${fmtYen(totalSales)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="s-label">総給料</div>
+      <div class="s-value" style="font-size:16px;">${fmtYen(totalPay)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="s-label">総店落ち</div>
+      <div class="s-value" style="font-size:16px;">${fmtYen(totalDrop)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="s-label">本指名数</div>
+      <div class="s-value" style="font-size:16px;">${totalHon}件</div>
+      <div class="s-sub">全体 ${totalCnt > 0 ? (totalHon/totalCnt*100).toFixed(1) : 0}%</div>
+    </div>
+  </div>
+  <div class="rank-list">`;
+
+  sorted.forEach((item, i) => {
+    const rank = i + 1;
+    const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+    const barPct = maxVal > 0 ? Math.round(item[cfg.key] / maxVal * 100) : 0;
+    const honRatioStr = item.total > 0 ? (item.honshimei / item.total * 100).toFixed(1) + '%' : '0%';
+
+    html += `
+    <div class="rank-item">
+      <div class="rank-num ${rankClass}">${rank}</div>
+      <div style="flex:1;min-width:0;">
+        <div class="rank-name">${item.name}</div>
+        <div class="rank-badge-row">
+          <span class="rank-badge">売上 ${fmtYen(item.sales)}</span>
+          <span class="rank-badge">給料 ${fmtYen(item.pay)}</span>
+          <span class="rank-badge">本指名 ${item.honshimei}件 (${honRatioStr})</span>
+          <span class="rank-badge">店落ち ${fmtYen(item.drop)}</span>
+          <span class="rank-badge">件数 ${item.total}件</span>
+        </div>
+      </div>
+      <div class="bar-wrap">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px;">${barPct}%</div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${barPct}%;background:${cfg.color};"></div>
+        </div>
+      </div>
+      <div class="rank-metrics">
+        <div class="rank-main" style="color:${cfg.color};">${cfg.fmt(item[cfg.key])}</div>
+        <div class="rank-sub">${cfg.label}</div>
+      </div>
+    </div>`;
+  });
+
+  html += `</div>`;
+  document.getElementById('rank-content').innerHTML = html;
+}
+</script>
+</body>
+</html>
