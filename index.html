@@ -527,6 +527,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       height:var(--nav-h);
       border-right:1px solid rgba(255,255,255,0.15);
     ">読込中...</div>
+    <div id="line-usage-badge" style="display:none;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;margin:auto 4px;flex-shrink:0"></div>
     <button onclick="showPage('payroll')" id="tab-payroll">💰 給料</button>
     <button onclick="showPage('sales-report')" id="tab-sales-report">📊 売上確認</button>
     <button onclick="showPage('reservation')" id="tab-reservation">📅 予約</button>
@@ -3463,6 +3464,8 @@ function startAdminMode() {
   setNowToResvDate();
   calcCoursePrice();
   calcSalesCoursePrice();
+  // LINE通数警告チェック（管理者のみ）
+  checkLineUsage();
 }
 // ============================================================
 // LIFF関連（廃止 - トークン方式に移行）
@@ -6684,6 +6687,38 @@ async function markCollected(roomName, upToDate) {
 
 function closeCustomerModal() {
   document.getElementById('customer-modal').style.display = 'none';
+}
+
+// LINE通数警告表示
+async function checkLineUsage() {
+  const badge = document.getElementById('line-usage-badge');
+  if (!badge) return;
+  try {
+    const EDGE_URL = 'https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push';
+    const res  = await fetch(EDGE_URL + '?action=getLineUsage');
+    const data = await res.json();
+    if (!data.ok) return;
+
+    const usage = data.usage || 0;
+    const limit = data.limit || 5000;
+    const pct   = Math.round(usage / limit * 100);
+
+    badge.style.display = '';
+    badge.textContent   = `📨 ${usage.toLocaleString()}/${limit.toLocaleString()}通`;
+
+    if (pct >= 90) {
+      badge.style.background = '#FCEBEB';
+      badge.style.color      = '#A32D2D';
+      showBanner(`⚠️ LINE通数が${pct}%に達しています（${usage}/${limit}通）。スタンダードプランへの変更を検討してください。`, 'error');
+    } else if (pct >= 80) {
+      badge.style.background = '#FAEEDA';
+      badge.style.color      = '#854F0B';
+      showBanner(`⚠️ LINE通数が${pct}%に達しています（${usage}/${limit}通）。`, 'error');
+    } else {
+      badge.style.background = '#E1F5EE';
+      badge.style.color      = '#0F6E56';
+    }
+  } catch(e) { console.warn('LINE通数取得エラー:', e); }
 }
 
 // その他入力欄の+/-切り替え
