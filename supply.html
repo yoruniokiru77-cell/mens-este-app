@@ -161,6 +161,7 @@ tr:last-child td { border-bottom: none; }
     <div class="nav-store" id="store-name-badge">読込中...</div>
     <button onclick="showPage('admin-orders')" id="tab-admin-orders">📋 発注管理</button>
     <button onclick="showPage('supply-master')" id="tab-supply-master">⚙ 備品マスタ</button>
+    <button onclick="showPage('supply-analytics')" id="tab-supply-analytics" style="display:none">📊 消費分析</button>
     <!-- セラピスト用（非表示） -->
     <button onclick="showPage('supply-list')" id="tab-supply-list" style="display:none">📦 備品一覧</button>
     <button onclick="showPage('my-orders')" id="tab-my-orders" style="display:none">📋 申請履歴</button>
@@ -233,6 +234,35 @@ tr:last-child td { border-bottom: none; }
         <button class="btn btn-primary" onclick="saveSupply()">保存</button>
         <button class="btn btn-secondary" onclick="closeSupplyForm()">キャンセル</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== 管理者: 消費分析 ===== -->
+  <div id="page-supply-analytics" class="page">
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-header" style="margin-bottom:12px">
+        <div class="sec-title">📊 消費ペース分析</div>
+        <button class="btn btn-secondary btn-sm" onclick="loadSupplyAnalytics()">更新</button>
+      </div>
+      <!-- 期間選択 -->
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px">
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm" id="analytics-btn-month" onclick="setAnalyticsPeriod('month')" style="background:var(--primary);color:#fff;border:none">当月</button>
+          <button class="btn btn-secondary btn-sm" id="analytics-btn-lastmonth" onclick="setAnalyticsPeriod('lastmonth')">先月</button>
+          <button class="btn btn-secondary btn-sm" id="analytics-btn-week" onclick="setAnalyticsPeriod('week')">当週</button>
+          <button class="btn btn-secondary btn-sm" id="analytics-btn-custom" onclick="setAnalyticsPeriod('custom')">カスタム</button>
+        </div>
+        <div id="analytics-custom-range" style="display:none;align-items:center;gap:6px">
+          <input type="date" id="analytics-date-from" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
+          <span style="color:var(--muted)">〜</span>
+          <input type="date" id="analytics-date-to" style="font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)">
+          <button class="btn btn-primary btn-sm" onclick="loadSupplyAnalytics()">適用</button>
+        </div>
+      </div>
+      <div id="analytics-period-label" style="font-size:12px;color:var(--muted);margin-bottom:4px"></div>
+    </div>
+    <div id="supply-analytics-content">
+      <p style="color:var(--muted);text-align:center;padding:20px">読み込み中...</p>
     </div>
   </div>
 
@@ -384,6 +414,7 @@ async function initAdmin() {
   // 管理者ナビ表示
   document.getElementById('tab-admin-orders').style.display = '';
   document.getElementById('tab-supply-master').style.display = '';
+  document.getElementById('tab-supply-analytics').style.display = '';
   document.getElementById('tab-supply-list').style.display = 'none';
   document.getElementById('tab-my-orders').style.display = 'none';
   document.getElementById('bottom-nav').classList.remove('show');
@@ -435,10 +466,11 @@ function showPage(id) {
   if (bnavBtn) bnavBtn.classList.add('active');
 
   // ページ初期化
-  if (id === 'admin-orders')  loadAdminOrders();
-  if (id === 'supply-master') loadSupplyMaster();
-  if (id === 'supply-list')   loadSupplyList();
-  if (id === 'my-orders')     loadMyOrders();
+  if (id === 'admin-orders')      loadAdminOrders();
+  if (id === 'supply-master')     loadSupplyMaster();
+  if (id === 'supply-analytics')  loadSupplyAnalytics();
+  if (id === 'supply-list')       loadSupplyList();
+  if (id === 'my-orders')         loadMyOrders();
 }
 
 // ============================================================
@@ -515,8 +547,9 @@ function switchAdminStore(storeId, btnEl) {
   const activePage = document.querySelector('.page.active');
   if (activePage) {
     const pageId = activePage.id.replace('page-', '');
-    if (pageId === 'admin-orders')  loadAdminOrders();
-    if (pageId === 'supply-master') loadSupplyMaster();
+    if (pageId === 'admin-orders')      loadAdminOrders();
+    if (pageId === 'supply-master')     loadSupplyMaster();
+    if (pageId === 'supply-analytics')  loadSupplyAnalytics();
   }
 }
 
@@ -654,6 +687,159 @@ async function changeOrderStatus(id, newStatus, requester, supplyName, qty) {
     alert('エラー: ' + e.message);
   } finally {
     hideOverlay();
+  }
+}
+
+// ============================================================
+// 管理者: 消費ペース分析
+// ============================================================
+let _analyticsPeriod = 'month';
+
+function setAnalyticsPeriod(period) {
+  _analyticsPeriod = period;
+  ['month','lastmonth','week','custom'].forEach(p => {
+    const btn = document.getElementById('analytics-btn-' + p);
+    if (btn) {
+      btn.style.background = p === period ? 'var(--primary)' : '';
+      btn.style.color      = p === period ? '#fff' : '';
+      btn.className        = p === period ? 'btn btn-sm' : 'btn btn-secondary btn-sm';
+      btn.style.border     = p === period ? 'none' : '';
+    }
+  });
+  const cr = document.getElementById('analytics-custom-range');
+  if (cr) cr.style.display = period === 'custom' ? 'flex' : 'none';
+  if (period !== 'custom') loadSupplyAnalytics();
+}
+
+function getAnalyticsDateRange() {
+  const now = new Date();
+  let startDate, endDate, label;
+  if (_analyticsPeriod === 'month') {
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    endDate   = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    label     = now.getFullYear() + '年' + (now.getMonth()+1) + '月';
+  } else if (_analyticsPeriod === 'lastmonth') {
+    startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    endDate   = new Date(now.getFullYear(), now.getMonth(), 0);
+    label     = startDate.getFullYear() + '年' + (startDate.getMonth()+1) + '月';
+  } else if (_analyticsPeriod === 'week') {
+    const dow = now.getDay() === 0 ? 6 : now.getDay() - 1;
+    startDate = new Date(now); startDate.setDate(now.getDate() - dow);
+    endDate   = new Date(startDate); endDate.setDate(startDate.getDate() + 6);
+    const fmt = d => (d.getMonth()+1) + '/' + d.getDate();
+    label = fmt(startDate) + '〜' + fmt(endDate);
+  } else {
+    const f = document.getElementById('analytics-date-from').value;
+    const t = document.getElementById('analytics-date-to').value;
+    if (!f || !t) { alert('日付を入力してください'); return null; }
+    startDate = new Date(f); endDate = new Date(t); label = f + '〜' + t;
+  }
+  const pad = n => String(n).padStart(2,'0');
+  const fmt = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+  return { start: fmt(startDate), end: fmt(endDate), label };
+}
+
+async function loadSupplyAnalytics() {
+  const range = getAnalyticsDateRange();
+  if (!range) return;
+  const el = document.getElementById('supply-analytics-content');
+  const labelEl = document.getElementById('analytics-period-label');
+  if (labelEl) labelEl.textContent = '集計期間: ' + range.label;
+  el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">読み込み中...</p>';
+
+  try {
+    const startISO = range.start + 'T00:00:00+09:00';
+    const endISO   = range.end   + 'T23:59:59+09:00';
+    const startMs  = new Date(startISO).getTime();
+    const endMs    = new Date(endISO).getTime();
+
+    // 受取済み発注履歴 + 予約データを並列取得
+    // received_atがNULLの過去データはcreated_atで代替するためJS側でフィルタ
+    const [ordersRes, resvRes] = await Promise.all([
+      _sb.from('supply_orders')
+        .select('supply_name, room_name, quantity, received_at, created_at')
+        .eq('store_id', STORE_ID)
+        .eq('status', 'received'),
+      _sb.from('reservations')
+        .select('date, room_name')
+        .eq('store_id', STORE_ID)
+        .eq('status', 'active')
+        .gte('date', startISO)
+        .lte('date', endISO)
+    ]);
+
+    // received_at があればそちらを、なければ created_at を使用して期間フィルタ
+    const orders = (ordersRes.data || []).filter(o => {
+      const ms = new Date(o.received_at || o.created_at).getTime();
+      return ms >= startMs && ms <= endMs;
+    });
+    const resvs = resvRes.data || [];
+
+    // ルーム別に集計
+    const roomData = {}; // roomName → { items: {name: qty}, resvCount }
+
+    orders.forEach(o => {
+      const room = o.room_name || '未指定';
+      if (!roomData[room]) roomData[room] = { items: {}, resvCount: 0 };
+      roomData[room].items[o.supply_name] = (roomData[room].items[o.supply_name] || 0) + (o.quantity || 1);
+    });
+
+    resvs.forEach(r => {
+      const room = r.room_name || '未指定';
+      if (!roomData[room]) roomData[room] = { items: {}, resvCount: 0 };
+      roomData[room].resvCount++;
+    });
+
+    const rooms = Object.keys(roomData).sort();
+    if (!rooms.length) {
+      el.innerHTML = '<div class="card"><p style="color:var(--muted);text-align:center;padding:20px">この期間の受取済みデータがありません</p></div>';
+      return;
+    }
+
+    el.innerHTML = rooms.map(room => {
+      const d = roomData[room];
+      const items = Object.entries(d.items).sort((a, b) => b[1] - a[1]);
+      const totalItems = items.reduce((s, [, q]) => s + q, 0);
+
+      const itemsHtml = items.length
+        ? `<div class="table-wrap">
+            <table>
+              <thead><tr><th>備品名</th><th style="text-align:right">消費数</th></tr></thead>
+              <tbody>
+                ${items.map(([name, qty]) => `
+                <tr>
+                  <td>${name}</td>
+                  <td style="text-align:right;font-weight:600">${qty}</td>
+                </tr>`).join('')}
+                <tr style="background:var(--bg)">
+                  <td style="font-weight:600;color:var(--muted)">合計</td>
+                  <td style="text-align:right;font-weight:700">${totalItems}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>`
+        : '<p style="color:var(--muted);font-size:13px;padding:8px 0">この期間の受取実績なし</p>';
+
+      return `
+      <div class="card" style="margin-bottom:14px">
+        <div class="sec-header" style="margin-bottom:12px">
+          <div class="sec-title" style="font-size:15px">🚪 ${room}</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:12px;background:#eff6ff;color:#1d4ed8;padding:4px 10px;border-radius:20px;font-weight:600">
+              予約 ${d.resvCount}件
+            </span>
+          </div>
+        </div>
+        ${itemsHtml}
+        ${d.resvCount > 0 && totalItems > 0 ? `
+        <div style="margin-top:10px;padding:8px 10px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--muted)">
+          予約1件あたり消費 <strong style="color:var(--text)">${(totalItems / d.resvCount).toFixed(1)}</strong> 点
+        </div>` : ''}
+      </div>`;
+    }).join('');
+
+  } catch(e) {
+    el.innerHTML = '<p style="color:red">エラー: ' + e.message + '</p>';
   }
 }
 
