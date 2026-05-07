@@ -1374,6 +1374,45 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         </div>
         <button class="btn btn-primary" onclick="saveStoreSettings()">設定を保存</button>
 
+        <!-- シフトリマインド自動送信設定 -->
+        <div style="font-size:14px;font-weight:700;margin-top:20px;margin-bottom:12px">📅 シフト提出リマインド自動送信</div>
+        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:12px">
+          <label class="toggle-wrap" style="margin:0">
+            <span class="toggle-switch">
+              <input type="checkbox" id="st-shift-reminder-enabled">
+              <span class="toggle-slider"></span>
+            </span>
+            <div>
+              <div style="font-size:14px;font-weight:600">自動リマインドを有効にする</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">指定した曜日・時刻に未提出セラピストへ自動でLINE通知します</div>
+            </div>
+          </label>
+        </div>
+        <div id="shift-reminder-detail" style="display:none">
+          <div class="grid2" style="gap:12px;margin-bottom:12px">
+            <div class="form-group" style="margin:0">
+              <label>送信曜日</label>
+              <select id="st-shift-reminder-day" style="width:100%">
+                <option value="0">日曜日</option>
+                <option value="1">月曜日</option>
+                <option value="2">火曜日</option>
+                <option value="3">水曜日</option>
+                <option value="4">木曜日</option>
+                <option value="5" selected>金曜日</option>
+                <option value="6">土曜日</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>送信時刻</label>
+              <input type="time" id="st-shift-reminder-time" value="09:00" style="width:100%">
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);background:#eff6ff;border-radius:8px;padding:8px 12px;margin-bottom:12px">
+            💡 翌週分のシフトを未提出のセラピストへ送信します
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveStoreSettings()">設定を保存</button>
+
         <!-- 店舗LINE設定 -->
         <div style="font-size:14px;font-weight:700;margin-top:20px;margin-bottom:12px">📱 店舗LINE通知</div>
         <div class="form-group" style="margin-bottom:4px">
@@ -2584,18 +2623,46 @@ async function apiGet(action, params = {}) {
 
 case 'sendShiftReminder': {
   try {
-    const res = await fetch('https://script.google.com/macros/s/AKfycbyM8dYbt1b4Iyt3llHsZBq8_VdILU_jc1VrFerV7rWjaeqnSdVhZi7RMdHOMHc_2UNKTQ/exec?action=sendShiftReminder&storeId=' + encodeURIComponent(STORE_ID));
-    const text = await res.text();
-    try { return JSON.parse(text); } catch(e) { return { ok: true }; }
-  } catch(e) { return { ok: true }; }
+    const LINE_PUSH = 'https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push';
+    // 未提出セラピストを取得して一括送信
+    const now = new Date();
+    const day = now.getDay();
+    const diff = (8 - day) % 7 || 7;
+    const mon = new Date(now); mon.setDate(now.getDate() + diff); mon.setHours(0,0,0,0);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const fmtD = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const monStr = fmtD(mon), sunStr = fmtD(sun);
+    const weekLabel = monStr.replace(/-/g,'/') + '〜' + sunStr.replace(/-/g,'/');
+    const [tRes, sRes] = await Promise.all([
+      _sb.from('therapists').select('name,line_user_id').eq('store_id', STORE_ID).eq('active', true),
+      _sb.from('shifts').select('therapist_name').eq('store_id', STORE_ID).gte('date', monStr).lte('date', sunStr)
+    ]);
+    const submittedSet = new Set((sRes.data || []).map(s => s.therapist_name));
+    const targets = (tRes.data || []).filter(t => t.name && t.name !== '管理者' && !submittedSet.has(t.name) && t.line_user_id);
+    let sent = 0;
+    for (const t of targets) {
+      const msg = `【シフト提出リマインド】\n${weekLabel}のシフトがまだ提出されていません。\nLINEで「ログイン」と送信して提出してください。`;
+      await fetch(LINE_PUSH + '?action=sendLineMessage&userId=' + encodeURIComponent(t.line_user_id) + '&message=' + encodeURIComponent(msg));
+      sent++;
+    }
+    return { ok: true, sent };
+  } catch(e) { return { ok: false, error: e.message }; }
 }
 
 case 'sendReminderToOne': {
   try {
-    const res = await fetch('https://script.google.com/macros/s/AKfycbyM8dYbt1b4Iyt3llHsZBq8_VdILU_jc1VrFerV7rWjaeqnSdVhZi7RMdHOMHc_2UNKTQ/exec?action=sendReminderToOne&userId=' + encodeURIComponent(params.userId) + '&name=' + encodeURIComponent(params.name || '') + '&storeId=' + encodeURIComponent(STORE_ID));
-    const text = await res.text();
-    try { return JSON.parse(text); } catch(e) { return { ok: true }; }
-  } catch(e) { return { ok: true }; }
+    const LINE_PUSH = 'https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push';
+    const now = new Date();
+    const day = now.getDay();
+    const diff = (8 - day) % 7 || 7;
+    const mon = new Date(now); mon.setDate(now.getDate() + diff); mon.setHours(0,0,0,0);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    const fmtD = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    const weekLabel = fmtD(mon).replace(/-/g,'/') + '〜' + fmtD(sun).replace(/-/g,'/');
+    const msg = `【シフト提出リマインド】\n${weekLabel}のシフトがまだ提出されていません。\nLINEで「ログイン」と送信して提出してください。`;
+    await fetch(LINE_PUSH + '?action=sendLineMessage&userId=' + encodeURIComponent(params.userId) + '&message=' + encodeURIComponent(msg));
+    return { ok: true };
+  } catch(e) { return { ok: false, error: e.message }; }
 }
 
     // ===== 顧客マスタ =====
@@ -3293,12 +3360,13 @@ case 'verifyTokenAction': {
 
 case 'sendLineMessage': {
   try {
-    const res = await fetch('https://script.google.com/macros/s/AKfycbyM8dYbt1b4Iyt3llHsZBq8_VdILU_jc1VrFerV7rWjaeqnSdVhZi7RMdHOMHc_2UNKTQ/exec?action=sendLineMessage&userId=' + encodeURIComponent(params.userId) + '&message=' + encodeURIComponent(params.message || ''));
+    const LINE_PUSH = 'https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push';
+    const res = await fetch(LINE_PUSH + '?action=sendLineMessage&userId=' + encodeURIComponent(params.userId) + '&message=' + encodeURIComponent(params.message || ''));
     const text = await res.text();
     try { return JSON.parse(text); } catch(e) { return { ok: true }; }
   } catch(e) {
     console.warn('LINE送信エラー:', e);
-    return { ok: true };
+    return { ok: false, error: e.message };
   }
 }
 
@@ -3328,8 +3396,11 @@ case 'sendLineMessage': {
       if (params.discount_mode      !== undefined) upd.discount_mode      = params.discount_mode;
       if (params.auto_honshimei     !== undefined) upd.auto_honshimei     = params.auto_honshimei;
       if (params.store_line_name    !== undefined) upd.store_line_name    = params.store_line_name;
-      if (params.send_payroll_line  !== undefined) upd.send_payroll_line  = params.send_payroll_line;
-      if (params.send_store_line    !== undefined) upd.send_store_line    = params.send_store_line;
+      if (params.send_payroll_line       !== undefined) upd.send_payroll_line       = params.send_payroll_line;
+      if (params.send_store_line         !== undefined) upd.send_store_line         = params.send_store_line;
+      if (params.shift_reminder_enabled  !== undefined) upd.shift_reminder_enabled  = params.shift_reminder_enabled;
+      if (params.shift_reminder_day      !== undefined) upd.shift_reminder_day      = Number(params.shift_reminder_day);
+      if (params.shift_reminder_time     !== undefined) upd.shift_reminder_time     = params.shift_reminder_time;
       if (params.extension_min      !== undefined) upd.extension_min      = Number(params.extension_min);
       if (params.extension_price    !== undefined) upd.extension_price    = Number(params.extension_price);
       if (ex) {
@@ -8816,7 +8887,7 @@ async function submitReservation() {
   // 出禁・NGチェック
   if (customerNo || tel) {
     try {
-      const check = await apiGet('checkCustomerStatus', { customerNo, tel, therapist: therapistName });
+      const check = await apiGet('checkCustomerStatus', { customerNo, tel, customerName, therapist: therapistName });
       if (!check.allowed) { alert('⛔ 予約できません\n' + check.reason); return; }
       if (check.warning)  { if (!confirm('⚠ ' + check.reason + '\n予約を続けますか？')) return; }
     } catch(e) { console.warn('status check error:', e); }
@@ -8986,6 +9057,11 @@ async function copyResvGuide() {
 }
 
 async function saveAndSendLine() {
+  // 二重送信防止
+  const lineBtn = document.querySelector('[onclick="saveAndSendLine()"]');
+  if (lineBtn && lineBtn.disabled) return;
+  if (lineBtn) { lineBtn.disabled = true; lineBtn.textContent = '送信中...'; }
+
   const customerNo2 = document.getElementById('resv-customer-no').value;
   const tel2 = document.getElementById('resv-customer-tel-full').value || document.getElementById('resv-customer-tel').value;
   const therapistName2 = document.getElementById('resv-therapist').value;
@@ -9142,7 +9218,11 @@ async function saveAndSendLine() {
     loadReservations();
     resetResvForm();
   } catch(e) { alert('エラー: ' + e.message); }
-  finally { hideOverlay(); }
+  finally {
+    hideOverlay();
+    const lineBtnF = document.querySelector('[onclick="saveAndSendLine()"]');
+    if (lineBtnF) { lineBtnF.disabled = false; lineBtnF.textContent = '保存 + LINE送信'; }
+  }
 }
 
 function resetResvForm() {
@@ -11282,6 +11362,19 @@ async function loadStoreSettingsUI() {
     if (splEl) splEl.checked = s.send_payroll_line !== false;
     const sslEl = document.getElementById('st-send-store-line');
     if (sslEl) sslEl.checked = s.send_store_line !== false;
+    // シフトリマインド設定
+    const sreEl = document.getElementById('st-shift-reminder-enabled');
+    if (sreEl) {
+      sreEl.checked = s.shift_reminder_enabled || false;
+      document.getElementById('shift-reminder-detail').style.display = sreEl.checked ? '' : 'none';
+      sreEl.onchange = () => {
+        document.getElementById('shift-reminder-detail').style.display = sreEl.checked ? '' : 'none';
+      };
+    }
+    const srdEl = document.getElementById('st-shift-reminder-day');
+    if (srdEl && s.shift_reminder_day !== undefined) srdEl.value = s.shift_reminder_day;
+    const srtEl = document.getElementById('st-shift-reminder-time');
+    if (srtEl && s.shift_reminder_time) srtEl.value = s.shift_reminder_time;
   } catch(e) { alert('設定読み込みエラー: ' + e.message); }
 }
 
@@ -11348,6 +11441,9 @@ async function saveStoreSettings() {
       store_line_name:            document.getElementById('st-store-line-name')?.value?.trim() || '',
       send_payroll_line:          document.getElementById('st-send-payroll-line')?.checked !== false,
       send_store_line:            document.getElementById('st-send-store-line')?.checked !== false,
+      shift_reminder_enabled:     document.getElementById('st-shift-reminder-enabled')?.checked || false,
+      shift_reminder_day:         Number(document.getElementById('st-shift-reminder-day')?.value ?? 5),
+      shift_reminder_time:        document.getElementById('st-shift-reminder-time')?.value || '09:00',
     });
     await loadStoreSettings();
     showToast('店舗設定を保存しました');
