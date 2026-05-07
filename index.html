@@ -783,17 +783,13 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" id="room-avail-date-btns"></div>
         <!-- 凡例 -->
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:var(--muted)">
+          <div style="display:flex;align-items:center;gap:4px"><span style="font-size:16px">◎</span> 3部屋以上空き</div>
+          <div style="display:flex;align-items:center;gap:4px"><span style="font-size:16px">○</span> 2部屋空き</div>
+          <div style="display:flex;align-items:center;gap:4px"><span style="font-size:16px">△</span> 1部屋空き</div>
+          <div style="display:flex;align-items:center;gap:4px"><span style="font-size:16px">✕</span> 空きなし</div>
           <div style="display:flex;align-items:center;gap:4px">
-            <div style="width:18px;height:18px;border-radius:4px;background:#fee2e2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#b91c1c;font-weight:700">✕</div>
-            承認済みシフトあり
-          </div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <div style="width:18px;height:18px;border-radius:4px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">2</div>
+            <div style="width:20px;height:20px;border-radius:4px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">2</div>
             申請中（人数）
-          </div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <div style="width:18px;height:18px;border-radius:4px;background:#f0fdf4"></div>
-            空き
           </div>
         </div>
         <!-- グリッド -->
@@ -4383,37 +4379,54 @@ async function loadRoomAvailability() {
   if (!gridEl) return;
   gridEl.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">読み込み中...</p>';
 
-  // 日付ボタン生成（今日から7日分）
+  // 日付ボタン生成（今日〜来週末の日曜日まで）
   const btnWrap = document.getElementById('room-avail-date-btns');
   if (btnWrap && !btnWrap.children.length) {
     const WDAYS = ['日','月','火','水','木','金','土'];
     const today = new Date();
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + i);
+    today.setHours(0, 0, 0, 0);
+
+    // 来週の日曜日を計算
+    const todayDow = today.getDay(); // 0=日〜6=土
+    // 今週の日曜 → todayDow===0なら今日、それ以外は今週末
+    const daysToThisSun = todayDow === 0 ? 7 : (7 - todayDow);
+    const nextSun = new Date(today);
+    nextSun.setDate(today.getDate() + daysToThisSun + 7); // 来週の日曜
+
+    // 今日〜来週日曜までボタン生成
+    const cur = new Date(today);
+    while (cur <= nextSun) {
+      const d  = new Date(cur);
       const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-      const label = (i === 0 ? '今日 ' : '') + (d.getMonth()+1) + '/' + d.getDate() + '（' + WDAYS[d.getDay()] + '）';
+      const diffDays = Math.round((d - today) / 86400000);
+      const prefix   = diffDays === 0 ? '今日 ' : diffDays === 1 ? '明日 ' : '';
+      const label    = prefix + (d.getMonth()+1) + '/' + d.getDate() + '（' + WDAYS[d.getDay()] + '）';
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+
       const btn = document.createElement('button');
       btn.className = 'btn btn-sm';
       btn.dataset.date = ds;
-      btn.textContent = label;
-      btn.style.cssText = 'font-size:12px;padding:5px 10px;';
+      btn.textContent  = label;
+      btn.style.cssText = `font-size:12px;padding:5px 10px;${isWeekend ? 'color:var(--accent)' : ''}`;
       btn.onclick = () => {
         _availSelectedDate = ds;
         document.querySelectorAll('#room-avail-date-btns button').forEach(b => {
-          b.style.background   = b.dataset.date === ds ? 'var(--primary)' : '';
-          b.style.color        = b.dataset.date === ds ? '#fff' : '';
-          b.style.borderColor  = b.dataset.date === ds ? 'var(--primary)' : '';
+          const isSel = b.dataset.date === ds;
+          b.style.background  = isSel ? 'var(--primary)' : '';
+          b.style.color       = isSel ? '#fff' : ((['0','6'].includes(String(new Date(b.dataset.date + 'T00:00:00').getDay()))) ? 'var(--accent)' : '');
+          b.style.borderColor = isSel ? 'var(--primary)' : '';
         });
         renderRoomAvailGrid(ds);
       };
-      if (i === 0) {
+
+      if (diffDays === 0) {
         _availSelectedDate = ds;
         btn.style.background  = 'var(--primary)';
         btn.style.color       = '#fff';
         btn.style.borderColor = 'var(--primary)';
       }
       btnWrap.appendChild(btn);
+      cur.setDate(cur.getDate() + 1);
     }
   }
 
@@ -4425,108 +4438,90 @@ async function renderRoomAvailGrid(dateStr) {
   gridEl.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">読み込み中...</p>';
 
   try {
-    const month = dateStr.slice(0, 7);
+    // 月またぎ対応
+    const month      = dateStr.slice(0, 7);
+    const todayMonth = new Date().toISOString().slice(0, 7);
+    let allShifts;
+    if (month !== todayMonth) {
+      const [s1, s2] = await Promise.all([
+        apiGet('getShifts', { month: todayMonth }),
+        apiGet('getShifts', { month })
+      ]);
+      allShifts = [...s1, ...s2];
+    } else {
+      allShifts = await apiGet('getShifts', { month });
+    }
 
-    // ルーム一覧・承認済みシフト・申請中シフトを並列取得
-    const [rooms, allShifts] = await Promise.all([
-      apiGetCached('getRoomMaster', {}),
-      apiGet('getShifts', { month })
-    ]);
+    const rooms = await apiGetCached('getRoomMaster', {});
+    const totalRooms = (rooms || []).filter(r => r.active !== false).length;
 
-    const activeRooms = (rooms || []).filter(r => r.active !== false);
-    if (!activeRooms.length) {
+    if (!totalRooms) {
       gridEl.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">ルームが登録されていません</p>';
       return;
     }
 
-    // 対象日のシフトのみ抽出
     const dateFormatted = dateStr.replace(/-/g, '/');
     const dayShifts = (allShifts || []).filter(s => s.date === dateFormatted);
 
-    // 承認済みと申請中（自分以外）に分類
-    const approvedByRoom = {}; // roomName → [{start, end}]
-    const pendingByRoom  = {}; // roomName → count per hour
+    // 時間帯ごとに集計
+    const occupiedRoomsByHour = {}; // h → Set of roomNames（承認済み）
+    const pendingCountByHour  = {}; // h → 申請中人数（自分以外）
 
     dayShifts.forEach(s => {
-      if (!s.roomName) return;
-      const room = s.roomName;
-      if (s.status === 'approved') {
-        if (!approvedByRoom[room]) approvedByRoom[room] = [];
-        approvedByRoom[room].push({ start: s.startTime, end: s.endTime });
-      } else {
-        // 申請中（自分以外）
-        if (s.therapist === loggedInTherapist) return;
-        if (!pendingByRoom[room]) pendingByRoom[room] = {};
-        // 申請時間帯の各時間にカウント
-        const startH = _timeToMin27(s.startTime) / 60 | 0;
-        const endH   = Math.ceil(_timeToMin27(s.endTime) / 60);
+      const startMin = _timeToMin27(s.startTime);
+      const endMin   = _timeToMin27(s.endTime);
+      const startH   = Math.floor(startMin / 60);
+      const endH     = Math.ceil(endMin / 60);
+
+      if (s.status === 'approved' && s.roomName) {
         for (let h = startH; h < endH; h++) {
-          pendingByRoom[room][h] = (pendingByRoom[room][h] || 0) + 1;
+          if (!occupiedRoomsByHour[h]) occupiedRoomsByHour[h] = new Set();
+          occupiedRoomsByHour[h].add(s.roomName);
+        }
+      } else if (s.status !== 'approved' && s.therapist !== loggedInTherapist) {
+        for (let h = startH; h < endH; h++) {
+          pendingCountByHour[h] = (pendingCountByHour[h] || 0) + 1;
         }
       }
     });
 
-    // 時間帯（10時〜26時）
+    function availSymbol(free) {
+      if (free >= 3) return { sym: '◎', color: '#16a34a', bg: '#f0fdf4' };
+      if (free === 2) return { sym: '○', color: '#2563eb', bg: '#eff6ff' };
+      if (free === 1) return { sym: '△', color: '#d97706', bg: '#fffbeb' };
+      return { sym: '✕', color: '#b91c1c', bg: '#fee2e2' };
+    }
+
     const hours = [];
     for (let h = 10; h <= 26; h++) hours.push(h);
 
-    // テーブル生成
-    const thCells = activeRooms.map(r =>
-      `<th style="padding:6px 8px;white-space:nowrap;font-size:12px;font-weight:600;background:var(--bg);border:0.5px solid var(--border);text-align:center;min-width:72px">${r.name}</th>`
-    ).join('');
-
     const rows = hours.map(h => {
-      const label = h > 24
-        ? String(h) + ':00'
-        : String(h).padStart(2,'0') + ':00';
+      const label     = h > 24 ? `${h}:00` : `${String(h).padStart(2,'0')}:00`;
+      const occupied  = occupiedRoomsByHour[h] ? occupiedRoomsByHour[h].size : 0;
+      const freeRooms = Math.max(0, totalRooms - occupied);
+      const { sym, color, bg } = availSymbol(freeRooms);
+      const pending   = pendingCountByHour[h] || 0;
+      const border    = pending > 0 ? 'border:2px dashed #94a3b8' : 'border:1px solid #e2e8f0';
 
-      const cells = activeRooms.map(r => {
-        const room = r.name;
-        // 承認済みシフトがこの時間帯にあるか
-        const hasApproved = (approvedByRoom[room] || []).some(sh => {
-          const shStart = _timeToMin27(sh.start);
-          const shEnd   = _timeToMin27(sh.end);
-          const hMin    = h * 60;
-          return shStart <= hMin && shEnd > hMin;
-        });
-        if (hasApproved) {
-          return `<td style="padding:3px;border:0.5px solid var(--border)">
-            <div style="height:28px;border-radius:4px;background:#fee2e2;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#b91c1c">✕</div>
-          </td>`;
-        }
-        // 申請中の人数
-        const pendingCount = (pendingByRoom[room] || {})[h] || 0;
-        if (pendingCount > 0) {
-          return `<td style="padding:3px;border:0.5px solid var(--border)">
-            <div style="height:28px;border-radius:4px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted)">${pendingCount}</div>
-          </td>`;
-        }
-        // 空き
-        return `<td style="padding:3px;border:0.5px solid var(--border)">
-          <div style="height:28px;border-radius:4px;background:#f0fdf4"></div>
-        </td>`;
-      }).join('');
-
-      return `<tr>
-        <td style="padding:4px 8px;white-space:nowrap;font-size:12px;color:var(--muted);background:var(--bg);border:0.5px solid var(--border);font-weight:500">${label}</td>
-        ${cells}
-      </tr>`;
+      return `
+        <tr>
+          <td style="padding:6px 10px;font-size:13px;color:var(--muted);font-weight:500;white-space:nowrap;width:60px">${label}</td>
+          <td style="padding:4px 6px">
+            <div style="display:flex;align-items:center;gap:10px;padding:6px 12px;border-radius:8px;background:${bg};${border}">
+              <span style="font-size:22px;color:${color};line-height:1">${sym}</span>
+              <span style="font-size:12px;color:${color};font-weight:600">${freeRooms}部屋空き</span>
+              ${pending > 0 ? `<span style="font-size:12px;color:var(--muted);margin-left:auto">申請中 ${pending}人</span>` : ''}
+            </div>
+          </td>
+        </tr>`;
     }).join('');
 
-    gridEl.innerHTML = `
-      <table style="border-collapse:collapse;font-size:13px;width:100%">
-        <thead>
-          <tr>
-            <th style="padding:6px 8px;background:var(--bg);border:0.5px solid var(--border);font-size:12px;color:var(--muted);font-weight:500">時間</th>
-            ${thCells}
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+    gridEl.innerHTML = `<table style="width:100%;border-collapse:collapse"><tbody>${rows}</tbody></table>`;
   } catch(e) {
     gridEl.innerHTML = `<p style="color:red">エラー: ${e.message}</p>`;
   }
 }
+
 
 async function initShiftSubmit() {
   if (!therapists.length) therapists = await apiGet('getTherapists');
