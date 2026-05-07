@@ -1417,6 +1417,21 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         </div>
         <button class="btn btn-primary" onclick="saveStoreSettings()">設定を保存</button>
 
+        <!-- ルーム空き状況設定 -->
+        <div style="font-size:14px;font-weight:700;margin-top:20px;margin-bottom:12px">🚪 ルーム空き状況</div>
+        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:16px">
+          <label class="toggle-wrap" style="margin:0">
+            <span class="toggle-switch">
+              <input type="checkbox" id="st-show-room-availability" checked>
+              <span class="toggle-slider"></span>
+            </span>
+            <div>
+              <div style="font-size:14px;font-weight:600">シフト提出画面にルーム空き状況を表示する</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">OFFにするとセラピストのシフト提出画面から「ルーム空き状況」タブが非表示になります</div>
+            </div>
+          </label>
+        </div>
+
         <!-- シフトリマインド自動送信設定 -->
         <div style="font-size:14px;font-weight:700;margin-top:20px;margin-bottom:12px">📅 シフト提出リマインド自動送信</div>
         <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:12px">
@@ -3441,6 +3456,7 @@ case 'sendLineMessage': {
       if (params.store_line_name    !== undefined) upd.store_line_name    = params.store_line_name;
       if (params.send_payroll_line       !== undefined) upd.send_payroll_line       = params.send_payroll_line;
       if (params.send_store_line         !== undefined) upd.send_store_line         = params.send_store_line;
+      if (params.show_room_availability  !== undefined) upd.show_room_availability  = params.show_room_availability;
       if (params.shift_reminder_enabled  !== undefined) upd.shift_reminder_enabled  = params.shift_reminder_enabled;
       if (params.shift_reminder_day      !== undefined) upd.shift_reminder_day      = Number(params.shift_reminder_day);
       if (params.shift_reminder_time     !== undefined) upd.shift_reminder_time     = params.shift_reminder_time;
@@ -4478,7 +4494,7 @@ async function renderRoomAvailGrid(dateStr) {
           if (!occupiedRoomsByHour[h]) occupiedRoomsByHour[h] = new Set();
           occupiedRoomsByHour[h].add(s.roomName);
         }
-      } else if (s.status !== 'approved' && s.therapist !== loggedInTherapist) {
+      } else if (s.status === 'pending' && s.therapist !== loggedInTherapist) {
         for (let h = startH; h < endH; h++) {
           pendingCountByHour[h] = (pendingCountByHour[h] || 0) + 1;
         }
@@ -4541,6 +4557,16 @@ async function initShiftSubmit() {
   // 追加待ちリストをリセット
   pendingShifts = [];
   renderPendingList();
+
+  // ルーム空き状況タブの表示制御
+  try {
+    const settings = await apiGet('getStoreSettings');
+    const showAvail = settings.show_room_availability !== false;
+    const tabAvail  = document.getElementById('shift-tab-availability');
+    if (tabAvail) tabAvail.style.display = showAvail ? '' : 'none';
+    // 非表示の場合はシフト提出タブをアクティブに戻す
+    if (!showAvail) switchShiftTab('submit');
+  } catch(e) { console.warn('store_settings取得エラー:', e); }
 
   // 提出済みシフトを読み込む
   loadMyShifts();
@@ -11575,6 +11601,9 @@ async function loadStoreSettingsUI() {
     if (splEl) splEl.checked = s.send_payroll_line !== false;
     const sslEl = document.getElementById('st-send-store-line');
     if (sslEl) sslEl.checked = s.send_store_line !== false;
+    // ルーム空き状況表示設定
+    const sraEl = document.getElementById('st-show-room-availability');
+    if (sraEl) sraEl.checked = s.show_room_availability !== false;
     // シフトリマインド設定
     const sreEl = document.getElementById('st-shift-reminder-enabled');
     if (sreEl) {
@@ -11654,6 +11683,7 @@ async function saveStoreSettings() {
       store_line_name:            document.getElementById('st-store-line-name')?.value?.trim() || '',
       send_payroll_line:          document.getElementById('st-send-payroll-line')?.checked !== false,
       send_store_line:            document.getElementById('st-send-store-line')?.checked !== false,
+      show_room_availability:     document.getElementById('st-show-room-availability')?.checked !== false,
       shift_reminder_enabled:     document.getElementById('st-shift-reminder-enabled')?.checked || false,
       shift_reminder_day:         Number(document.getElementById('st-shift-reminder-day')?.value ?? 5),
       shift_reminder_time:        document.getElementById('st-shift-reminder-time')?.value || '09:00',
