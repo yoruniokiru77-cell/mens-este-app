@@ -715,6 +715,20 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
 
   <!-- ===== シフト提出ページ ===== -->
   <div id="page-shift-submit" class="page">
+    <!-- タブ切り替え -->
+    <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:14px">
+      <button id="shift-tab-submit" onclick="switchShiftTab('submit')"
+        style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--accent);margin-bottom:-2px;color:var(--accent);cursor:pointer">
+        📆 シフト提出
+      </button>
+      <button id="shift-tab-availability" onclick="switchShiftTab('availability')"
+        style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer">
+        🚪 ルーム空き状況
+      </button>
+    </div>
+
+    <!-- シフト提出タブ -->
+    <div id="shift-tab-content-submit">
     <div class="card" style="margin-bottom:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div class="sec-title">シフト提出</div>
@@ -756,6 +770,39 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <div class="sec-title" style="margin-bottom:12px">📋 提出済みシフト（今日以降）</div>
       <div id="shift-submit-list">読み込み中...</div>
     </div>
+    </div><!-- /shift-tab-content-submit -->
+
+    <!-- ルーム空き状況タブ -->
+    <div id="shift-tab-content-availability" style="display:none">
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="sec-title">🚪 ルーム空き状況</div>
+          <button class="btn btn-secondary btn-sm" onclick="loadRoomAvailability()">更新</button>
+        </div>
+        <!-- 日付選択 -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" id="room-avail-date-btns"></div>
+        <!-- 凡例 -->
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:var(--muted)">
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="width:18px;height:18px;border-radius:4px;background:#fee2e2;display:flex;align-items:center;justify-content:center;font-size:10px;color:#b91c1c;font-weight:700">✕</div>
+            承認済みシフトあり
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="width:18px;height:18px;border-radius:4px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">2</div>
+            申請中（人数）
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="width:18px;height:18px;border-radius:4px;background:#f0fdf4"></div>
+            空き
+          </div>
+        </div>
+        <!-- グリッド -->
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+          <div id="room-avail-grid">日付を選択してください</div>
+        </div>
+      </div>
+    </div><!-- /shift-tab-content-availability -->
+
   </div>
 
   <!-- ===== シフトカレンダーページ ===== -->
@@ -4309,6 +4356,177 @@ async function sendPayrollLine(uid, name, dateLabel) {
 // ============================================================
 // 追加待ちリスト（まだ提出していないシフト）
 let pendingShifts = [];
+
+// シフト提出ページ タブ切り替え
+function switchShiftTab(tab) {
+  const isSubmit = tab === 'submit';
+  document.getElementById('shift-tab-content-submit').style.display      = isSubmit ? '' : 'none';
+  document.getElementById('shift-tab-content-availability').style.display = isSubmit ? 'none' : '';
+  const btnSubmit = document.getElementById('shift-tab-submit');
+  const btnAvail  = document.getElementById('shift-tab-availability');
+  if (btnSubmit) {
+    btnSubmit.style.borderBottomColor = isSubmit ? 'var(--accent)' : 'transparent';
+    btnSubmit.style.color             = isSubmit ? 'var(--accent)' : 'var(--muted)';
+  }
+  if (btnAvail) {
+    btnAvail.style.borderBottomColor = !isSubmit ? 'var(--accent)' : 'transparent';
+    btnAvail.style.color             = !isSubmit ? 'var(--accent)' : 'var(--muted)';
+  }
+  if (!isSubmit) loadRoomAvailability();
+}
+
+// ルーム空き状況
+let _availSelectedDate = '';
+
+async function loadRoomAvailability() {
+  const gridEl = document.getElementById('room-avail-grid');
+  if (!gridEl) return;
+  gridEl.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">読み込み中...</p>';
+
+  // 日付ボタン生成（今日から7日分）
+  const btnWrap = document.getElementById('room-avail-date-btns');
+  if (btnWrap && !btnWrap.children.length) {
+    const WDAYS = ['日','月','火','水','木','金','土'];
+    const today = new Date();
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() + i);
+      const ds = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+      const label = (i === 0 ? '今日 ' : '') + (d.getMonth()+1) + '/' + d.getDate() + '（' + WDAYS[d.getDay()] + '）';
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm';
+      btn.dataset.date = ds;
+      btn.textContent = label;
+      btn.style.cssText = 'font-size:12px;padding:5px 10px;';
+      btn.onclick = () => {
+        _availSelectedDate = ds;
+        document.querySelectorAll('#room-avail-date-btns button').forEach(b => {
+          b.style.background   = b.dataset.date === ds ? 'var(--primary)' : '';
+          b.style.color        = b.dataset.date === ds ? '#fff' : '';
+          b.style.borderColor  = b.dataset.date === ds ? 'var(--primary)' : '';
+        });
+        renderRoomAvailGrid(ds);
+      };
+      if (i === 0) {
+        _availSelectedDate = ds;
+        btn.style.background  = 'var(--primary)';
+        btn.style.color       = '#fff';
+        btn.style.borderColor = 'var(--primary)';
+      }
+      btnWrap.appendChild(btn);
+    }
+  }
+
+  if (_availSelectedDate) await renderRoomAvailGrid(_availSelectedDate);
+}
+
+async function renderRoomAvailGrid(dateStr) {
+  const gridEl = document.getElementById('room-avail-grid');
+  gridEl.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">読み込み中...</p>';
+
+  try {
+    const month = dateStr.slice(0, 7);
+
+    // ルーム一覧・承認済みシフト・申請中シフトを並列取得
+    const [rooms, allShifts] = await Promise.all([
+      apiGetCached('getRoomMaster', {}),
+      apiGet('getShifts', { month })
+    ]);
+
+    const activeRooms = (rooms || []).filter(r => r.active !== false);
+    if (!activeRooms.length) {
+      gridEl.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">ルームが登録されていません</p>';
+      return;
+    }
+
+    // 対象日のシフトのみ抽出
+    const dateFormatted = dateStr.replace(/-/g, '/');
+    const dayShifts = (allShifts || []).filter(s => s.date === dateFormatted);
+
+    // 承認済みと申請中（自分以外）に分類
+    const approvedByRoom = {}; // roomName → [{start, end}]
+    const pendingByRoom  = {}; // roomName → count per hour
+
+    dayShifts.forEach(s => {
+      if (!s.roomName) return;
+      const room = s.roomName;
+      if (s.status === 'approved') {
+        if (!approvedByRoom[room]) approvedByRoom[room] = [];
+        approvedByRoom[room].push({ start: s.startTime, end: s.endTime });
+      } else {
+        // 申請中（自分以外）
+        if (s.therapist === loggedInTherapist) return;
+        if (!pendingByRoom[room]) pendingByRoom[room] = {};
+        // 申請時間帯の各時間にカウント
+        const startH = _timeToMin27(s.startTime) / 60 | 0;
+        const endH   = Math.ceil(_timeToMin27(s.endTime) / 60);
+        for (let h = startH; h < endH; h++) {
+          pendingByRoom[room][h] = (pendingByRoom[room][h] || 0) + 1;
+        }
+      }
+    });
+
+    // 時間帯（10時〜26時）
+    const hours = [];
+    for (let h = 10; h <= 26; h++) hours.push(h);
+
+    // テーブル生成
+    const thCells = activeRooms.map(r =>
+      `<th style="padding:6px 8px;white-space:nowrap;font-size:12px;font-weight:600;background:var(--bg);border:0.5px solid var(--border);text-align:center;min-width:72px">${r.name}</th>`
+    ).join('');
+
+    const rows = hours.map(h => {
+      const label = h > 24
+        ? String(h) + ':00'
+        : String(h).padStart(2,'0') + ':00';
+
+      const cells = activeRooms.map(r => {
+        const room = r.name;
+        // 承認済みシフトがこの時間帯にあるか
+        const hasApproved = (approvedByRoom[room] || []).some(sh => {
+          const shStart = _timeToMin27(sh.start);
+          const shEnd   = _timeToMin27(sh.end);
+          const hMin    = h * 60;
+          return shStart <= hMin && shEnd > hMin;
+        });
+        if (hasApproved) {
+          return `<td style="padding:3px;border:0.5px solid var(--border)">
+            <div style="height:28px;border-radius:4px;background:#fee2e2;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#b91c1c">✕</div>
+          </td>`;
+        }
+        // 申請中の人数
+        const pendingCount = (pendingByRoom[room] || {})[h] || 0;
+        if (pendingCount > 0) {
+          return `<td style="padding:3px;border:0.5px solid var(--border)">
+            <div style="height:28px;border-radius:4px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted)">${pendingCount}</div>
+          </td>`;
+        }
+        // 空き
+        return `<td style="padding:3px;border:0.5px solid var(--border)">
+          <div style="height:28px;border-radius:4px;background:#f0fdf4"></div>
+        </td>`;
+      }).join('');
+
+      return `<tr>
+        <td style="padding:4px 8px;white-space:nowrap;font-size:12px;color:var(--muted);background:var(--bg);border:0.5px solid var(--border);font-weight:500">${label}</td>
+        ${cells}
+      </tr>`;
+    }).join('');
+
+    gridEl.innerHTML = `
+      <table style="border-collapse:collapse;font-size:13px;width:100%">
+        <thead>
+          <tr>
+            <th style="padding:6px 8px;background:var(--bg);border:0.5px solid var(--border);font-size:12px;color:var(--muted);font-weight:500">時間</th>
+            ${thCells}
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } catch(e) {
+    gridEl.innerHTML = `<p style="color:red">エラー: ${e.message}</p>`;
+  }
+}
 
 async function initShiftSubmit() {
   if (!therapists.length) therapists = await apiGet('getTherapists');
