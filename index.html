@@ -9323,6 +9323,44 @@ async function saveAndSendLine() {
     const dt      = new Date(dateVal);
     const dateStr = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
     const timeStr = String(dt.getHours()).padStart(2,'0') + ':' + String(dt.getMinutes()).padStart(2,'0');
+    const month   = dateStr.slice(0, 7);
+    const dtH_sl  = dt.getHours();
+    const np_sl   = n => String(n).padStart(2,'0');
+
+    // シフト超過チェック（27時ルール対応）
+    try {
+      const reqMin_sl = _timeToMin27(timeStr);
+      const prevDt_sl = new Date(dt); prevDt_sl.setDate(prevDt_sl.getDate() - 1);
+      const prevDateStr_sl = prevDt_sl.getFullYear() + '-' + np_sl(prevDt_sl.getMonth()+1) + '-' + np_sl(prevDt_sl.getDate());
+      const targetDate_sl  = (dtH_sl < 3 ? prevDateStr_sl : dateStr).replace(/-/g, '/');
+      const prevMonth_sl   = prevDateStr_sl.slice(0, 7);
+      const shifts_sl = await apiGet('getShifts', { month, status: 'approved' });
+      const shiftsAll_sl = month !== prevMonth_sl
+        ? [...shifts_sl, ...(await apiGet('getShifts', { month: prevMonth_sl, status: 'approved' }))]
+        : shifts_sl;
+      const myShift_sl = shiftsAll_sl.find(s =>
+        s.therapist === therapistName &&
+        s.date === targetDate_sl &&
+        _timeToMin27(s.startTime) <= reqMin_sl &&
+        _timeToMin27(s.endTime)   >  reqMin_sl
+      );
+      if (myShift_sl) {
+        const endMin_sl   = reqMin_sl + mins;
+        const shiftEnd_sl = _timeToMin27(myShift_sl.endTime);
+        if (endMin_sl > shiftEnd_sl) {
+          const eH = Math.floor(endMin_sl/60), eM = endMin_sl%60;
+          const sH = Math.floor(shiftEnd_sl/60), sM = shiftEnd_sl%60;
+          hideOverlay();
+          if (!confirm('⚠ コース終了時間（' + np_sl(eH) + ':' + np_sl(eM) + '）がシフト終了時間（' + np_sl(sH) + ':' + np_sl(sM) + '）を超えています。\n予約を続けますか？')) {
+            const lineBtnC = document.querySelector('[onclick="saveAndSendLine()"]');
+            if (lineBtnC) { lineBtnC.disabled = false; lineBtnC.textContent = '保存 + LINE送信'; }
+            return;
+          }
+          showOverlay();
+        }
+      }
+    } catch(esl) { console.warn('シフト超過チェックエラー:', esl); }
+
     const reservations = await apiGet('getReservations', { date: dateStr });
     const interval = (therapists.find(t => t.name === therapistName) || {}).interval || 30;
     const conflict = reservations.find(r => {
