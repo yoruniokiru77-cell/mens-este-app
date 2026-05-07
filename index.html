@@ -656,7 +656,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <input type="hidden" id="resv-customer-tel" value="">
       <div class="grid2">
         <div class="form-group">
-          <label>お客様名</label>
+          <label>お客様名 <span style="color:var(--accent);font-size:11px">※必須</span></label>
           <input type="text" id="resv-customer-name" placeholder="例: サカバ"
             oninput="lookupCustomerByName(this.value)">
         </div>
@@ -2063,9 +2063,19 @@ async function apiGet(action, params = {}) {
     }
 
     case 'recordCancellation': {
-      const no = String(params.customerNo || '');
+      const no  = String(params.customerNo || '');
+      const tel = String(params.tel || '');
       const today = new Date().toISOString().slice(0, 10);
-      const { data: cust } = await _sb.from('customers').select('id,cancel_count').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
+      // tel優先、なければcustomer_noで顧客特定
+      let cust = null;
+      if (tel) {
+        const { data } = await _sb.from('customers').select('id,cancel_count').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
+        cust = data;
+      }
+      if (!cust && no) {
+        const { data } = await _sb.from('customers').select('id,cancel_count').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
+        cust = data;
+      }
       if (cust) {
         const newCount = (Number(cust.cancel_count) || 0) + 1;
         await _sb.from('customers').update({ cancel_count: newCount, last_cancel_date: today }).eq('id', cust.id);
@@ -2736,6 +2746,7 @@ case 'sendReminderToOne': {
             let q = _sb.from('reservations').select('*')
               .eq('store_id', STORE_ID)
               .ilike('customer_tel', lookupTel)
+              .neq('status', 'cancelled')
               .order('date', { ascending: false }).limit(30);
             if (therapist) q = q.eq('therapist_name', therapist);
             return q;
@@ -2743,6 +2754,7 @@ case 'sendReminderToOne': {
             let q = _sb.from('reservations').select('*')
               .eq('store_id', STORE_ID)
               .eq('customer_no', no)
+              .neq('status', 'cancelled')
               .order('date', { ascending: false }).limit(30);
             if (therapist) q = q.eq('therapist_name', therapist);
             return q;
@@ -2761,9 +2773,10 @@ case 'sendReminderToOne': {
 
       const customer = custData ? {
         found: true,
-        customerNo: String(custData.customer_no || ''),
-        name: custData.name||'', tel: custData.tel||'',
-        status: custData.status||'normal',
+        id:           custData.id || '',
+        customerNo:   String(custData.customer_no || ''),
+        name:         custData.name||'', tel: custData.tel||'',
+        status:       custData.status||'normal',
         ngTherapists: custData.ng_therapists||[]
       } : { found: false };
       const history = (histRes.data || []).map(r => ({
@@ -2779,11 +2792,22 @@ case 'sendReminderToOne': {
     }
 
     case 'saveCustomerMemo': {
-      const no = String(params.customerNo || '');
-      const { data: cust } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
+      const customerId = params.customerId || '';
+      const no  = String(params.customerNo || '');
+      const tel = String(params.tel || '');
       const therapistId = await _getTherapistId(params.therapist);
+      // customerId(UUID)優先 → tel → customer_noの順で顧客特定
+      let custId = customerId || null;
+      if (!custId && tel) {
+        const { data: c } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
+        if (c) custId = c.id;
+      }
+      if (!custId && no) {
+        const { data: c } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
+        if (c) custId = c.id;
+      }
       const { error } = await _sb.from('customer_memos').insert({
-        customer_id:    cust ? cust.id : null,
+        customer_id:    custId,
         therapist_id:   therapistId,
         therapist_name: params.therapist,
         memo:           params.memo
@@ -2794,46 +2818,74 @@ case 'sendReminderToOne': {
 
     case 'getMyCustomers': {
       const therapist = params.therapist || '';
-      const { data: resvData } = await _sb.from('reservations').select('customer_no, customer_name, customer_tel, date')
-        .eq('store_id', STORE_ID).eq('therapist_name', therapist);
+      const { data: resvData } = await _sb.from('reservations')
+        .select('customer_no, customer_name, customer_tel, date')
+        .eq('store_id', STORE_ID).eq('therapist_name', therapist)
+        .neq('status', 'cancelled');
       const custMap = {};
       (resvData || []).forEach(r => {
-        const key = r.customer_no || r.customer_tel || r.customer_name || '';
+        // tel優先、なければcustomer_no、なければ名前をキーに
+        const key = r.customer_tel || r.customer_no || r.customer_name || '';
         if (!key) return;
         const dateStr = _fmtDateJp(r.date);
-        if (!custMap[key]) custMap[key] = { customerNo: r.customer_no || '', tel: r.customer_tel || '', visitCount: 0, lastVisit: '', name: r.customer_name||'' };
+        if (!custMap[key]) custMap[key] = {
+          customerNo: r.customer_no || '',
+          tel:        r.customer_tel || '',
+          visitCount: 0, lastVisit: '',
+          name:       r.customer_name || ''
+        };
         custMap[key].visitCount++;
         if (dateStr > custMap[key].lastVisit) custMap[key].lastVisit = dateStr;
+        // telが後から判明した場合は補完
+        if (!custMap[key].tel && r.customer_tel) custMap[key].tel = r.customer_tel;
       });
       if (!Object.keys(custMap).length) return [];
-      // 顧客マスタから名前・tel補完
-      const nos = [...new Set(Object.values(custMap).map(c => c.customerNo).filter(Boolean))];
-      if (nos.length) {
-        const { data: custMaster } = await _sb.from('customers').select('customer_no,name,tel').eq('store_id', STORE_ID).in('customer_no', nos);
-        (custMaster || []).forEach(c => {
-          const key = c.customer_no;
-          if (custMap[key]) {
-            custMap[key].name = c.name || custMap[key].name;
-            custMap[key].tel  = c.tel  || custMap[key].tel;
+
+      // 顧客マスタから名前補完（tel優先）
+      const tels = [...new Set(Object.values(custMap).map(c => c.tel).filter(Boolean))];
+      if (tels.length) {
+        const { data: custByTel } = await _sb.from('customers')
+          .select('tel,name,id').eq('store_id', STORE_ID).in('tel', tels);
+        (custByTel || []).forEach(c => {
+          if (custMap[c.tel]) {
+            custMap[c.tel].name       = c.name || custMap[c.tel].name;
+            custMap[c.tel].customerId = c.id;
           }
         });
       }
-      // 最新メモ
-      const { data: memoData } = await _sb.from('customer_memos').select('therapist_name,memo,customers!inner(customer_no)')
-        .eq('therapist_name', therapist).order('created_at', { ascending: false });
-      (memoData || []).forEach(m => {
-        const no = m.customers && m.customers.customer_no ? String(m.customers.customer_no) : '';
-        if (custMap[no] && !custMap[no].latestMemo) custMap[no].latestMemo = m.memo || '';
-      });
-      return Object.values(custMap).sort((a,b) => b.visitCount - a.visitCount);
+
+      // 最新メモ（customer_idベース）
+      const custIds = [...new Set(Object.values(custMap).map(c => c.customerId).filter(Boolean))];
+      if (custIds.length) {
+        const { data: memoData } = await _sb.from('customer_memos')
+          .select('customer_id, memo')
+          .eq('therapist_name', therapist)
+          .in('customer_id', custIds)
+          .order('created_at', { ascending: false });
+        (memoData || []).forEach(m => {
+          const entry = Object.values(custMap).find(c => c.customerId === m.customer_id);
+          if (entry && !entry.latestMemo) entry.latestMemo = m.memo || '';
+        });
+      }
+
+      return Object.values(custMap).sort((a, b) => b.visitCount - a.visitCount);
     }
 
     case 'checkCustomerStatus': {
-      const no = String(params.customerNo || '');
-      if (!no || no === '0000') return { allowed: true, reason: '' };
-      const { data } = await _sb.from('customers').select('status,ng_therapists').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
-      if (!data) return { allowed: true, reason: '' };
-      const { status, ng_therapists } = data;
+      const no  = String(params.customerNo || '');
+      const tel = String(params.tel || '');
+      // tel優先、なければcustomer_noで検索
+      let custData = null;
+      if (tel) {
+        const { data } = await _sb.from('customers').select('status,ng_therapists').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
+        custData = data;
+      }
+      if (!custData && no && no !== '0000') {
+        const { data } = await _sb.from('customers').select('status,ng_therapists').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
+        custData = data;
+      }
+      if (!custData) return { allowed: true, reason: '' };
+      const { status, ng_therapists } = custData;
       if (status === '出禁') return { allowed: false, reason: '出禁のお客様です' };
       if (ng_therapists && ng_therapists.includes(params.therapist)) return { allowed: false, reason: params.therapist + ' さんへのNG客です' };
       if (status === 'NG')   return { allowed: false, reason: 'NGのお客様です' };
@@ -6462,9 +6514,15 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
     }
 
     document.getElementById('customer-memo-input').dataset.customerNo = resolvedNo;
+    document.getElementById('customer-memo-input').dataset.customerTel = resolvedTel;
     // 管理者モードは全セラピストの履歴、セラピストモードは自分のみ
     const histTherapist = isAdminMode ? '' : loggedInTherapist;
     const res = await apiGet('getCustomerHistory', { customerNo: resolvedNo, tel: resolvedTel, therapist: histTherapist });
+
+    // 顧客IDをdatasetに保存（メモ保存時に使用）
+    if (res.customer && res.customer.id) {
+      document.getElementById('customer-memo-input').dataset.customerId = res.customer.id;
+    }
 
     // 顧客情報
     const c = res.customer;
@@ -6779,15 +6837,17 @@ async function removeCustomerModalNG(therapistName, tel, customerNo, custName, c
 
 async function saveCustomerMemo() {
   const input      = document.getElementById('customer-memo-input');
-  const customerNo = input.dataset.customerNo;
+  const customerId = input.dataset.customerId || '';
+  const customerNo = input.dataset.customerNo || '';
+  const customerTel= input.dataset.customerTel || '';
   const memo       = input.value.trim();
   if (!memo) { alert('メモを入力してください'); return; }
   try {
-    await apiGet('saveCustomerMemo', { customerNo, therapist: loggedInTherapist, memo });
+    await apiGet('saveCustomerMemo', { customerId, customerNo, tel: customerTel, therapist: loggedInTherapist, memo });
     input.value = '';
     showToast('メモを保存しました');
     // 再読み込み
-    openCustomerDetail(customerNo);
+    openCustomerDetail(customerNo, customerTel);
   } catch(e) { alert('エラー: ' + e.message); }
 }
 
@@ -8390,7 +8450,7 @@ async function updateResvRow() {
   const therapistName = document.getElementById('resv-therapist').value;
   const nomFee        = getNominationFee(therapistName, document.getElementById('resv-nomination').value);
   const customerNo    = document.getElementById('resv-customer-no').value;
-  const customerName  = document.getElementById('resv-customer-name').value;
+  const customerName  = document.getElementById('resv-customer-name').value.trim();
   const dateVal       = document.getElementById('resv-date').value;
   const tel           = document.getElementById('resv-customer-tel-full').value || document.getElementById('resv-customer-tel').value;
   const discount      = Number(document.getElementById('resv-discount').value) || 0;
@@ -8629,8 +8689,8 @@ async function cancelResvLine(idx) {
     await apiGet('cancelReservation', { row: r.row });
 
     // 顧客マスタのキャンセル回数・最終キャンセル日を更新
-    if (r.customerNo) {
-      await apiGet('recordCancellation', { customerNo: r.customerNo });
+    if (r.customerNo || r.tel) {
+      await apiGet('recordCancellation', { customerNo: r.customerNo, tel: r.tel || '' });
     }
 
     // LINE通知
@@ -8731,7 +8791,7 @@ async function submitReservation() {
   const mins          = getCourseMinutes('resv');
   const coursePrice   = getCoursePrice('resv');
   const customerNo    = document.getElementById('resv-customer-no').value;
-  const customerName  = document.getElementById('resv-customer-name').value;
+  const customerName  = document.getElementById('resv-customer-name').value.trim();
   const therapistName = document.getElementById('resv-therapist').value;
   const nomFee        = getNominationFee(therapistName, document.getElementById('resv-nomination').value);
   const dateVal       = document.getElementById('resv-date').value;
@@ -8754,9 +8814,9 @@ async function submitReservation() {
   const endTimeStr = String(endDt.getHours()).padStart(2,'0') + ':' + String(endDt.getMinutes()).padStart(2,'0');
 
   // 出禁・NGチェック
-  if (customerNo) {
+  if (customerNo || tel) {
     try {
-      const check = await apiGet('checkCustomerStatus', { customerNo, therapist: therapistName });
+      const check = await apiGet('checkCustomerStatus', { customerNo, tel, therapist: therapistName });
       if (!check.allowed) { alert('⛔ 予約できません\n' + check.reason); return; }
       if (check.warning)  { if (!confirm('⚠ ' + check.reason + '\n予約を続けますか？')) return; }
     } catch(e) { console.warn('status check error:', e); }
@@ -8927,10 +8987,11 @@ async function copyResvGuide() {
 
 async function saveAndSendLine() {
   const customerNo2 = document.getElementById('resv-customer-no').value;
+  const tel2 = document.getElementById('resv-customer-tel-full').value || document.getElementById('resv-customer-tel').value;
   const therapistName2 = document.getElementById('resv-therapist').value;
-  if (customerNo2) {
+  if (customerNo2 || tel2) {
     try {
-      const check = await apiGet('checkCustomerStatus', { customerNo: customerNo2, therapist: therapistName2 });
+      const check = await apiGet('checkCustomerStatus', { customerNo: customerNo2, tel: tel2, therapist: therapistName2 });
       if (!check.allowed) { alert('⛔ 予約できません\n' + check.reason); return; }
       if (check.warning) { if (!confirm('⚠ ' + check.reason + '\n予約を続けますか？')) return; }
     } catch(e) { console.warn(e); }
