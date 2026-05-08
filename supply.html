@@ -852,7 +852,7 @@ async function loadSupplyMaster() {
   const el = document.getElementById('supply-master-list');
   try {
     const [{ data: supplies }, { data: rooms }] = await Promise.all([
-      _sb.from('supplies').select('*').eq('store_id', STORE_ID).order('created_at'),
+      _sb.from('supplies').select('*').eq('store_id', STORE_ID).order('name', { ascending: true }),
       _sb.from('rooms').select('name').eq('store_id', STORE_ID).eq('active', true).order('display_order')
     ]);
     if (!supplies || !supplies.length) {
@@ -949,7 +949,7 @@ async function loadSupplyList() {
   el.innerHTML = '<p style="color:var(--muted)">読み込み中...</p>';
   try {
     const [{ data, error }, { data: pendingOrders }] = await Promise.all([
-      _sb.from('supplies').select('*').eq('store_id', STORE_ID).eq('active', true).eq('room_name', room).order('created_at'),
+      _sb.from('supplies').select('*').eq('store_id', STORE_ID).eq('active', true).eq('room_name', room).order('name', { ascending: true }),
       _sb.from('supply_orders').select('supply_id').eq('store_id', STORE_ID).in('status', ['requested', 'ordered', 'approved', 'purchased'])
     ]);
     if (error) throw error;
