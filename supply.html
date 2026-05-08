@@ -846,104 +846,85 @@ async function loadSupplyAnalytics() {
 // ============================================================
 // 管理者: 備品マスタ
 // ============================================================
+let _masterSelectedRoom = '';
+
 async function loadSupplyMaster() {
   const el = document.getElementById('supply-master-list');
   try {
-    const { data, error } = await _sb.from('supplies').select('*').eq('store_id', STORE_ID).order('created_at');
-    if (error) throw error;
-    if (!data.length) {
+    const [{ data: supplies }, { data: rooms }] = await Promise.all([
+      _sb.from('supplies').select('*').eq('store_id', STORE_ID).order('created_at'),
+      _sb.from('rooms').select('name').eq('store_id', STORE_ID).eq('active', true).order('display_order')
+    ]);
+    if (!supplies || !supplies.length) {
       el.innerHTML = '<p style="color:var(--muted)">備品が登録されていません</p>';
       return;
     }
-    el.innerHTML = `
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>備品名</th><th>単位</th><th>ルーム</th><th>購入先</th><th>配達日数</th><th>有効</th><th>操作</th></tr></thead>
+
+    const roomNames = rooms && rooms.length
+      ? rooms.map(r => r.name)
+      : [...new Set(supplies.map(s => s.room_name).filter(Boolean))];
+
+    if (!_masterSelectedRoom || !roomNames.includes(_masterSelectedRoom)) {
+      _masterSelectedRoom = roomNames[0] || '';
+    }
+
+    const tabsHtml = roomNames.map(r => {
+      const isSel = r === _masterSelectedRoom;
+      const safeId = r.replace(/[^a-zA-Z0-9]/g, '_');
+      return `<button onclick="switchMasterRoom('${r}')" id="master-room-tab-${safeId}"
+        class="btn btn-sm" style="${isSel ? 'background:var(--primary);color:#fff;border-color:var(--primary)' : ''}">${r}</button>`;
+    }).join('');
+
+    const filtered = supplies.filter(s => s.room_name === _masterSelectedRoom);
+    const tableHtml = filtered.length
+      ? `<div class="table-wrap"><table>
+          <thead><tr><th>備品名</th><th>単位</th><th>購入先</th><th>配達日数</th><th>有効</th><th>操作</th></tr></thead>
           <tbody>
-            ${data.map(s => `
-            <tr>
+            ${filtered.map(s => `
+            <tr style="${!s.active ? 'opacity:.5' : ''}">
               <td style="font-weight:600">${s.name}</td>
               <td>${s.unit || '個'}</td>
-              <td style="font-size:12px;color:var(--muted)">${s.room_name || '-'}</td>
               <td>${s.purchase_url ? `<a href="${s.purchase_url}" target="_blank" style="color:var(--accent2);font-size:13px">🔗 開く</a>` : '-'}</td>
               <td style="font-size:12px">${s.delivery_days != null ? s.delivery_days + '日' : '-'}</td>
-              <td>${s.active ? '✓' : '-'}</td>
+              <td>${s.active ? '✓' : '無効'}</td>
               <td style="display:flex;gap:6px">
                 <button class="btn btn-secondary btn-sm" onclick="openSupplyForm('${s.id}','${s.name}','${s.unit||''}','${s.room_name||''}','${(s.purchase_url||'').replace(/'/g,'&#39;')}',${s.delivery_days ?? 1})">編集</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteSupply('${s.id}', '${s.name}')">削除</button>
+                <button class="btn btn-sm" style="background:${s.active ? '#ef4444' : '#10b981'};color:#fff;border:none"
+                  onclick="toggleSupplyActive('${s.id}', ${s.active})">${s.active ? '無効化' : '有効化'}</button>
               </td>
             </tr>`).join('')}
           </tbody>
-        </table>
-      </div>`;
+        </table></div>`
+      : '<p style="color:var(--muted);padding:12px 0">このルームに備品がありません</p>';
+
+    el.innerHTML = `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${tabsHtml}</div>
+      ${tableHtml}`;
   } catch(e) {
     el.innerHTML = '<p style="color:red">' + e.message + '</p>';
   }
 }
 
-async function openSupplyForm(id, name, unit, roomName, purchaseUrl, deliveryDays) {
-  document.getElementById('supply-form-card').style.display = '';
-  document.getElementById('supply-form-title').textContent = id ? '備品編集' : '備品追加';
-  document.getElementById('supply-name').value          = name        || '';
-  document.getElementById('supply-unit').value          = unit        || '個';
-  document.getElementById('supply-edit-id').value       = id          || '';
-  document.getElementById('supply-url').value           = purchaseUrl || '';
-  document.getElementById('supply-delivery-days').value = deliveryDays != null ? deliveryDays : 1;
-
-  // ルーム選択肢を読み込み
-  const sel = document.getElementById('supply-room-master');
-  sel.innerHTML = '<option value="">選択してください</option>';
-  try {
-    const { data } = await _sb.from('rooms').select('name').eq('store_id', STORE_ID).eq('active', true).order('display_order');
-    (data || []).forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = r.name;
-      opt.textContent = r.name;
-      if (r.name === roomName) opt.selected = true;
-      sel.appendChild(opt);
-    });
-  } catch(e) { console.warn('ルーム取得エラー:', e); }
-
-  document.getElementById('supply-name').focus();
+function switchMasterRoom(room) {
+  _masterSelectedRoom = room;
+  loadSupplyMaster();
 }
 
-function closeSupplyForm() {
-  document.getElementById('supply-form-card').style.display = 'none';
-}
-
-async function saveSupply() {
-  const id           = document.getElementById('supply-edit-id').value;
-  const name         = document.getElementById('supply-name').value.trim();
-  const unit         = document.getElementById('supply-unit').value.trim() || '個';
-  const roomName     = document.getElementById('supply-room-master').value;
-  const purchaseUrl  = document.getElementById('supply-url').value.trim() || null;
-  const deliveryDays = parseInt(document.getElementById('supply-delivery-days').value) || 0;
-  if (!name) { alert('備品名を入力してください'); return; }
-  if (!roomName) { alert('対応ルームを選択してください'); return; }
+async function toggleSupplyActive(id, currentActive) {
+  const newActive = !currentActive;
+  const label = newActive ? '有効化' : '無効化';
+  if (!confirm(`この備品を${label}しますか？`)) return;
   try {
-    showOverlay();
-    const saveData = { name, unit, room_name: roomName, purchase_url: purchaseUrl, delivery_days: deliveryDays };
-    if (id) {
-      const { error } = await _sb.from('supplies').update(saveData).eq('id', id);
-      if (error) throw error;
-    } else {
-      const { error } = await _sb.from('supplies').insert({ store_id: STORE_ID, active: true, ...saveData });
-      if (error) throw error;
-    }
-    showToast('保存しました');
-    closeSupplyForm();
+    const { error } = await _sb.from('supplies').update({ active: newActive }).eq('id', id);
+    if (error) throw error;
+    showToast(`${label}しました`);
     loadSupplyMaster();
-  } catch(e) {
-    alert('エラー: ' + e.message);
-  } finally {
-    hideOverlay();
-  }
+  } catch(e) { alert('エラー: ' + e.message); }
 }
 
 async function deleteSupply(id, name) {
-  if (!confirm('「' + name + '」を削除しますか？\nこの操作は取り消せません。')) return;
-  try {
-    const { error } = await _sb.from('supplies').delete().eq('id', id);
+  await toggleSupplyActive(id, true);
+} = await _sb.from('supplies').delete().eq('id', id);
     if (error) throw new Error(error.message);
     showToast('削除しました');
     loadSupplyMaster();
