@@ -11557,8 +11557,14 @@ async function submitCheckout() {
       const settings = await apiGet('getStoreSettings');
       const storeLineName = settings.store_line_name || '';
       if (storeLineName) {
-        const t = therapists.find(th => th.name === storeLineName);
-        if (t && t.userId) {
+        // DBから直接取得（therapistsキャッシュが空の場合に対応）
+        const { data: th } = await _sb.from('therapists')
+          .select('line_user_id')
+          .eq('store_id', STORE_ID)
+          .eq('name', storeLineName)
+          .eq('active', true)
+          .maybeSingle();
+        if (th && th.line_user_id) {
           let msgLines = ['【退勤チェック】', 'セラピスト: ' + loggedInTherapist];
           let hasUnchecked = false;
           for (const [room, data] of Object.entries(byRoom)) {
@@ -11573,7 +11579,7 @@ async function submitCheckout() {
             msgLines.push('');
             msgLines.push('全項目チェック完了 ✅');
           }
-          await apiGet('sendLineMessage', { userId: t.userId, message: msgLines.join('\n') });
+          await apiGet('sendLineMessage', { userId: th.line_user_id, message: msgLines.join('\n') });
         }
       }
     } catch(e) { console.warn('LINE通知エラー:', e); }
