@@ -561,7 +561,7 @@ async function loadAdminOrders() {
   const status = document.getElementById('admin-filter-status').value;
   el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">読み込み中...</p>';
   try {
-    let q = _sb.from('supply_orders').select('*, supplies(purchase_url, delivery_days)').eq('store_id', STORE_ID).order('created_at', { ascending: false });
+    let q = _sb.from('supply_orders').select('*, supplies(purchase_url, delivery_days)').eq('store_id', STORE_ID).order('supply_name', { ascending: true });
     if (status) q = q.eq('status', status);
     const { data, error } = await q;
     if (error) throw error;
@@ -1079,7 +1079,7 @@ async function loadCurrentStatus() {
       .eq('store_id', STORE_ID)
       .not('status', 'eq', 'stocked')
       .not('status', 'eq', 'received')
-      .order('created_at', { ascending: false })
+      .order('supply_name', { ascending: true })
       .limit(50);
 
     // ルーム選択時：そのルームの全員の申請を表示
@@ -1168,7 +1168,7 @@ async function loadMyOrders() {
     const { data, error } = await _sb.from('supply_orders').select('*')
       .eq('store_id', STORE_ID)
       .eq('requested_by', loggedInTherapist)
-      .order('created_at', { ascending: false })
+      .order('supply_name', { ascending: true })
       .limit(50);
     if (error) throw error;
     if (!data.length) {
