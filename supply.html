@@ -924,11 +924,6 @@ async function toggleSupplyActive(id, currentActive) {
 
 async function deleteSupply(id, name) {
   await toggleSupplyActive(id, true);
-} = await _sb.from('supplies').delete().eq('id', id);
-    if (error) throw new Error(error.message);
-    showToast('削除しました');
-    loadSupplyMaster();
-  } catch(e) { alert('削除エラー: ' + e.message); }
 }
 
 // ============================================================
