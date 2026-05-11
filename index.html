@@ -834,6 +834,15 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <button id="cal-view-therapist" class="btn btn-secondary btn-sm" style="flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)" onclick="setCalView('therapist')">👤 セラピスト縦軸</button>
     </div>
     <div id="shift-calendar-content">読み込み中...</div>
+
+    <!-- 勤怠サマリ -->
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="sec-title" style="font-size:14px">📊 勤怠サマリ（当月）</div>
+        <button class="btn btn-secondary btn-sm" onclick="loadAttendanceSummary()">更新</button>
+      </div>
+      <div id="attendance-summary">読み込み中...</div>
+    </div>
   </div>
 
   <!-- ===== 売上入力ページ（セラピスト用） ===== -->
@@ -2154,7 +2163,9 @@ async function apiGet(action, params = {}) {
     }
 
     case 'cancelReservation': {
-      const { error } = await _sb.from('reservations').update({ status: 'cancelled' }).eq('id', params.row);
+      const upd = { status: 'cancelled' };
+      if (params.reason) upd.cancel_reason = params.reason;
+      const { error } = await _sb.from('reservations').update(upd).eq('id', params.row);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
@@ -7912,7 +7923,93 @@ function fmtCalDate(d) {
     String(d.getDate()).padStart(2,'0');
 }
 
+async function loadAttendanceSummary() {
+  const el = document.getElementById('attendance-summary');
+  if (!el) return;
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const pad = n => String(n).padStart(2, '0');
+    const fmt = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+    const monthStr   = fmt(monthStart);
+    const nextMonthStr = fmt(monthEnd);
+
+    // シフトの勤怠と予約のキャンセル理由を並列取得
+    const [{ data: shifts }, { data: cancellations }] = await Promise.all([
+      _sb.from('shifts').select('therapist_name, attendance_type, date')
+        .eq('store_id', STORE_ID)
+        .eq('status', 'approved')
+        .gte('date', monthStr)
+        .lt('date', nextMonthStr)
+        .in('attendance_type', ['late', 'early_leave', 'absent', 'noshow']),
+      _sb.from('reservations').select('therapist_name, date')
+        .eq('store_id', STORE_ID)
+        .eq('status', 'cancelled')
+        .eq('cancel_reason', 'therapist')
+        .gte('date', monthStr + 'T00:00:00+09:00')
+        .lt('date', nextMonthStr + 'T00:00:00+09:00')
+    ]);
+
+    // セラピスト別集計
+    const summary = {};
+    (shifts || []).forEach(s => {
+      if (!s.therapist_name) return;
+      if (!summary[s.therapist_name]) summary[s.therapist_name] = { late:0, early_leave:0, absent:0, noshow:0, ther_cancel:0 };
+      if (summary[s.therapist_name][s.attendance_type] !== undefined) {
+        summary[s.therapist_name][s.attendance_type]++;
+      }
+    });
+    (cancellations || []).forEach(r => {
+      if (!r.therapist_name) return;
+      if (!summary[r.therapist_name]) summary[r.therapist_name] = { late:0, early_leave:0, absent:0, noshow:0, ther_cancel:0 };
+      summary[r.therapist_name].ther_cancel++;
+    });
+
+    const names = Object.keys(summary).sort();
+    if (!names.length) {
+      el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:12px">当月の勤怠特記事項はありません</p>';
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="table-wrap">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:var(--bg)">
+              <th style="padding:8px;text-align:left;border-bottom:1px solid var(--border)">セラピスト</th>
+              <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">遅刻</th>
+              <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">早退</th>
+              <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">欠勤</th>
+              <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">無断欠勤</th>
+              <th style="padding:8px;text-align:center;border-bottom:1px solid var(--border)">セラピストキャンセル</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${names.map(name => {
+              const s = summary[name];
+              const cell = (v, color) => v > 0
+                ? `<td style="padding:8px;text-align:center;border-bottom:1px solid var(--border);font-weight:700;color:${color}">${v}</td>`
+                : `<td style="padding:8px;text-align:center;border-bottom:1px solid var(--border);color:var(--muted)">-</td>`;
+              return `<tr>
+                <td style="padding:8px;border-bottom:1px solid var(--border);font-weight:600">${name}</td>
+                ${cell(s.late, '#f59e0b')}
+                ${cell(s.early_leave, '#f59e0b')}
+                ${cell(s.absent, '#dc2626')}
+                ${cell(s.noshow, '#dc2626')}
+                ${cell(s.ther_cancel, '#dc2626')}
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = '<p style="color:red">エラー: ' + e.message + '</p>';
+  }
+}
+
 async function loadShiftCalendar() {
+  loadAttendanceSummary();
   const el   = document.getElementById('shift-calendar-content');
   const days  = getWeekDates(_calendarWeekOffset);
   const month = days[0].getFullYear() + '-' + String(days[0].getMonth()+1).padStart(2,'0');
@@ -8687,30 +8784,34 @@ function renderResvByTherapist(data, el) {
       const sales = valid.reduce((s, r) => s + Number(r.price || 0), 0);
 
       // シフト情報・最短案内時刻（複数シフト対応）
+      // 今日の予約一覧のみ表示（未来日は不要）
+      const viewingDate = currentResvDate;
+      const todayDate   = new Date(); todayDate.setHours(0,0,0,0);
+      const isToday = viewingDate.toDateString() === todayDate.toDateString();
       const shifts = window._resvShiftMap && window._resvShiftMap[th];
       let shiftLabel = '';
       let availLabel = '';
       if (shifts && shifts.length) {
-        // 全シフトを表示
         shiftLabel = shifts.map(s => `${s.start.substring(0,5)}〜${s.end.substring(0,5)}`).join(' / ');
-        // 現在時刻が含まれるシフト、なければ次のシフト
-        const toMin = t => { const [h,m] = (t||'00:00').split(':').map(Number); return (h<3?h+24:h)*60+(m||0); };
-        let target = null;
-        for (const s of shifts) {
-          const sStart = toMin(s.start);
-          const sEnd   = toMin(s.end);
-          if (nowMin < sEnd) { target = { start: sStart, end: sEnd, intervalMin: s.intervalMin }; break; }
-        }
-        if (!target) {
-          availLabel = `<span style="font-size:11px;font-weight:700;background:#dc2626;color:#fff;padding:2px 10px;border-radius:10px;margin-left:4px">🔥 完売</span>`;
-        } else {
-          const baseCandidate = Math.max(nowMin, target.start);
-          const earliest = calcEarliestAvailable(rows, target.intervalMin || 30, baseCandidate, target.end);
-          if (earliest != null && earliest < target.end) {
-            const remaining = target.end - earliest;
-            availLabel = `<span style="font-size:11px;font-weight:600;background:#10b981;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">⏱ 最短 ${minToTimeStr(earliest)}〜（残${remaining}分）</span>`;
-          } else {
+        if (isToday) {
+          const toMin = t => { const [h,m] = (t||'00:00').split(':').map(Number); return (h<3?h+24:h)*60+(m||0); };
+          let target = null;
+          for (const s of shifts) {
+            const sStart = toMin(s.start);
+            const sEnd   = toMin(s.end);
+            if (nowMin < sEnd) { target = { start: sStart, end: sEnd, intervalMin: s.intervalMin }; break; }
+          }
+          if (!target) {
             availLabel = `<span style="font-size:11px;font-weight:700;background:#dc2626;color:#fff;padding:2px 10px;border-radius:10px;margin-left:4px">🔥 完売</span>`;
+          } else {
+            const baseCandidate = Math.max(nowMin, target.start);
+            const earliest = calcEarliestAvailable(rows, target.intervalMin || 30, baseCandidate, target.end);
+            if (earliest != null && earliest < target.end) {
+              const remaining = target.end - earliest;
+              availLabel = `<span style="font-size:11px;font-weight:600;background:#10b981;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">⏱ 最短 ${minToTimeStr(earliest)}〜（残${remaining}分）</span>`;
+            } else {
+              availLabel = `<span style="font-size:11px;font-weight:700;background:#dc2626;color:#fff;padding:2px 10px;border-radius:10px;margin-left:4px">🔥 完売</span>`;
+            }
           }
         }
       }
@@ -9133,20 +9234,44 @@ async function cancelResvLine(idx) {
   const r = (window._resvTableData || [])[idx];
   if (!r) return;
 
+  // キャンセル理由を選択
+  const reasonInput = prompt(
+    'キャンセル理由を選択してください：\n' +
+    '1: お客様都合\n' +
+    '2: セラピスト都合\n' +
+    '3: その他\n\n' +
+    '番号を入力してください（1〜3）:',
+    '1'
+  );
+  if (reasonInput === null) return; // キャンセル
+  const reasonMap = { '1': 'customer', '2': 'therapist', '3': 'other' };
+  const reason = reasonMap[reasonInput.trim()];
+  if (!reason) {
+    alert('1〜3の番号を入力してください');
+    return;
+  }
+  const reasonLabel = { customer: 'お客様都合', therapist: 'セラピスト都合', other: 'その他' }[reason];
+
   const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
   const storeName = storeData ? storeData.name : '';
 
-  if (!confirm('この予約をキャンセルしますか？\n' + r.date + ' ' + r.therapist + '\n' + formatCustomer(r.customerNo, r.customer) + '\n\n※LINEでセラピストに通知します')) return;
+  if (!confirm(
+    'この予約をキャンセルしますか？\n' +
+    r.date + ' ' + r.therapist + '\n' +
+    formatCustomer(r.customerNo, r.customer) + '\n' +
+    '理由: ' + reasonLabel + '\n\n' +
+    '※LINEでセラピストに通知します'
+  )) return;
 
   const t = therapists.find(th => th.name === r.therapist);
 
   try {
     showOverlay();
-    // ステータスをキャンセルに更新
-    await apiGet('cancelReservation', { row: r.row });
+    // ステータスをキャンセルに更新（理由付き）
+    await apiGet('cancelReservation', { row: r.row, reason });
 
-    // 顧客マスタのキャンセル回数・最終キャンセル日を更新
-    if (r.customerNo || r.tel) {
+    // 顧客マスタのキャンセル回数を更新（お客様都合のみ）
+    if (reason === 'customer' && (r.customerNo || r.tel)) {
       await apiGet('recordCancellation', { customerNo: r.customerNo, tel: r.tel || '' });
     }
 
@@ -9156,6 +9281,7 @@ async function cancelResvLine(idx) {
         '\n' + r.date +
         '\nコース: ' + r.course + '分' +
         '\nお客様: ' + formatCustomer(r.customerNo, r.customer) +
+        '\n理由: ' + reasonLabel +
         '\nのご予約がキャンセルになりました。';
       await apiGet('sendLineMessage', { userId: t.userId, message: msg });
     }
