@@ -9026,12 +9026,18 @@ async function updateResvRow() {
       const pad = n => String(n).padStart(2,'0');
       const dateStr = dt.getFullYear() + '/' + pad(dt.getMonth()+1) + '/' + pad(dt.getDate()) + ' ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
       const nomLabel = { free:'フリー', nomination:'指名', honshimei:'本指名' };
-      const msg = '【予約変更】' + (storeName ? '（' + storeName + '）' : '') +
+      const subtotal = coursePrice + nomFee;
+      const finalPrice = subtotal - (discount || 0);
+      let msg = '【予約変更】' + (storeName ? '（' + storeName + '）' : '') +
         '\n日時: ' + dateStr +
         '\nコース: ' + mins + '分' +
         '\nお客様: ' + formatCustomer(customerNo, customerName) +
         '\n指名: ' + (nomLabel[nomination] || nomination) +
-        '\n金額: ¥' + (coursePrice + nomFee).toLocaleString();
+        '\n金額: ¥' + subtotal.toLocaleString();
+      if (discount > 0) {
+        msg += '\n割引: -¥' + discount.toLocaleString() +
+               '\n適用後金額: ¥' + finalPrice.toLocaleString();
+      }
       await apiGet('sendLineMessage', { userId: t.userId, message: msg });
     }
 
@@ -9540,8 +9546,13 @@ async function saveAndSendLine() {
       const customerLabel = formatCustomer(params.customerNo, params.customer);
       const nomLabel = NOMINATION_LABEL[params.nomination] || '';
       const customerType = isNewCustomer ? '新規' : '店リピ';
+      const subtotal  = price + nomFee;
+      const finalPrice = subtotal - (discount || 0);
 
-      const msg = `【予約確定】\n日時: ${dateStr}\nコース: ${mins}分\nお客様: ${customerLabel}（${customerType}）\n指名: ${nomLabel}\n金額: ¥${(price+nomFee).toLocaleString()}`;
+      let msg = `【予約確定】\n日時: ${dateStr}\nコース: ${mins}分\nお客様: ${customerLabel}（${customerType}）\n指名: ${nomLabel}\n金額: ¥${subtotal.toLocaleString()}`;
+      if (discount > 0) {
+        msg += `\n割引: -¥${discount.toLocaleString()}\n適用後金額: ¥${finalPrice.toLocaleString()}`;
+      }
       try {
         await apiGet('sendLineMessage', { userId: t.userId, message: msg });
         showBanner('✅ LINE送信完了しました', 'success');
