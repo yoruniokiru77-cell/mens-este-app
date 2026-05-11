@@ -9589,7 +9589,8 @@ async function saveAndSendLine() {
     const mins   = getCourseMinutes('resv');
     const price  = getCoursePrice('resv');
     const therapistName = document.getElementById('resv-therapist').value;
-    const nomFee = getNominationFee(therapistName, document.getElementById('resv-nomination').value);
+    const nomFee   = getNominationFee(therapistName, document.getElementById('resv-nomination').value);
+    const discount = Number(document.getElementById('resv-discount')?.value) || 0;
     const dateVal = document.getElementById('resv-date').value;
 
     // 重複チェック
