@@ -583,37 +583,58 @@ function renderAdminOrders(el, data) {
   order.forEach(s => { groups[s] = []; });
   data.forEach(r => { if (groups[r.status]) groups[r.status].push(r); });
 
-  el.innerHTML = order.filter(s => groups[s].length > 0).map(s => `
+  el.innerHTML = order.filter(s => groups[s].length > 0).map(s => {
+    const items = groups[s];
+
+    // ルーム別にサブグループ化
+    const roomMap = {};
+    items.forEach(r => {
+      const room = r.room_name || '未設定';
+      if (!roomMap[room]) roomMap[room] = [];
+      roomMap[room].push(r);
+    });
+    const rooms = Object.keys(roomMap).sort();
+
+    const roomsHtml = rooms.map(room => `
+      <div style="margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);padding:4px 8px;background:var(--bg);border-radius:6px;margin-bottom:6px">
+          🚪 ${room}（${roomMap[room].length}件）
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>備品名</th><th>数量</th><th>申請者</th><th>申請日時</th><th>操作</th></tr></thead>
+            <tbody>
+              ${roomMap[room].map(r => {
+                const supplyUrl   = r.supplies?.purchase_url || null;
+                const supplyDdays = r.supplies?.delivery_days ?? 1;
+                return `
+                <tr>
+                  <td style="font-weight:600">
+                    ${r.supply_name}
+                    ${supplyUrl ? `<a href="${supplyUrl}" target="_blank" style="margin-left:6px;color:var(--accent2);font-size:12px">🔗</a>` : ''}
+                  </td>
+                  <td style="font-size:12px">${r.reason || '-'}</td>
+                  <td>${r.requested_by || '-'}</td>
+                  <td style="font-size:12px;white-space:nowrap">${fmtDate(r.created_at)}</td>
+                  <td>
+                    <button class="btn btn-secondary btn-sm" onclick="openStatusModal('${r.id}','${r.supply_name}','${r.status}','${r.requested_by||''}','${r.room_name||''}',${r.quantity},${supplyDdays})">変更</button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`).join('');
+
+    return `
     <div class="card" style="margin-bottom:14px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
         ${statusBadge(s)}
-        <span style="font-size:13px;color:var(--muted)">${groups[s].length}件</span>
+        <span style="font-size:13px;color:var(--muted)">${items.length}件</span>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>備品名</th><th>数量</th><th>申請者</th><th>ルーム</th><th>メモ</th><th>申請日時</th><th>操作</th></tr></thead>
-          <tbody>
-            ${groups[s].map(r => {
-              const supplyUrl   = r.supplies?.purchase_url || null;
-              const supplyDdays = r.supplies?.delivery_days ?? 1;
-              return `
-            <tr>
-              <td style="font-weight:600">
-                ${r.supply_name}
-                ${supplyUrl ? `<a href="${supplyUrl}" target="_blank" style="margin-left:6px;color:var(--accent2);font-size:12px">🔗</a>` : ''}
-              </td>
-              <td style="font-size:12px">${r.reason || '-'}</td>
-              <td>${r.requested_by || '-'}</td>
-              <td style="font-size:12px;color:var(--muted)">${r.room_name || '-'}</td>
-              <td style="font-size:12px;white-space:nowrap">${fmtDate(r.created_at)}</td>
-              <td>
-                <button class="btn btn-secondary btn-sm" onclick="openStatusModal('${r.id}','${r.supply_name}','${r.status}','${r.requested_by||''}','${r.room_name||''}',${r.quantity},${supplyDdays})">変更</button>
-              </td>
-            </tr>`; }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>`).join('');
+      ${roomsHtml}
+    </div>`;
+  }).join('');
 }
 
 // ステータス変更モーダル
