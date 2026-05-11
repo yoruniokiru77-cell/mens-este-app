@@ -8118,7 +8118,7 @@ function _openCalShiftMenu(e, row, status, therapist, date, startTime, endTime, 
   const hasChgReq    = !!hasChangeRequest;
   document.getElementById('cal-menu-approve').style.display        = isPending  ? '' : 'none';
   document.getElementById('cal-menu-reject').style.display         = isPending  ? '' : 'none';
-  document.getElementById('cal-menu-room').style.display           = (isPending || isApproved) ? '' : 'none';
+  document.getElementById('cal-menu-room').style.display           = isPending  ? '' : 'none';
   document.getElementById('cal-menu-change-approve').style.display = hasChgReq  ? '' : 'none';
   document.getElementById('cal-menu-change-reject').style.display  = hasChgReq  ? '' : 'none';
   document.getElementById('cal-menu-att').style.display            = isApproved ? '' : 'none';
