@@ -8702,7 +8702,7 @@ function renderResvByTherapist(data, el) {
           if (nowMin < sEnd) { target = { start: sStart, end: sEnd, intervalMin: s.intervalMin }; break; }
         }
         if (!target) {
-          availLabel = `<span style="font-size:11px;font-weight:600;background:#6b7280;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">退勤後</span>`;
+          availLabel = `<span style="font-size:11px;font-weight:700;background:#dc2626;color:#fff;padding:2px 10px;border-radius:10px;margin-left:4px">🔥 完売</span>`;
         } else {
           const baseCandidate = Math.max(nowMin, target.start);
           const earliest = calcEarliestAvailable(rows, target.intervalMin || 30, baseCandidate, target.end);
@@ -8710,7 +8710,7 @@ function renderResvByTherapist(data, el) {
             const remaining = target.end - earliest;
             availLabel = `<span style="font-size:11px;font-weight:600;background:#10b981;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">⏱ 最短 ${minToTimeStr(earliest)}〜（残${remaining}分）</span>`;
           } else {
-            availLabel = `<span style="font-size:11px;font-weight:600;background:#6b7280;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">退勤後</span>`;
+            availLabel = `<span style="font-size:11px;font-weight:700;background:#dc2626;color:#fff;padding:2px 10px;border-radius:10px;margin-left:4px">🔥 完売</span>`;
           }
         }
       }
