@@ -4342,15 +4342,47 @@ async function sendPayrollLine(uid, name, dateLabel) {
       }
     }
 
-    // cash_logsの該当レコードをis_collected=falseで回収管理対象にマーク
+    // cash_logsの回収管理マーク
+    // いわき=既存レコードを更新、水戸・神栖=store_dropレコードを新規作成
     try {
-      await _sb.from('cash_logs')
-        .update({ is_collected: false })
-        .eq('store_id', STORE_ID)
-        .eq('therapist_name', name)
-        .eq('work_date', dateStr)
-        .eq('status', 'closed')
-        .is('is_collected', null);  // 未マーク分のみ更新
+      const isIwaki = STORE_ID === '11111111-0000-0000-0000-000000000001';
+      if (isIwaki) {
+        // いわきは cash.html で作成済みのレコードをマーク
+        await _sb.from('cash_logs')
+          .update({ is_collected: false })
+          .eq('store_id', STORE_ID)
+          .eq('therapist_name', name)
+          .eq('work_date', dateStr)
+          .eq('status', 'closed')
+          .is('is_collected', null);
+      } else {
+        // 水戸・神栖: 店落ち額でcash_logsを新規作成（回収管理用）
+        const storeDropNum = parseInt((store || '¥0').replace(/[^0-9-]/g, '')) || 0;
+        if (storeDropNum > 0) {
+          // 同日・同セラピストのレコードが既になければ作成
+          const { data: existing } = await _sb.from('cash_logs')
+            .select('id')
+            .eq('store_id', STORE_ID)
+            .eq('therapist_name', name)
+            .eq('work_date', dateStr)
+            .maybeSingle();
+          if (!existing) {
+            await _sb.from('cash_logs').insert({
+              store_id:       STORE_ID,
+              therapist_name: name,
+              room_name:      '',
+              work_date:      dateStr,
+              store_drop:     storeDropNum,
+              status:         'closed',
+              is_collected:   false
+            });
+          } else {
+            await _sb.from('cash_logs')
+              .update({ store_drop: storeDropNum, is_collected: false })
+              .eq('id', existing.id);
+          }
+        }
+      }
     } catch(e) { console.warn('cash_logs更新エラー:', e); }
 
     // UI即時更新
@@ -6961,7 +6993,6 @@ async function loadCollection() {
   el.innerHTML = '<p style="color:var(--muted)">読み込み中...</p>';
 
   try {
-    // is_collected=falseの未回収レコードを取得
     const { data: uncollected } = await _sb.from('cash_logs')
       .select('*')
       .eq('store_id', STORE_ID)
@@ -6970,87 +7001,91 @@ async function loadCollection() {
       .order('work_date', { ascending: true });
 
     const rows = uncollected || [];
-
-    // ルーム別にグループ化
-    const roomGroups = {};
-    rows.forEach(r => {
-      if (!roomGroups[r.room_name]) roomGroups[r.room_name] = [];
-      roomGroups[r.room_name].push(r);
-    });
-
-    // 金額計算（いわき=万札投函額、水戸・神栖=店落ち）
     const isIwaki = STORE_ID === IWAKI_STORE_ID_COL;
     const getAmt = r => isIwaki ? (r.ten_thousand_deposited || 0) : (r.store_drop || 0);
 
-    const totalUncollected = rows.reduce((sum, r) => sum + getAmt(r), 0);
-    sumEl.textContent = `未回収合計：¥${totalUncollected.toLocaleString()}`;
+    const total = rows.reduce((sum, r) => sum + getAmt(r), 0);
+    sumEl.textContent = `未回収合計：¥${total.toLocaleString()}（${rows.length}件）`;
 
     if (!rows.length) {
       el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">未回収の店落ちはありません</div>';
       return;
     }
 
-    let html = '';
-    Object.entries(roomGroups).forEach(([room, items]) => {
-      const roomTotal = items.reduce((sum, r) => sum + getAmt(r), 0);
-      const latestDate = items[items.length - 1].work_date;
+    const amtLabel = isIwaki ? '万札投函額' : '店落ち';
+    const rowsHtml = rows.map(r => {
+      const amt     = getAmt(r);
+      const date    = r.work_date || '-';
+      const room    = r.room_name || '-';
+      const person  = r.therapist_name || '-';
+      // 日付を読みやすく（2026-05-18 → 5/18）
+      const dateShort = date.replace(/^\d{4}-0?(\d+)-0?(\d+)$/, '$1/$2');
+      return `
+      <tr>
+        <td style="padding:8px 6px;border-bottom:1px solid var(--border);white-space:nowrap;font-size:13px">${dateShort}</td>
+        <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600">${person}</td>
+        <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">${room}</td>
+        <td style="padding:8px 6px;border-bottom:1px solid var(--border);text-align:right;font-size:13px;font-weight:600;color:#E24B4A">¥${amt.toLocaleString()}</td>
+        <td style="padding:8px 6px;border-bottom:1px solid var(--border);text-align:center">
+          <button class="btn btn-primary btn-sm" onclick="markCollectedById('${r.id}')">✅</button>
+        </td>
+      </tr>`;
+    }).join('');
 
-      html += `
-      <div class="card" style="margin-bottom:12px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-          <div>
-            <span style="font-size:14px;font-weight:600">🚪 ${room}</span>
-            <span style="font-size:13px;color:var(--muted);margin-left:8px">${items.length}件</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:16px;font-weight:600;color:#E24B4A">¥${roomTotal.toLocaleString()}</span>
-            <button class="btn btn-primary btn-sm" onclick="markCollected('${room}', '${latestDate}')">✅ 回収済みにする</button>
-          </div>
-        </div>
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
+    el.innerHTML = `
+      <div class="card" style="padding:0;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse">
           <thead>
             <tr style="background:var(--bg)">
-              <th style="padding:6px;text-align:left;border-bottom:1px solid var(--border)">日付</th>
-              <th style="padding:6px;text-align:left;border-bottom:1px solid var(--border)">セラピスト</th>
-              <th style="padding:6px;text-align:right;border-bottom:1px solid var(--border)">${isIwaki ? '万札投函額' : '店落ち'}</th>
+              <th style="padding:8px 6px;text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">日付</th>
+              <th style="padding:8px 6px;text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">セラピスト</th>
+              <th style="padding:8px 6px;text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">ルーム</th>
+              <th style="padding:8px 6px;text-align:right;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">${amtLabel}</th>
+              <th style="padding:8px 6px;text-align:center;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">回収</th>
             </tr>
           </thead>
-          <tbody>
-            ${items.map(r => `
-            <tr>
-              <td style="padding:6px;border-bottom:1px solid var(--border)">${r.work_date}</td>
-              <td style="padding:6px;border-bottom:1px solid var(--border)">${r.therapist_name || '-'}</td>
-              <td style="padding:6px;text-align:right;border-bottom:1px solid var(--border)">¥${getAmt(r).toLocaleString()}</td>
-            </tr>`).join('')}
-          </tbody>
+          <tbody>${rowsHtml}</tbody>
         </table>
-      </div>`;
-    });
-
-    el.innerHTML = html;
+      </div>
+      <button class="btn btn-primary" style="margin-top:12px;width:100%" onclick="markAllCollected()">✅ 全件回収済みにする</button>`;
   } catch(e) {
     el.innerHTML = '<p style="color:red">エラー: ' + e.message + '</p>';
   }
 }
 
-async function markCollected(roomName, upToDate) {
-  if (!confirm(`🚪 ${roomName}\n${upToDate}以前の未回収分を全て回収済みにしますか？`)) return;
+async function markCollectedById(id) {
+  if (!confirm('この1件を回収済みにしますか？')) return;
+  try {
+    showOverlay();
+    const { error } = await _sb.from('cash_logs')
+      .update({ is_collected: true, collected_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new Error(error.message);
+    showToast('回収済みにしました');
+    loadCollection();
+  } catch(e) { alert('エラー: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
+async function markAllCollected() {
+  if (!confirm('未回収の全件を回収済みにしますか？')) return;
   try {
     showOverlay();
     const { error } = await _sb.from('cash_logs')
       .update({ is_collected: true, collected_at: new Date().toISOString() })
       .eq('store_id', STORE_ID)
-      .eq('room_name', roomName)
       .eq('is_collected', false)
-      .lte('work_date', upToDate);
+      .eq('status', 'closed');
     if (error) throw new Error(error.message);
-    showToast(`${roomName} の回収済み登録が完了しました`);
+    showToast('全件回収済みにしました');
     loadCollection();
-  } catch(e) {
-    alert('エラー: ' + e.message);
-  } finally {
-    hideOverlay();
-  }
+  } catch(e) { alert('エラー: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
+async function markCollected(roomName, upToDate) {
+  // 後方互換のため残す
+  await markAllCollected();
 }
 
 function closeCustomerModal() {
@@ -8239,7 +8274,7 @@ function _calDateHeader(d, i, today) {
   const isSat   = i === 5;
   const isSun   = i === 6;
   const color   = isSun ? 'var(--accent)' : isSat ? '#3b82f6' : 'var(--text)';
-  return `<th style="padding:6px 4px;text-align:center;border-bottom:2px solid var(--border);font-size:11px;color:${color};min-width:52px;${isToday ? 'background:rgba(233,69,96,0.08);border-radius:6px 6px 0 0' : ''}">
+  return `<th style="padding:6px 4px;text-align:center;border-bottom:2px solid var(--border);font-size:11px;color:${color};min-width:52px;position:sticky;top:0;background:${isToday ? '#fde9ec' : 'var(--surface)'};z-index:2;${isToday ? 'border-radius:6px 6px 0 0' : ''}">
     <div style="font-weight:700">${WDAYS[i]}</div>
     <div style="font-size:13px;font-weight:${isToday ? '900' : '600'}">${d.getMonth()+1}/${d.getDate()}</div>
     ${isToday ? '<div style="width:5px;height:5px;background:var(--accent);border-radius:50%;margin:2px auto 0"></div>' : ''}
@@ -8304,11 +8339,11 @@ function renderShiftCalendar(el, days, shifts) {
     }
 
     el.innerHTML = `
-      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-        <table style="width:100%;border-collapse:collapse;min-width:${52 * days.length + 90}px">
+      <div style="overflow:auto;-webkit-overflow-scrolling:touch;max-height:75vh">
+        <table style="width:100%;border-collapse:separate;border-spacing:0;min-width:${52 * days.length + 90}px">
           <thead>
             <tr>
-              <th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);font-size:12px;font-weight:700;min-width:88px;position:sticky;left:0;background:var(--surface);z-index:2">
+              <th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);font-size:12px;font-weight:700;min-width:88px;position:sticky;left:0;top:0;background:var(--surface);z-index:3">
                 セラピスト
                 <button onclick="openCalAddShift('','')" style="float:right;background:var(--accent);color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;font-weight:700">＋</button>
               </th>
@@ -8503,9 +8538,25 @@ async function loadReservations() {
     ]);
     // セラピスト名 → ルーム名のマップを作成
     window._resvRoomMap = {};
+    window._resvShiftMap = {}; // セラピスト名 → {start, end, intervalMin}
     (shiftData || []).forEach(s => {
       if (s.therapist && s.roomName) window._resvRoomMap[s.therapist] = s.roomName;
+      if (s.therapist) {
+        window._resvShiftMap[s.therapist] = {
+          start: s.startTime || '',
+          end:   s.endTime   || '',
+          intervalMin: 30 // 後でセラピストデータから上書き
+        };
+      }
     });
+    // セラピストのインターバルをマージ
+    if (therapists && therapists.length) {
+      therapists.forEach(t => {
+        if (window._resvShiftMap[t.name]) {
+          window._resvShiftMap[t.name].intervalMin = Number(t.interval ?? t.intervalMin ?? t.interval_min ?? 30);
+        }
+      });
+    }
 
     // 承認待ち姫予約を日付に関係なく別途取得（今日以外の分）
     const todayIso = new Date(); todayIso.setHours(0,0,0,0);
@@ -8566,6 +8617,52 @@ function renderResvByTherapist(data, el) {
 
   const totalSales = data.filter(r => r.status !== 'cancelled').reduce((s, r) => s + Number(r.price || 0), 0);
 
+  // 最短案内時刻を計算
+  // 引数: 予約配列、インターバル分、現在時刻分、シフト終了分
+  // 戻り値: 最短開始時刻(分) or null（シフト終了）
+  function calcEarliestAvailable(reservations, intervalMin, nowMin, shiftEndMin) {
+    const MIN_COURSE = 60; // 最短コース時間（分）
+    const minGap = MIN_COURSE + intervalMin;
+    // 有効な予約を時刻順にソート
+    const valid = reservations
+      .filter(r => r.status !== 'cancelled')
+      .map(r => {
+        const dt = new Date(r.date);
+        const h  = dt.getHours(), m = dt.getMinutes();
+        const startMin = (h < 3 ? h + 24 : h) * 60 + m; // 27時ルール
+        return { startMin, endMin: startMin + Number(r.course || 60) };
+      })
+      .sort((a, b) => a.startMin - b.startMin);
+
+    let candidate = nowMin;
+    for (const resv of valid) {
+      if (candidate < resv.startMin) {
+        // 隙間あり
+        const gap = resv.startMin - candidate;
+        if (gap >= minGap) return candidate;
+      }
+      // 予約期間+インターバルまで進める
+      const blockedUntil = resv.endMin + intervalMin;
+      if (candidate < blockedUntil) candidate = blockedUntil;
+    }
+    if (shiftEndMin && candidate >= shiftEndMin) return null;
+    return candidate;
+  }
+
+  // 分→HH:MM文字列（27時ルール対応）
+  function minToTimeStr(min) {
+    if (min == null) return '';
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+  }
+
+  // 現在時刻（27時ルール対応）
+  const now = new Date();
+  let nowMin = now.getHours() * 60 + now.getMinutes();
+  // 0〜2時台なら24+h（前日扱い）
+  if (now.getHours() < 3) nowMin += 24 * 60;
+
   el.innerHTML = `
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
       合計 ${data.filter(r=>r.status!=='cancelled').length} 件（キャンセル除く）　有効売上 ¥${totalSales.toLocaleString()}
@@ -8574,11 +8671,31 @@ function renderResvByTherapist(data, el) {
       const rows = groups[th];
       const valid = rows.filter(r => r.status !== 'cancelled');
       const sales = valid.reduce((s, r) => s + Number(r.price || 0), 0);
+
+      // シフト情報・最短案内時刻
+      const shift = window._resvShiftMap && window._resvShiftMap[th];
+      let shiftLabel = '';
+      let availLabel = '';
+      if (shift && shift.start && shift.end) {
+        shiftLabel = `${shift.start.substring(0,5)}〜${shift.end.substring(0,5)}`;
+        const startMin0 = (() => { const [h,m] = shift.start.split(':').map(Number); return (h < 3 ? h+24 : h)*60 + (m||0); })();
+        const endMin0   = (() => { const [h,m] = shift.end.split(':').map(Number);   return (h < 3 ? h+24 : h)*60 + (m||0); })();
+        // 候補開始 = max(現在時刻, シフト開始)
+        const baseCandidate = Math.max(nowMin, startMin0);
+        const earliest = calcEarliestAvailable(rows, shift.intervalMin || 30, baseCandidate, endMin0);
+        if (earliest != null && earliest < endMin0) {
+          const remaining = endMin0 - earliest;
+          availLabel = `<span style="font-size:11px;font-weight:600;background:#10b981;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">⏱ 最短 ${minToTimeStr(earliest)}〜（残${remaining}分）</span>`;
+        } else {
+          availLabel = `<span style="font-size:11px;font-weight:600;background:#6b7280;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">退勤後</span>`;
+        }
+      }
+
       return `
         <div style="margin-bottom:16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--primary);color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700">
-            <span>👤 ${th}${(window._resvRoomMap && window._resvRoomMap[th]) ? ` <span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:4px">🚪 ${window._resvRoomMap[th]}</span>` : ''}</span>
-            <span style="font-size:12px;opacity:.85">${valid.length}件 ¥${sales.toLocaleString()}</span>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--primary);color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;flex-wrap:wrap;gap:6px">
+            <span>👤 ${th}${(window._resvRoomMap && window._resvRoomMap[th]) ? ` <span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:4px">🚪 ${window._resvRoomMap[th]}</span>` : ''}${availLabel}</span>
+            <span style="font-size:12px;opacity:.85">${shiftLabel || (valid.length + '件 ¥' + sales.toLocaleString())}</span>
           </div>
           <div style="border-radius:0 0 8px 8px;border:1px solid var(--border);border-top:none;padding:8px">
                 ${rows.map((r, _i) => {
