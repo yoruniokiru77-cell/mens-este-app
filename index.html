@@ -2504,6 +2504,7 @@ async function apiGet(action, params = {}) {
       let q = _sb.from('shifts').select('*').eq('store_id', STORE_ID).order('date').order('start_time');
       if (params.therapist)  q = q.eq('therapist_name', params.therapist);
       if (params.status)     q = q.eq('status', params.status);
+      if (params.date)       q = q.eq('date', params.date);
       if (params.futureOnly) q = q.gte('date', new Date().toISOString().slice(0,10));
       if (params.month) {
         const [y, m] = params.month.split('-');
@@ -8538,22 +8539,35 @@ async function loadReservations() {
     ]);
     // セラピスト名 → ルーム名のマップを作成
     window._resvRoomMap = {};
-    window._resvShiftMap = {}; // セラピスト名 → {start, end, intervalMin}
+    window._resvShiftMap = {}; // セラピスト名 → [{start, end, roomName, intervalMin}, ...]
     (shiftData || []).forEach(s => {
-      if (s.therapist && s.roomName) window._resvRoomMap[s.therapist] = s.roomName;
       if (s.therapist) {
-        window._resvShiftMap[s.therapist] = {
-          start: s.startTime || '',
-          end:   s.endTime   || '',
-          intervalMin: 30 // 後でセラピストデータから上書き
-        };
+        if (!window._resvShiftMap[s.therapist]) window._resvShiftMap[s.therapist] = [];
+        window._resvShiftMap[s.therapist].push({
+          start:    s.startTime || '',
+          end:      s.endTime   || '',
+          roomName: s.roomName  || '',
+          intervalMin: 30
+        });
       }
+    });
+    // 各セラピストのシフトを開始時刻順にソート＆ルームマップ作成
+    Object.keys(window._resvShiftMap).forEach(name => {
+      window._resvShiftMap[name].sort((a, b) => {
+        const am = (() => { const [h,m] = (a.start||'00:00').split(':').map(Number); return (h<3?h+24:h)*60+(m||0); })();
+        const bm = (() => { const [h,m] = (b.start||'00:00').split(':').map(Number); return (h<3?h+24:h)*60+(m||0); })();
+        return am - bm;
+      });
+      // ルームを連結（重複除外）
+      const rooms = [...new Set(window._resvShiftMap[name].map(s => s.roomName).filter(Boolean))];
+      if (rooms.length) window._resvRoomMap[name] = rooms.join(' / ');
     });
     // セラピストのインターバルをマージ
     if (therapists && therapists.length) {
       therapists.forEach(t => {
         if (window._resvShiftMap[t.name]) {
-          window._resvShiftMap[t.name].intervalMin = Number(t.interval ?? t.intervalMin ?? t.interval_min ?? 30);
+          const iv = Number(t.interval ?? t.intervalMin ?? t.interval_min ?? 30);
+          window._resvShiftMap[t.name].forEach(s => s.intervalMin = iv);
         }
       });
     }
@@ -8672,22 +8686,32 @@ function renderResvByTherapist(data, el) {
       const valid = rows.filter(r => r.status !== 'cancelled');
       const sales = valid.reduce((s, r) => s + Number(r.price || 0), 0);
 
-      // シフト情報・最短案内時刻
-      const shift = window._resvShiftMap && window._resvShiftMap[th];
+      // シフト情報・最短案内時刻（複数シフト対応）
+      const shifts = window._resvShiftMap && window._resvShiftMap[th];
       let shiftLabel = '';
       let availLabel = '';
-      if (shift && shift.start && shift.end) {
-        shiftLabel = `${shift.start.substring(0,5)}〜${shift.end.substring(0,5)}`;
-        const startMin0 = (() => { const [h,m] = shift.start.split(':').map(Number); return (h < 3 ? h+24 : h)*60 + (m||0); })();
-        const endMin0   = (() => { const [h,m] = shift.end.split(':').map(Number);   return (h < 3 ? h+24 : h)*60 + (m||0); })();
-        // 候補開始 = max(現在時刻, シフト開始)
-        const baseCandidate = Math.max(nowMin, startMin0);
-        const earliest = calcEarliestAvailable(rows, shift.intervalMin || 30, baseCandidate, endMin0);
-        if (earliest != null && earliest < endMin0) {
-          const remaining = endMin0 - earliest;
-          availLabel = `<span style="font-size:11px;font-weight:600;background:#10b981;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">⏱ 最短 ${minToTimeStr(earliest)}〜（残${remaining}分）</span>`;
-        } else {
+      if (shifts && shifts.length) {
+        // 全シフトを表示
+        shiftLabel = shifts.map(s => `${s.start.substring(0,5)}〜${s.end.substring(0,5)}`).join(' / ');
+        // 現在時刻が含まれるシフト、なければ次のシフト
+        const toMin = t => { const [h,m] = (t||'00:00').split(':').map(Number); return (h<3?h+24:h)*60+(m||0); };
+        let target = null;
+        for (const s of shifts) {
+          const sStart = toMin(s.start);
+          const sEnd   = toMin(s.end);
+          if (nowMin < sEnd) { target = { start: sStart, end: sEnd, intervalMin: s.intervalMin }; break; }
+        }
+        if (!target) {
           availLabel = `<span style="font-size:11px;font-weight:600;background:#6b7280;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">退勤後</span>`;
+        } else {
+          const baseCandidate = Math.max(nowMin, target.start);
+          const earliest = calcEarliestAvailable(rows, target.intervalMin || 30, baseCandidate, target.end);
+          if (earliest != null && earliest < target.end) {
+            const remaining = target.end - earliest;
+            availLabel = `<span style="font-size:11px;font-weight:600;background:#10b981;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">⏱ 最短 ${minToTimeStr(earliest)}〜（残${remaining}分）</span>`;
+          } else {
+            availLabel = `<span style="font-size:11px;font-weight:600;background:#6b7280;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">退勤後</span>`;
+          }
         }
       }
 
