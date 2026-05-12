@@ -9276,23 +9276,21 @@ async function copyResvGuideByIdx(idx) {
       }
     } catch(e3) { console.warn('ルーム案内取得エラー:', e3); }
 
-    const copyParts3 = [
-      dateDisp3 + '～',
-      r.course + '分コース',
-      '担当セラピスト：' + therapistDisp3,
-      'お客様：' + (r.customer || ''),
-    ];
-    // コピーテキストはお客様名を除く（最初の3行のみ）
-    const copyBase3 = copyParts3.slice(0, 3);
-    if (guideText3) { copyBase3.push(''); copyBase3.push(''); copyBase3.push('ーーーーーーーーーーーーーーーー'); copyBase3.push(guideText3); }
-    const copyText3 = copyBase3.join('\n');
+    const { infoLines: infoText3, copyText: copyText3 } = buildGuideInfo({
+      dateDisp:      dateDisp3,
+      mins:          r.course,
+      price:         r.price,
+      nomFee:        0,
+      therapistDisp: therapistDisp3,
+      guideText:     guideText3,
+      customerName:  r.customer || '',
+    });
 
     window._resvGuideText = copyText3;
     const guideWrapEl3  = document.getElementById('resv-complete-guide-wrap');
     const guideEl3      = document.getElementById('resv-complete-guide');
     const copyBtnEl3    = document.getElementById('resv-complete-copy-btn');
     const infoEl3       = document.getElementById('resv-complete-info');
-    const infoText3 = copyParts3.slice(0, 4).join('\n');
     if (infoEl3)      infoEl3.textContent = infoText3;
     if (guideText3 && guideEl3) {
       guideEl3.textContent = guideText3;
@@ -9581,6 +9579,82 @@ async function submitReservation() {
   finally { hideOverlay(); }
 }
 
+// ============================================================
+// 店舗別案内文フォーマット生成
+// ============================================================
+const NEVERLAND_STORE_ID = '44444444-0000-0000-0000-000000000004';
+
+function buildGuideText({ dateDisp, mins, price, nomFee, therapistDisp, guideText, includeCustomer, customerName }) {
+  const isNeverland = STORE_ID === NEVERLAND_STORE_ID;
+  if (isNeverland) {
+    // NEVERLANDフォーマット
+    const totalPrice = (price || 0) + (nomFee || 0);
+    // 日付と時刻を分離（例: 5/13（水） 14:50 → 5/13 と 14:50）
+    const datePart  = dateDisp.replace(/（.）.*/, '').trim();   // 5/13
+    const timePart  = dateDisp.replace(/.*） /, '').trim();     // 14:50
+
+    const lines = [
+      '★ご予約日',
+      '・' + datePart,
+      '★ご予約時間',
+      '・' + timePart + '〜',
+      '★コース',
+      '・' + mins + '分',
+      '★料金',
+      '・' + totalPrice.toLocaleString() + '円',
+      '★セラピスト',
+      '・' + therapistDisp,
+    ];
+    if (guideText) {
+      lines.push('');
+      lines.push('=====================');
+      lines.push(guideText);
+    }
+    return lines.join('\n');
+  } else {
+    // 通常フォーマット
+    const lines = [
+      dateDisp + '～',
+      mins + '分コース',
+      '担当セラピスト：' + therapistDisp,
+    ];
+    if (guideText) {
+      lines.push('');
+      lines.push('');
+      lines.push('ーーーーーーーーーーーーーーーー');
+      lines.push(guideText);
+    }
+    return lines.join('\n');
+  }
+}
+
+function buildGuideInfo({ dateDisp, mins, price, nomFee, therapistDisp, guideText, customerName }) {
+  const isNeverland = STORE_ID === NEVERLAND_STORE_ID;
+  const copyText = buildGuideText({ dateDisp, mins, price, nomFee, therapistDisp, guideText });
+  if (isNeverland) {
+    // ヘッダー情報（表示用：お客様名含む）
+    const datePart = dateDisp.replace(/（.）.*/, '').trim();
+    const timePart = dateDisp.replace(/.*） /, '').trim();
+    const totalPrice = (price || 0) + (nomFee || 0);
+    const infoLines = [
+      '★ご予約日：' + datePart,
+      '★時間：' + timePart + '〜',
+      '★' + mins + '分 / ¥' + totalPrice.toLocaleString(),
+      '★' + therapistDisp,
+      customerName ? 'お客様：' + customerName : '',
+    ].filter(Boolean).join('\n');
+    return { infoLines, copyText };
+  } else {
+    const infoLines = [
+      dateDisp + '～',
+      mins + '分コース',
+      '担当セラピスト：' + therapistDisp,
+      customerName ? 'お客様：' + customerName : '',
+    ].filter(Boolean).join('\n');
+    return { infoLines, copyText };
+  }
+}
+
 async function showResvCompleteModal(p) {
   const dt    = new Date(p.dateVal);
   const WDAYS = ['日','月','火','水','木','金','土'];
@@ -9589,22 +9663,7 @@ async function showResvCompleteModal(p) {
     + '（' + WDAYS[dt.getDay()] + '） ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
   const therapistDispM = p.nomination === 'free' ? 'フリー' : p.therapistName;
 
-  // ヘッダー情報（固定表示）お客様名含む
-  const infoLines = [
-    dateDisp + '～',
-    p.mins + '分コース',
-    '担当セラピスト：' + therapistDispM,
-    'お客様：' + (p.customerName || ''),
-  ].join('\n');
-
-  // コピー用テキストのベース（お客様名を除く）
-  const copyBase = [
-    dateDisp + '～',
-    p.mins + '分コース',
-    '担当セラピスト：' + therapistDispM,
-  ].join('\n');
-
-  document.getElementById('resv-complete-info').textContent = infoLines;
+  document.getElementById('resv-complete-info').textContent = '';
 
   const guideWrap = document.getElementById('resv-complete-guide-wrap');
   const guideEl   = document.getElementById('resv-complete-guide');
@@ -9612,7 +9671,7 @@ async function showResvCompleteModal(p) {
   guideWrap.style.display = 'none';
   copyBtn.style.display   = 'none';
 
-  // ルーム案内文を取得（myShiftがある場合）
+  // ルーム案内文を取得
   let guideTextM = '';
   if (p.myShift && p.myShift.roomName) {
     try {
@@ -9622,13 +9681,19 @@ async function showResvCompleteModal(p) {
     } catch(e) { console.warn(e); }
   }
 
-  // コピー用フルテキスト（お客様名を除く）
-  const copyText = guideTextM
-    ? copyBase + '\n\n\nーーーーーーーーーーーーーーーー\n' + guideTextM
-    : copyBase;
+  const { infoLines, copyText } = buildGuideInfo({
+    dateDisp:      dateDisp,
+    mins:          p.mins,
+    price:         p.coursePrice,
+    nomFee:        p.nomFee,
+    therapistDisp: therapistDispM,
+    guideText:     guideTextM,
+    customerName:  p.customerName || '',
+  });
+
+  document.getElementById('resv-complete-info').textContent = infoLines;
   window._resvGuideText = copyText;
 
-  // 案内文がある場合はスクロールエリアに表示
   if (guideTextM) {
     guideEl.textContent     = guideTextM;
     guideWrap.style.display = '';
@@ -9815,16 +9880,15 @@ async function saveAndSendLine() {
       } catch(e2) { console.warn('ルーム案内取得エラー:', e2); }
 
       // テキスト組み立て
-      const copyParts = [
-        dateDisp2 + '～',
-        mins + '分コース',
-        '担当セラピスト：' + therapistDisp,
-        'お客様：' + (params.customer || ''),
-      ];
-      // コピーテキストはお客様名を除く
-      const copyBase2 = copyParts.slice(0, 3);
-      if (guideText) { copyBase2.push(''); copyBase2.push(''); copyBase2.push('ーーーーーーーーーーーーーーーー'); copyBase2.push(guideText); }
-      const copyText = copyBase2.join('\n');
+      const { infoLines: infoText2, copyText } = buildGuideInfo({
+        dateDisp:      dateDisp2,
+        mins:          mins,
+        price:         price,
+        nomFee:        nomFee,
+        therapistDisp: therapistDisp,
+        guideText:     guideText,
+        customerName:  params.customer || '',
+      });
 
       // テキストをモーダルに表示（iOS Safari対応）
       window._resvGuideText = copyText;
@@ -9832,7 +9896,6 @@ async function saveAndSendLine() {
       const guideWrapEl  = document.getElementById('resv-complete-guide-wrap');
       const guideEl2     = document.getElementById('resv-complete-guide');
       const copyBtnEl    = document.getElementById('resv-complete-copy-btn');
-      const infoText2    = copyParts.slice(0, 4).join('\n');
       if (infoEl2)     infoEl2.textContent = infoText2;
       if (guideText && guideEl2) {
         guideEl2.textContent = guideText;
@@ -11061,23 +11124,21 @@ async function confirmHimeApprove() {
         }
       } catch(e4) { console.warn('ルーム案内取得エラー:', e4); }
 
-      const copyParts4 = [
-        dateDisp4 + '～',
-        mins4 + '分コース',
-        '担当セラピスト：' + therapistDisp4,
-        'お客様：' + (approvedCustName || resvFull.customer_name || ''),
-      ];
-      // コピーテキストはお客様名を除く
-      const copyBase4 = copyParts4.slice(0, 3);
-      if (guideText4) { copyBase4.push(''); copyBase4.push(''); copyBase4.push('ーーーーーーーーーーーーーーーー'); copyBase4.push(guideText4); }
-      const copyText4 = copyBase4.join('\n');
+      const { infoLines: infoText4, copyText: copyText4 } = buildGuideInfo({
+        dateDisp:      dateDisp4,
+        mins:          mins4,
+        price:         coursePrice4,
+        nomFee:        nomFee4,
+        therapistDisp: therapistDisp4,
+        guideText:     guideText4,
+        customerName:  approvedCustName || resvFull.customer_name || '',
+      });
 
       window._resvGuideText = copyText4;
       const guideWrapEl4  = document.getElementById('resv-complete-guide-wrap');
       const guideEl4      = document.getElementById('resv-complete-guide');
       const copyBtnEl4    = document.getElementById('resv-complete-copy-btn');
       const infoEl4       = document.getElementById('resv-complete-info');
-      const infoText4     = copyParts4.slice(0, 4).join('\n');
       if (infoEl4)      infoEl4.textContent = infoText4;
       if (guideText4 && guideEl4) {
         guideEl4.textContent = guideText4;
