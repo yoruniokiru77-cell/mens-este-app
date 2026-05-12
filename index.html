@@ -7026,21 +7026,20 @@ async function loadCollection() {
 
     const amtLabel = isIwaki ? '万札投函額' : '店落ち';
     const rowsHtml = rows.map(r => {
-      const amt     = getAmt(r);
-      const date    = r.work_date || '-';
-      const room    = r.room_name || '-';
-      const person  = r.therapist_name || '-';
-      // 日付を読みやすく（2026-05-18 → 5/18）
+      const amt       = getAmt(r);
+      const date      = r.work_date || '-';
+      const room      = r.room_name || '-';
+      const person    = r.therapist_name || '-';
       const dateShort = date.replace(/^\d{4}-0?(\d+)-0?(\d+)$/, '$1/$2');
       return `
       <tr>
+        <td style="padding:8px 6px;border-bottom:1px solid var(--border);text-align:center">
+          <input type="checkbox" class="collection-check" data-id="${r.id}" style="width:16px;height:16px;cursor:pointer">
+        </td>
         <td style="padding:8px 6px;border-bottom:1px solid var(--border);white-space:nowrap;font-size:13px">${dateShort}</td>
         <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600">${person}</td>
         <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">${room}</td>
         <td style="padding:8px 6px;border-bottom:1px solid var(--border);text-align:right;font-size:13px;font-weight:600;color:#E24B4A">¥${amt.toLocaleString()}</td>
-        <td style="padding:8px 6px;border-bottom:1px solid var(--border);text-align:center">
-          <button class="btn btn-primary btn-sm" onclick="markCollectedById('${r.id}')">✅</button>
-        </td>
       </tr>`;
     }).join('');
 
@@ -7049,20 +7048,44 @@ async function loadCollection() {
         <table style="width:100%;border-collapse:collapse">
           <thead>
             <tr style="background:var(--bg)">
+              <th style="padding:8px 6px;text-align:center;border-bottom:1px solid var(--border)">
+                <input type="checkbox" id="collection-check-all" style="width:16px;height:16px;cursor:pointer"
+                  onchange="toggleAllCollection(this.checked)">
+              </th>
               <th style="padding:8px 6px;text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">日付</th>
               <th style="padding:8px 6px;text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">セラピスト</th>
               <th style="padding:8px 6px;text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">ルーム</th>
               <th style="padding:8px 6px;text-align:right;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">${amtLabel}</th>
-              <th style="padding:8px 6px;text-align:center;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">回収</th>
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>
-      <button class="btn btn-primary" style="margin-top:12px;width:100%" onclick="markAllCollected()">✅ 全件回収済みにする</button>`;
+      <button class="btn btn-primary" style="margin-top:12px;width:100%" onclick="markCheckedCollected()">✅ 選択した項目を回収済みにする</button>`;
   } catch(e) {
     el.innerHTML = '<p style="color:red">エラー: ' + e.message + '</p>';
   }
+}
+
+function toggleAllCollection(checked) {
+  document.querySelectorAll('.collection-check').forEach(cb => cb.checked = checked);
+}
+
+async function markCheckedCollected() {
+  const checked = [...document.querySelectorAll('.collection-check:checked')];
+  if (!checked.length) { alert('回収済みにする項目を選択してください'); return; }
+  if (!confirm(`選択した${checked.length}件を回収済みにしますか？`)) return;
+  try {
+    showOverlay();
+    const ids = checked.map(cb => cb.dataset.id);
+    const { error } = await _sb.from('cash_logs')
+      .update({ is_collected: true, collected_at: new Date().toISOString() })
+      .in('id', ids);
+    if (error) throw new Error(error.message);
+    showToast(`${ids.length}件を回収済みにしました`);
+    loadCollection();
+  } catch(e) { alert('エラー: ' + e.message); }
+  finally { hideOverlay(); }
 }
 
 async function markCollectedById(id) {
