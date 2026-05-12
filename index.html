@@ -7034,7 +7034,10 @@ async function loadCollection() {
       return `
       <tr>
         <td style="padding:8px 6px;border-bottom:1px solid var(--border);text-align:center">
-          <input type="checkbox" class="collection-check" data-id="${r.id}" style="width:16px;height:16px;cursor:pointer">
+          <span class="toggle-switch" style="width:36px;height:20px">
+            <input type="checkbox" class="collection-check" data-id="${r.id}">
+            <span class="toggle-slider"></span>
+          </span>
         </td>
         <td style="padding:8px 6px;border-bottom:1px solid var(--border);white-space:nowrap;font-size:13px">${dateShort}</td>
         <td style="padding:8px 6px;border-bottom:1px solid var(--border);font-size:13px;font-weight:600">${person}</td>
@@ -7049,8 +7052,10 @@ async function loadCollection() {
           <thead>
             <tr style="background:var(--bg)">
               <th style="padding:8px 6px;text-align:center;border-bottom:1px solid var(--border)">
-                <input type="checkbox" id="collection-check-all" style="width:16px;height:16px;cursor:pointer"
-                  onchange="toggleAllCollection(this.checked)">
+                <span class="toggle-switch" style="width:36px;height:20px">
+                  <input type="checkbox" id="collection-check-all" onchange="toggleAllCollection(this.checked)">
+                  <span class="toggle-slider"></span>
+                </span>
               </th>
               <th style="padding:8px 6px;text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">日付</th>
               <th style="padding:8px 6px;text-align:left;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border)">セラピスト</th>
