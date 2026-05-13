@@ -492,6 +492,7 @@ async function loadPrevBalance() {
     .eq('room_name', room)
     .eq('status', 'closed')
     .order('work_date', { ascending: false })
+    .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
 
