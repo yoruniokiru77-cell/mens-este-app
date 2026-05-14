@@ -8671,7 +8671,11 @@ function _syncResvDatetime() {
   } else {
     document.getElementById('resv-date').value = datePart + 'T' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
   }
-  populateTherapistSelect();
+  // セラピスト選択がロック中（編集モード）はリストを更新しない
+  const sel = document.getElementById('resv-therapist');
+  if (!sel || !sel.disabled) {
+    populateTherapistSelect();
+  }
 }
 
 function setNowToResvDate() {
@@ -9192,11 +9196,26 @@ async function updateResvRow() {
     alert('チェックエラー: ' + e.message);
     return;
   }
-  // LINE通知するか選択
+  // LINE通知するか選択（通知する / 通知しない）
   const t = therapists.find(th => th.name === therapistName);
   let sendNotify = false;
   if (t && t.userId) {
-    sendNotify = confirm('変更内容をLINEでセラピストに通知しますか？');
+    await new Promise(resolve => {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+      overlay.innerHTML = `
+        <div style="background:var(--surface);border-radius:14px;padding:24px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+          <div style="font-size:15px;font-weight:700;margin-bottom:8px">LINE通知</div>
+          <div style="font-size:14px;color:var(--muted);margin-bottom:20px">変更内容をLINEでセラピストに通知しますか？</div>
+          <div style="display:flex;gap:10px">
+            <button id="_notify-yes" style="flex:1;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">📨 通知する</button>
+            <button id="_notify-no"  style="flex:1;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">通知しない</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#_notify-yes').onclick = () => { sendNotify = true;  document.body.removeChild(overlay); resolve(); };
+      overlay.querySelector('#_notify-no').onclick  = () => { sendNotify = false; document.body.removeChild(overlay); resolve(); };
+    });
   }
 
   const params = {
