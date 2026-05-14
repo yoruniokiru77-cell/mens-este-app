@@ -537,6 +537,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     <button onclick="showPage('customer-master')" id="tab-customer-master">👥 顧客マスタ</button>
     <button onclick="showPage('master-mgmt')" id="tab-master-mgmt">⚙ マスタ管理</button>
     <button onclick="showPage('line-mgmt')" id="tab-line-mgmt" style="display:none">💬 LINE管理</button>
+    <button onclick="showPage('broadcast')" id="tab-broadcast">📢 アナウンス</button>
     <button onclick="showPage('shift-submit')" id="tab-shift-submit" style="display:none">📆 シフト提出</button>
     <button onclick="showPage('my-reservations')" id="tab-my-reservations" style="display:none">📋 予約確認</button>
     <button onclick="showPage('sales-input')" id="tab-sales-input" style="display:none">📝 売上入力</button>
@@ -1573,8 +1574,41 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     </div>
   </div>
 
+  <!-- ===== 一括送信ページ ===== -->
+  <div id="page-broadcast" class="page">
+    <div class="card">
+      <div class="sec-title" style="margin-bottom:14px">📢 一括メッセージ送信</div>
+
+      <div class="form-group" style="margin-bottom:12px">
+        <label>メッセージ</label>
+        <textarea id="broadcast-message" rows="5" placeholder="セラピスト全員またはチェックした人に送信されます..." style="width:100%;resize:vertical;font-size:14px;line-height:1.6"></textarea>
+      </div>
+
+      <div style="margin-bottom:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <label style="font-size:13px;font-weight:600;color:var(--muted)">送信対象（LINE登録済みのみ）</label>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-secondary btn-sm" onclick="broadcastSelectAll(true)">全員選択</button>
+            <button class="btn btn-secondary btn-sm" onclick="broadcastSelectAll(false)">全員解除</button>
+          </div>
+        </div>
+        <div id="broadcast-therapist-list" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;background:var(--bg);border-radius:8px;min-height:48px">
+          <span style="color:var(--muted);font-size:13px">読み込み中...</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
+        <button class="btn btn-primary" onclick="sendBroadcastMessage()" id="broadcast-send-btn">📤 送信する</button>
+        <span id="broadcast-selected-count" style="font-size:13px;color:var(--muted)"></span>
+      </div>
+
+      <div id="broadcast-result" style="display:none;margin-top:12px"></div>
+    </div>
+  </div>
+
   <!-- ===== LINE管理ページ ===== -->
   <div id="page-line-mgmt" class="page">
+
     <div class="card" style="margin-bottom:14px">
       <div class="sec-title" style="margin-bottom:14px">手動登録</div>
       <div class="grid2">
@@ -3654,6 +3688,7 @@ function showPage(name) {
   if (name === 'customer-list')    initCustomerList();
   if (name === 'manual-view')      loadManualView();
   if (name === 'line-mgmt')        loadLineUsers();
+  if (name === 'broadcast')        loadBroadcastTherapistList();
   if (name === 'customer-master')  loadCustomerMaster();
   if (name === 'master-mgmt')      initMasterMgmt();
   if (name === 'sales-input') initSalesInput();
@@ -11719,6 +11754,8 @@ async function loadLineUsers() {
           </tbody>
         </table>
       </div>`;
+    // 一括送信用のセラピストリストも更新
+    loadBroadcastTherapistList();
   } catch(e) { alert('エラー: ' + e.message); }
 }
 
@@ -11766,6 +11803,102 @@ async function saveLineUser(userId, name) {
 }
 
 // ============================================================
+
+// ============================================================
+// 一括メッセージ送信（LINE管理ページ）
+// ============================================================
+let _broadcastTherapists = []; // { name, userId }
+
+// LINE管理ページを開いた際にセラピスト一覧を読み込む（loadLineUsers内で呼ぶ）
+async function loadBroadcastTherapistList() {
+  const wrap = document.getElementById('broadcast-therapist-list');
+  if (!wrap) return;
+  try {
+    const data = await apiGet('getLineUsers');
+    // LINE登録済み（userId あり）のみ表示
+    _broadcastTherapists = (data || []).filter(t => t.userId);
+    if (!_broadcastTherapists.length) {
+      wrap.innerHTML = '<span style="color:var(--muted);font-size:13px">LINE登録済みのセラピストがいません</span>';
+      return;
+    }
+    wrap.innerHTML = _broadcastTherapists.map(t => `
+      <label style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;cursor:pointer;font-size:13px;user-select:none">
+        <input type="checkbox" class="broadcast-chk" data-userid="${t.userId}" data-name="${t.name.replace(/"/g,'&quot;')}"
+               onchange="updateBroadcastCount()" checked style="accent-color:var(--accent2);width:14px;height:14px">
+        ${t.name}
+      </label>`).join('');
+    updateBroadcastCount();
+  } catch(e) {
+    wrap.innerHTML = '<span style="color:var(--muted);font-size:13px">読み込みエラー</span>';
+  }
+}
+
+// 全員選択 / 解除
+function broadcastSelectAll(checked) {
+  document.querySelectorAll('.broadcast-chk').forEach(el => { el.checked = checked; });
+  updateBroadcastCount();
+}
+
+// 選択中の人数を表示
+function updateBroadcastCount() {
+  const total    = document.querySelectorAll('.broadcast-chk').length;
+  const selected = document.querySelectorAll('.broadcast-chk:checked').length;
+  const el = document.getElementById('broadcast-selected-count');
+  if (el) el.textContent = selected + ' / ' + total + ' 人選択中';
+}
+
+// 送信実行
+async function sendBroadcastMessage() {
+  const msg = (document.getElementById('broadcast-message').value || '').trim();
+  if (!msg) { alert('メッセージを入力してください'); return; }
+
+  const targets = [...document.querySelectorAll('.broadcast-chk:checked')].map(el => ({
+    name:   el.dataset.name,
+    userId: el.dataset.userid
+  }));
+  if (!targets.length) { alert('送信対象を1人以上選択してください'); return; }
+
+  if (!confirm(targets.length + '人に以下のメッセージを送信しますか？\n\n' + msg)) return;
+
+  const btn    = document.getElementById('broadcast-send-btn');
+  const result = document.getElementById('broadcast-result');
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+  result.style.display = 'none';
+  result.innerHTML = '';
+
+  const results = [];
+  for (const t of targets) {
+    try {
+      await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+      results.push({ name: t.name, ok: true });
+    } catch(e) {
+      results.push({ name: t.name, ok: false, err: e.message });
+    }
+  }
+
+  const okCount  = results.filter(r => r.ok).length;
+  const ngList   = results.filter(r => !r.ok);
+  result.style.display = 'block';
+  result.innerHTML = `
+    <div style="background:${okCount===targets.length?'#d1fae5':'#fef3c7'};border-radius:8px;padding:12px;font-size:13px">
+      <div style="font-weight:600;margin-bottom:6px">
+        ${okCount===targets.length ? '✅' : '⚠️'} ${okCount} / ${targets.length} 人に送信完了
+      </div>
+      ${ngList.length ? '<div style="color:#991b1b;margin-top:6px">送信失敗: ' + ngList.map(r=>r.name).join('、') + '</div>' : ''}
+      <div style="margin-top:8px">
+        ${results.map(r => `<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 4px;padding:2px 8px;border-radius:12px;background:${r.ok?'#6ee7b7':'#fca5a5'};font-size:12px">${r.ok?'✓':'✗'} ${r.name}</span>`).join('')}
+      </div>
+    </div>`;
+
+  if (okCount === targets.length) {
+    document.getElementById('broadcast-message').value = '';
+    showToast('送信が完了しました');
+  }
+  btn.disabled  = false;
+  btn.textContent = '📤 送信する';
+}
+
 // 固定バックモーダル
 // ============================================================
 let _menuBackTherapistId = '';
