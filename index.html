@@ -6652,7 +6652,12 @@ async function saveSalesEdit() {
       showToast('売上を登録しました');
     }
     closeSalesEditModal();
-    loadSalesReport();
+    // 予約一覧から開いた場合は予約一覧を更新
+    if (document.getElementById('page-reservation').classList.contains('active')) {
+      loadReservations();
+    } else {
+      loadSalesReport();
+    }
   } catch(e) { alert('エラー: ' + e.message); }
   finally { hideOverlay(); }
 }
@@ -6668,7 +6673,11 @@ async function deleteSalesRow() {
     if (error) throw new Error(error.message);
     showToast('削除しました');
     closeSalesEditModal();
-    loadSalesReport();
+    if (document.getElementById('page-reservation').classList.contains('active')) {
+      loadReservations();
+    } else {
+      loadSalesReport();
+    }
   } catch(e) { alert('エラー: ' + e.message); }
   finally { hideOverlay(); }
 }
