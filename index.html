@@ -2908,6 +2908,28 @@ case 'sendReminderToOne': {
         })()
       ]);
 
+      // salesテーブルからも取得して予約データの不足分を補完
+      const resvIds = (histRes.data || []).map(r => r.id).filter(Boolean);
+      let salesMap = {};
+      let saleOptionsMap = {};
+      if (resvIds.length) {
+        const [salesRes2, saleOptsRes] = await Promise.all([
+          _sb.from('sales')
+            .select('reservation_id, course_price, option_price, nomination_fee, discount, price, memo')
+            .in('reservation_id', resvIds),
+          _sb.from('sale_options')
+            .select('reservation_id, menu_name, amount')
+            .in('reservation_id', resvIds)
+            .order('created_at', { ascending: true })
+        ]);
+        (salesRes2.data || []).forEach(s => { if (s.reservation_id) salesMap[s.reservation_id] = s; });
+        (saleOptsRes.data || []).forEach(o => {
+          if (!o.reservation_id) return;
+          if (!saleOptionsMap[o.reservation_id]) saleOptionsMap[o.reservation_id] = [];
+          saleOptionsMap[o.reservation_id].push({ name: o.menu_name, amount: o.amount });
+        });
+      }
+
       const customer = custData ? {
         found: true,
         id:           custData.id || '',
@@ -2916,13 +2938,26 @@ case 'sendReminderToOne': {
         status:       custData.status||'normal',
         ngTherapists: custData.ng_therapists||[]
       } : { found: false };
-      const history = (histRes.data || []).map(r => ({
-        date: _fmtDatetimeJp(r.date), therapist: r.therapist_name||'',
-        course: r.course_min, customer: r.customer_name||'',
-        price: r.price, discount: r.discount, nomination: r.nomination
-      }));
+      const history = (histRes.data || []).map(r => {
+        // salesデータが存在すれば補完（課金確定データを優先）
+        const s = salesMap[r.id] || {};
+        const coursePr = s.course_price || r.course_price || 0;
+        const optPr    = s.option_price  !== undefined ? (s.option_price||0)  : (r.option_price||0);
+        const nomFee   = s.nomination_fee !== undefined ? (s.nomination_fee||0) : (r.nomination_fee||0);
+        const discount = s.discount !== undefined ? (s.discount||0) : (r.discount||0);
+        const price    = s.price || r.price || 0;
+        const memo     = s.memo || r.memo || '';
+        return {
+          date: _fmtDatetimeJp(r.date), therapist: r.therapist_name||'',
+          course: r.course_min, customer: r.customer_name||'',
+          price, discount, nomination: r.nomination,
+          option_price: optPr, nomination_fee: nomFee,
+          course_price: coursePr, memo,
+          options: saleOptionsMap[r.id] || []
+        };
+      });
       const memos = (memoRes.data || []).map(r => ({
-        therapist: r.therapist_name||'', memo: r.memo||'',
+        id: r.id||'', therapist: r.therapist_name||'', memo: r.memo||'',
         date: _fmtDateJp(r.created_at)
       }));
       return { history, memos, customer };
@@ -2950,6 +2985,44 @@ case 'sendReminderToOne': {
         memo:           params.memo
       });
       if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'updateCustomerMemo': {
+      const { error } = await _sb.from('customer_memos')
+        .update({ memo: params.memo })
+        .eq('id', params.id);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'deleteCustomerMemo': {
+      const { error: delErr } = await _sb.from('customer_memos')
+        .delete()
+        .eq('id', params.id);
+      if (delErr) throw new Error(delErr.message);
+      return { ok: true };
+    }
+
+    case 'saveSaleOptions': {
+      // reservation_idがない場合はスキップ
+      const resvId = params.reservationId || null;
+      if (!resvId) return { ok: true };
+      // 既存オプションを削除してから再INSERT
+      await _sb.from('sale_options').delete()
+        .eq('store_id', STORE_ID).eq('reservation_id', resvId);
+      const opts = params.options || [];
+      if (opts.length > 0) {
+        const rows = opts.map(o => ({
+          store_id:       STORE_ID,
+          reservation_id: resvId,
+          menu_id:        o.menuId || null,
+          menu_name:      o.menuName || '',
+          amount:         Number(o.amount) || 0
+        }));
+        const { error } = await _sb.from('sale_options').insert(rows);
+        if (error) throw new Error(error.message);
+      }
       return { ok: true };
     }
 
@@ -6651,6 +6724,19 @@ async function saveSalesEdit() {
       _adminSalesResvId = null;
       showToast('売上を登録しました');
     }
+    // 選択オプションをsale_optionsに保存
+    try {
+      let resvIdForOpts = _adminSalesResvId || null;
+      if (!resvIdForOpts && _editSalesRow) {
+        const { data: sRow } = await _sb.from('sales').select('reservation_id').eq('id', _editSalesRow).maybeSingle();
+        if (sRow) resvIdForOpts = sRow.reservation_id || null;
+      }
+      if (resvIdForOpts) {
+        const selectedOpts = getEditSelectedOptionsData();
+        await apiGet('saveSaleOptions', { reservationId: resvIdForOpts, options: selectedOpts });
+      }
+    } catch(e) { console.warn('sale_options保存エラー:', e); }
+
     closeSalesEditModal();
     // 予約一覧から開いた場合は予約一覧を更新
     if (document.getElementById('page-reservation').classList.contains('active')) {
@@ -6904,34 +6990,67 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
          </div>`
       : '<span style="color:var(--muted)">顧客情報なし</span>';
 
-    // メモ
+    // メモ（編集ボタン付き）
     const memosEl = document.getElementById('customer-modal-memos');
     if (!res.memos.length) {
       memosEl.innerHTML = '<p style="color:var(--muted);font-size:13px">メモなし</p>';
     } else {
-      memosEl.innerHTML = res.memos.map(m => `
+      memosEl.innerHTML = res.memos.map(m => {
+        // 編集可能か: 管理者はすべて / セラピストは自分のメモのみ
+        const canEdit = isAdminMode || m.therapist === loggedInTherapist;
+        const safeText = m.memo.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
+        return `
         <div style="background:var(--bg);border-radius:8px;padding:10px;margin-bottom:6px;font-size:13px">
-          <div>${m.memo}</div>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
+            <div id="memo-item-${m.id}" style="flex:1;white-space:pre-wrap;word-break:break-all">${m.memo.replace(/</g,'&lt;')}</div>
+            ${canEdit && m.id ? `<div style="display:flex;gap:4px;flex-shrink:0">
+              <button onclick="startEditMemo('${m.id}', '${safeText}')" style="border:none;background:none;cursor:pointer;font-size:14px;padding:0 4px;color:var(--accent2)" title="編集">✏️</button>
+              <button onclick="deleteCustomerMemo('${m.id}')" style="border:none;background:none;cursor:pointer;font-size:14px;padding:0 4px;color:var(--muted)" title="削除">🗑</button>
+            </div>` : ''}
+          </div>
           <div style="color:var(--muted);font-size:11px;margin-top:4px">${isAdminMode && m.therapist ? m.therapist + '　' : ''}${m.date}</div>
-        </div>`).join('');
+        </div>`;
+      }).join('');
     }
 
-    // 来店履歴
+    // 来店履歴（タップで詳細展開）
     const histEl = document.getElementById('customer-modal-history');
     if (!res.history.length) {
       histEl.innerHTML = '<p style="color:var(--muted);font-size:13px">来店履歴なし</p>';
     } else {
-      histEl.innerHTML = `<div class="table-wrap"><table>
-        <thead><tr><th>日時</th><th>コース</th><th>指名</th>${isAdminMode ? '<th>担当</th>' : ''}<th>金額</th></tr></thead>
-        <tbody>${res.history.map(h => `
-          <tr>
-            <td style="font-size:12px;white-space:nowrap">${h.date}</td>
-            <td>${h.course}分</td>
-            <td style="font-size:12px">${NOMINATION_LABEL[h.nomination] || h.nomination || '-'}</td>
-            ${isAdminMode ? `<td style="font-size:12px;white-space:nowrap">${h.therapist || '-'}</td>` : ''}
-            <td>¥${Number(h.price).toLocaleString()}</td>
-          </tr>`).join('')}
-        </tbody></table></div>`;
+      histEl.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">💡 行をタップすると詳細を確認できます</div>` +
+        res.history.map((h, idx) => {
+          const hasOpt  = h.option_price > 0;
+          const hasNom  = h.nomination_fee > 0;
+          const hasDis  = h.discount > 0;
+          const hasMemo = h.memo && h.memo.trim();
+          const hasDetail = hasOpt || hasNom || hasDis || hasMemo;
+          return `
+          <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden">
+            <div onclick="toggleHistDetail(${idx})" style="display:flex;align-items:center;gap:6px;padding:10px;cursor:pointer;background:var(--bg);user-select:none">
+              <div style="flex:1;display:grid;grid-template-columns:auto auto${isAdminMode ? ' auto' : ''} auto;gap:6px 12px;align-items:center">
+                <span style="font-size:11px;white-space:nowrap;color:var(--muted)">${h.date}</span>
+                <span style="font-size:12px">${h.course}分</span>
+                ${isAdminMode ? `<span style="font-size:11px;color:var(--muted)">${h.therapist||'-'}</span>` : ''}
+                <span style="font-size:12px;font-weight:600">¥${Number(h.price).toLocaleString()}</span>
+              </div>
+              ${hasDetail ? '<span style="color:var(--muted);font-size:14px;flex-shrink:0">›</span>' : '<span style="color:transparent;font-size:14px;flex-shrink:0">›</span>'}
+            </div>
+            <div id="hist-detail-${idx}" style="display:none;padding:10px 12px;background:var(--surface);border-top:1px solid var(--border);font-size:13px">
+              <div style="display:flex;flex-direction:column;gap:4px">
+                ${h.course_price > 0 ? `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">コース（${h.course}分）</span><span>¥${Number(h.course_price).toLocaleString()}</span></div>` : ''}
+                ${h.options && h.options.length > 0
+                  ? h.options.map(o => `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">　${o.name}</span><span>¥${Number(o.amount).toLocaleString()}</span></div>`).join('')
+                  : (hasOpt ? `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">オプション計</span><span>¥${Number(h.option_price).toLocaleString()}</span></div>` : '')}
+                ${hasNom ? `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">${NOMINATION_LABEL[h.nomination] || h.nomination || '指名料'}</span><span>¥${Number(h.nomination_fee).toLocaleString()}</span></div>` : ''}
+                ${hasDis ? `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">割引</span><span style="color:var(--accent)">-¥${Number(h.discount).toLocaleString()}</span></div>` : ''}
+                <div style="display:flex;justify-content:space-between;font-weight:600;border-top:1px solid var(--border);padding-top:4px;margin-top:2px"><span>合計</span><span>¥${Number(h.price).toLocaleString()}</span></div>
+                ${hasMemo ? `<div style="margin-top:6px;padding:8px;background:var(--bg);border-radius:6px;color:var(--muted);white-space:pre-wrap;word-break:break-all">📝 ${h.memo.replace(/</g,'&lt;')}</div>` : ''}
+                ${!hasDetail ? '<div style="color:var(--muted)">詳細情報なし</div>' : ''}
+              </div>
+            </div>
+          </div>`;
+        }).join('');
     }
     // NG管理セクション（管理者のみ）
     if (isAdminMode && c && c.found) {
@@ -7292,6 +7411,66 @@ async function saveCustomerMemo() {
     // 再読み込み
     openCustomerDetail(customerNo, customerTel);
   } catch(e) { alert('エラー: ' + e.message); }
+}
+
+
+// メモをインライン編集モードに切り替え
+function startEditMemo(memoId, currentText) {
+  const wrapper = document.getElementById('memo-item-' + memoId);
+  if (!wrapper) return;
+  wrapper.innerHTML = `
+    <textarea id="memo-edit-ta-${memoId}" style="width:100%;min-height:60px;font-size:13px;padding:6px;border:1.5px solid var(--accent2);border-radius:6px;resize:vertical;box-sizing:border-box">${currentText.replace(/</g,'&lt;')}</textarea>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button class="btn btn-primary btn-sm" onclick="submitEditMemo('${memoId}')">保存</button>
+      <button class="btn btn-secondary btn-sm" onclick="cancelEditMemo('${memoId}','${currentText.replace(/'/g,"\\'").replace(/\n/g,'\\n')}')">キャンセル</button>
+    </div>`;
+  const ta = document.getElementById('memo-edit-ta-' + memoId);
+  if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+
+// メモ編集を保存
+async function submitEditMemo(memoId) {
+  const ta = document.getElementById('memo-edit-ta-' + memoId);
+  if (!ta) return;
+  const newMemo = ta.value.trim();
+  if (!newMemo) { alert('メモを入力してください'); return; }
+  try {
+    await apiGet('updateCustomerMemo', { id: memoId, memo: newMemo });
+    showToast('メモを更新しました');
+    // 再読み込み
+    const input = document.getElementById('customer-memo-input');
+    const no = input.dataset.customerNo || '';
+    const tel = input.dataset.customerTel || '';
+    openCustomerDetail(no, tel);
+  } catch(e) { alert('エラー: ' + e.message); }
+}
+
+// メモ編集をキャンセル（元のテキストに戻す）
+function cancelEditMemo(memoId, originalText) {
+  const wrapper = document.getElementById('memo-item-' + memoId);
+  if (!wrapper) return;
+  wrapper.textContent = originalText.replace(/\\n/g, '\n');
+}
+
+// メモを削除
+async function deleteCustomerMemo(memoId) {
+  if (!confirm('このメモを削除しますか？')) return;
+  try {
+    await apiGet('deleteCustomerMemo', { id: memoId });
+    showToast('メモを削除しました');
+    const input = document.getElementById('customer-memo-input');
+    const no = input.dataset.customerNo || '';
+    const tel = input.dataset.customerTel || '';
+    openCustomerDetail(no, tel);
+  } catch(e) { alert('エラー: ' + e.message); }
+}
+
+// 来店履歴の詳細アコーディオン開閉
+function toggleHistDetail(idx) {
+  const detail = document.getElementById('hist-detail-' + idx);
+  if (!detail) return;
+  const isOpen = detail.style.display !== 'none';
+  detail.style.display = isOpen ? 'none' : 'block';
 }
 
 
@@ -10546,6 +10725,76 @@ function getOptionsLabel() {
   return parts.join('、');
 }
 
+// 選択中のオプションを { menuId, menuName, amount } の配列で返す（セラピスト売上入力側）
+function getSelectedOptionsData() {
+  const result = [];
+  _dynamicOptions.forEach((opt, i) => {
+    const id = 'dyn-opt-' + i;
+    if (opt.optionType === 'fixed') {
+      const chk = document.getElementById(id);
+      if (chk && chk.checked) result.push({ menuId: opt.id||null, menuName: opt.name, amount: Number(opt.optionPrice)||0 });
+    } else if (opt.optionType === 'time_unit') {
+      const chk = document.getElementById(id + '-check');
+      const rng = document.getElementById(id + '-range');
+      if (chk && chk.checked && rng) {
+        const mins   = Number(rng.value) || opt.unitMin;
+        const units  = Math.round(mins / (opt.unitMin || 1));
+        const amount = units * (Number(opt.unitPrice) || 0);
+        result.push({ menuId: opt.id||null, menuName: opt.name + mins + '分', amount });
+      }
+    } else { // free
+      const chk = document.getElementById(id + '-check');
+      const amt = document.getElementById(id + '-amount');
+      if (chk && chk.checked && amt && amt.value) {
+        result.push({ menuId: opt.id||null, menuName: opt.name, amount: Number(amt.value)||0 });
+      }
+    }
+  });
+  // その他（延長は除外: course_priceに含まれるため）
+  const otherChk = document.getElementById('opt-other-check');
+  const otherAmt = document.getElementById('opt-other-amount');
+  if (otherChk && otherChk.checked && otherAmt && otherAmt.value) {
+    result.push({ menuId: null, menuName: 'その他', amount: Number(otherAmt.value)||0 });
+  }
+  return result;
+}
+
+// 選択中のオプションを { menuId, menuName, amount } の配列で返す（管理者売上編集側）
+function getEditSelectedOptionsData() {
+  const result = [];
+  _editDynamicOptions.forEach((opt, i) => {
+    const id = 'se-dyn-opt-' + i;
+    if (opt.optionType === 'fixed') {
+      const chk = document.getElementById(id);
+      if (chk && chk.checked) result.push({ menuId: opt.id||null, menuName: opt.name, amount: Number(opt.optionPrice)||0 });
+    } else if (opt.optionType === 'time_unit') {
+      const chk = document.getElementById(id);
+      const rng = document.getElementById(id + '-min');
+      if (chk && chk.checked && rng) {
+        const mins   = Number(rng.value) || opt.unitMin;
+        const units  = Math.round(mins / (opt.unitMin || 1));
+        const amount = units * (Number(opt.unitPrice) || 0);
+        result.push({ menuId: opt.id||null, menuName: opt.name + mins + '分', amount });
+      }
+    } else { // free
+      const chk = document.getElementById(id);
+      const amt = document.getElementById(id + '-amount');
+      if (chk && chk.checked && amt) {
+        const amount = Number(amt.value) || 0;
+        if (amount > 0) result.push({ menuId: opt.id||null, menuName: opt.name, amount });
+      }
+    }
+  });
+  // その他
+  const otherEl  = document.getElementById('se-opt-other');
+  const otherAmt = document.getElementById('se-opt-other-amount');
+  if (otherEl && otherEl.checked && otherAmt && otherAmt.value) {
+    result.push({ menuId: null, menuName: 'その他', amount: Number(otherAmt.value)||0 });
+  }
+  return result;
+}
+
+
 // 「オプション無し」選択時：全オプションをクリア
 function clearAllOptions() {
   _dynamicOptions.forEach((opt, i) => {
@@ -10719,6 +10968,13 @@ async function submitSalesEntry() {
     //   }
     // } catch(e) { console.warn('店舗LINE通知エラー:', e); }
 
+    // 選択オプションをsale_optionsに保存
+    if (params.reservationId) {
+      try {
+        const selectedOpts = getSelectedOptionsData();
+        await apiGet('saveSaleOptions', { reservationId: params.reservationId, options: selectedOpts });
+      } catch(e) { console.warn('sale_options保存エラー:', e); }
+    }
     showToast(wasUpdated ? '売上を更新しました' : '売上を登録しました');
     window._salesOriginal = null;
     const nameEl = document.getElementById('sales-customer-name');
