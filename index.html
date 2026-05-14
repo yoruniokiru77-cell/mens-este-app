@@ -9058,6 +9058,29 @@ async function openEditResv(idx) {
       sel.value = r.therapist;
     }
   }
+  // セラピスト選択を初期ロック（変更ボタンで解除）
+  if (sel) {
+    sel.disabled = true;
+    sel.style.background = 'var(--bg)';
+    sel.style.color      = 'var(--muted)';
+  }
+  // 変更ボタンを表示
+  let therapistChangeBtn = document.getElementById('resv-therapist-change-btn');
+  if (!therapistChangeBtn) {
+    therapistChangeBtn = document.createElement('button');
+    therapistChangeBtn.id = 'resv-therapist-change-btn';
+    therapistChangeBtn.type = 'button';
+    therapistChangeBtn.className = 'btn btn-secondary btn-sm';
+    therapistChangeBtn.style.marginTop = '6px';
+    therapistChangeBtn.textContent = '✏️ セラピストを変更する';
+    therapistChangeBtn.onclick = () => {
+      if (sel) { sel.disabled = false; sel.style.background = ''; sel.style.color = ''; }
+      therapistChangeBtn.style.display = 'none';
+    };
+    sel.parentNode.appendChild(therapistChangeBtn);
+  } else {
+    therapistChangeBtn.style.display = '';
+  }
 
   const saveBtn = document.querySelector('[onclick="submitReservation()"]');
   if (saveBtn) {
@@ -9233,6 +9256,11 @@ async function updateResvRow() {
     const telEl  = document.getElementById('resv-customer-tel-full');
     if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; nameEl.style.color = ''; }
     if (telEl)  { telEl.readOnly  = false; telEl.style.background  = ''; telEl.style.color  = ''; }
+    // セラピスト選択のロック解除・変更ボタン非表示
+    const selEl = document.getElementById('resv-therapist');
+    if (selEl) { selEl.disabled = false; selEl.style.background = ''; selEl.style.color = ''; }
+    const chgBtn = document.getElementById('resv-therapist-change-btn');
+    if (chgBtn) chgBtn.style.display = 'none';
     loadReservations();
     showToast('予約を更新しました');
   } catch(e) { alert('エラー: ' + e.message); }
@@ -10743,6 +10771,9 @@ async function openHimeModal() {
   document.getElementById('hime-discount').value   = '0';
   document.getElementById('hime-customer-name').value = '';
   document.getElementById('hime-customer-tel').value  = '';
+  const hTelEl = document.getElementById('hime-customer-tel');
+  if (hTelEl) { hTelEl.readOnly = false; hTelEl.style.background = ''; hTelEl.style.color = ''; }
+  _himeIsExisting = false;
   document.getElementById('hime-customer-info').style.display = 'none';
   document.getElementById('hime-memo').value       = '';
 
@@ -10754,14 +10785,27 @@ function closeHimeModal() {
 }
 
 let _himeLookupNameTimer = null;
+let _himeIsExisting = false; // 既存客フラグ
+
 function himeLookupByName(name) {
   clearTimeout(_himeLookupNameTimer);
-  if (!name || name.length < 1) return;
+  const infoEl = document.getElementById('hime-customer-info');
+  if (!name || name.length < 1) {
+    _himeIsExisting = false;
+    const telEl = document.getElementById('hime-customer-tel');
+    if (telEl) { telEl.readOnly = false; telEl.style.background = ''; telEl.style.color = ''; }
+    if (infoEl) infoEl.style.display = 'none';
+    return;
+  }
   _himeLookupNameTimer = setTimeout(async () => {
     try {
       const res = await apiGet('getCustomer', { name });
-      if (res.found) _fillHimeCustomer(res);
-    } catch(e) {}
+      if (res.found) {
+        _fillHimeCustomer(res);
+      } else {
+        _himeSetNewCustomer();
+      }
+    } catch(e) { console.warn('lookup error:', e); }
   }, 600);
 }
 
@@ -10780,12 +10824,35 @@ function himeLookupByTel(tel) {
 function _fillHimeCustomer(res) {
   const nameEl = document.getElementById('hime-customer-name');
   const telEl  = document.getElementById('hime-customer-tel');
-  if (!nameEl.value) nameEl.value = res.name || '';
-  if (!telEl.value)  telEl.value  = res.tel  || '';
   const infoEl = document.getElementById('hime-customer-info');
-  infoEl.textContent   = '✓ 既存顧客: ' + res.name + '様（C' + res.customerNo + '）';
-  infoEl.style.display = '';
-  setTimeout(() => { infoEl.style.display = 'none'; }, 4000);
+  if (nameEl && !nameEl.value) nameEl.value = res.name || '';
+  // 既存客: 電話番号を自動入力してロック
+  if (telEl) {
+    telEl.value    = res.tel || '';
+    telEl.readOnly = true;
+    telEl.style.background = 'var(--bg)';
+    telEl.style.color      = 'var(--muted)';
+  }
+  _himeIsExisting = true;
+  if (infoEl) {
+    infoEl.textContent      = '✓ 既存のお客様です（電話番号は自動入力されました）';
+    infoEl.style.background = '#f0fdf4';
+    infoEl.style.color      = '#15803d';
+    infoEl.style.display    = '';
+  }
+}
+
+function _himeSetNewCustomer() {
+  const telEl  = document.getElementById('hime-customer-tel');
+  const infoEl = document.getElementById('hime-customer-info');
+  _himeIsExisting = false;
+  if (telEl) { telEl.readOnly = false; telEl.style.background = ''; telEl.style.color = ''; }
+  if (infoEl) {
+    infoEl.textContent      = '⚠ 顧客マスタにいません（新規）電話番号を入力してください';
+    infoEl.style.background = '#fffbeb';
+    infoEl.style.color      = '#92400e';
+    infoEl.style.display    = '';
+  }
 }
 
 async function submitHimeReservation() {
@@ -10803,7 +10870,14 @@ async function submitHimeReservation() {
   if (!dateVal)    { alert('日時を入力してください'); return; }
   if (!mins)       { alert('コース時間を入力してください'); return; }
   if (!custName)   { alert('お客様名を入力してください'); return; }
-  if (!custTel)    { alert('電話番号を入力してください'); return; }
+  if (!custTel) {
+    if (_himeIsExisting) {
+      alert('既存のお客様の電話番号が取得できませんでした。再度お客様名を入力してください');
+    } else {
+      alert('新規のお客様は電話番号を入力してください');
+    }
+    return;
+  }
 
   try {
     showOverlay();
@@ -11164,6 +11238,8 @@ async function confirmHimeApprove() {
 }
 
 async function confirmHimeReject() {
+  const reason = prompt('却下理由を入力してください（セラピストにLINEで通知されます）：', '');
+  if (reason === null) return; // キャンセル
   if (!confirm('この姫予約を却下しますか？')) return;
   const resvId = document.getElementById('hime-approve-resv-id').value;
   if (!resvId) return;
@@ -11174,8 +11250,8 @@ async function confirmHimeReject() {
       .eq('id', resvId);
     if (error) throw new Error(error.message);
 
-    // セラピストに却下通知
-    await _sendHimeRejectLineToTherapist(resvId);
+    // セラピストに却下理由付きで通知
+    await _sendHimeRejectLineToTherapist(resvId, reason);
 
     showToast('姫予約を却下しました');
     closeHimeApproveModal();
@@ -11212,24 +11288,26 @@ async function _sendHimeApproveLineToTherapist(resvId) {
   } catch(e) { console.warn('承認LINE通知エラー:', e); }
 }
 
-async function _sendHimeRejectLineToTherapist(resvId) {
+async function _sendHimeRejectLineToTherapist(resvId, reason) {
   try {
     const { data: resv } = await _sb.from('reservations').select('*').eq('id', resvId).single();
     if (!resv) return;
-    if (!therapists.length) therapists = await apiGet('getTherapists');
-    const t = therapists.find(th => th.name === resv.therapist_name);
-    if (!t || !t.userId) return;
+    const { data: th } = await _sb.from('therapists').select('line_user_id').eq('store_id', STORE_ID).eq('name', resv.therapist_name).eq('active', true).maybeSingle();
+    if (!th || !th.line_user_id) return;
 
     const dt  = new Date(resv.date);
     const pad = n => String(n).padStart(2,'0');
     const dateStr = dt.getFullYear() + '/' + pad(dt.getMonth()+1) + '/' + pad(dt.getDate())
       + ' ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
 
-    const msg = '【🌸 姫予約 却下のお知らせ】\n'
+    let msg = '【🌸 姫予約 却下のお知らせ】\n'
       + '申請した姫予約が却下されました。\n\n'
       + '日時: ' + dateStr + '\n'
       + 'お客様: ' + resv.customer_name + '様';
-    await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+    if (reason && reason.trim()) {
+      msg += '\n\n理由: ' + reason.trim();
+    }
+    await apiGet('sendLineMessage', { userId: th.line_user_id, message: msg });
   } catch(e) { console.warn('却下LINE通知エラー:', e); }
 }
 
@@ -12464,14 +12542,14 @@ window.addEventListener('DOMContentLoaded', init);
       <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px">👤 お客様情報</div>
       <div class="form-group" style="margin-bottom:10px">
         <label>お客様名</label>
-        <input type="text" id="hime-customer-name" placeholder="例: サカバ" oninput="himeLookupByName(this.value)">
+        <input type="text" id="hime-customer-name" placeholder="例: C0041サカバ" oninput="himeLookupByName(this.value)">
       </div>
       <div class="form-group" style="margin-bottom:0">
-        <label>電話番号</label>
+        <label id="hime-tel-label">電話番号</label>
         <input type="text" id="hime-customer-tel" placeholder="例: 09012341234"
           oninput="this.value=this.value.replace(/[^0-9]/g,'');himeLookupByTel(this.value)">
       </div>
-      <div id="hime-customer-info" style="font-size:12px;color:var(--success);margin-top:6px;display:none"></div>
+      <div id="hime-customer-info" style="font-size:12px;margin-top:6px;display:none;padding:6px 10px;border-radius:6px"></div>
     </div>
 
     <div class="form-group">
