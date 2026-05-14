@@ -11022,11 +11022,11 @@ async function openHimeApproveModal(resvId) {
     const label = document.getElementById('hime-approve-customer-label');
     if (label) {
       if (existing.found) {
-        label.textContent   = '👤 お客様情報（既存客 - 名前を確認・修正してください）';
+        label.innerHTML = `👤 お客様情報（既存客）<span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:6px">マスタ: </span><span style="font-size:12px;font-weight:700;color:#1d4ed8">${existing.name}様</span>`;
         label.style.color   = '#1d4ed8';
       } else {
-        label.textContent   = '👤 お客様情報（新規 - 名前を確定してから承認してください）';
-        label.style.color   = '#92400e';
+        label.innerHTML   = '👤 お客様情報 <span style="font-size:11px;font-weight:700;background:#f59e0b;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">新規</span><span style="font-size:11px;font-weight:400;color:#92400e;margin-left:6px">名前を確定してから承認してください</span>';
+        label.style.color = '#92400e';
       }
     }
     // 電話番号は既存客なら編集不可
