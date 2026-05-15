@@ -658,12 +658,12 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <div class="grid2">
         <div class="form-group">
           <label>お客様名 <span style="color:var(--accent);font-size:11px">※必須</span></label>
-          <input type="text" id="resv-customer-name" placeholder="例: サカバ"
+          <input type="text" id="resv-customer-name" autocomplete="off" placeholder="例: サカバ"
             oninput="lookupCustomerByName(this.value)">
         </div>
         <div class="form-group">
           <label>電話番号</label>
-          <input type="text" id="resv-customer-tel-full" placeholder="例: 09012341234"
+          <input type="text" id="resv-customer-tel-full" autocomplete="off" placeholder="例: 09012341234"
             oninput="this.value=this.value.replace(/[^0-9]/g,'');lookupCustomerByTel(this.value)">
         </div>
       </div>
@@ -945,7 +945,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         </div>
         <div class="form-group">
           <label>お客様名</label>
-          <input type="text" id="sales-customer-name">
+          <input type="text" id="sales-customer-name" autocomplete="off">
         </div>
 
         <!-- オプション選択 -->
@@ -12979,11 +12979,11 @@ window.addEventListener('DOMContentLoaded', init);
       <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px">👤 お客様情報</div>
       <div class="form-group" style="margin-bottom:10px">
         <label>お客様名</label>
-        <input type="text" id="hime-customer-name" placeholder="例: C0041サカバ" oninput="himeLookupByName(this.value)">
+        <input type="text" id="hime-customer-name" autocomplete="off" placeholder="例: C0041サカバ" oninput="himeLookupByName(this.value)">
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label id="hime-tel-label">電話番号</label>
-        <input type="text" id="hime-customer-tel" placeholder="例: 09012341234"
+        <input type="text" id="hime-customer-tel" autocomplete="off" placeholder="例: 09012341234"
           oninput="this.value=this.value.replace(/[^0-9]/g,'');himeLookupByTel(this.value)">
       </div>
       <div id="hime-customer-info" style="font-size:12px;margin-top:6px;display:none;padding:6px 10px;border-radius:6px"></div>
