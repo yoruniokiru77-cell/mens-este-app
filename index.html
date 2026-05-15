@@ -1958,7 +1958,10 @@ function _calcPayroll(row, storeSettings, opts = {}) {
     therapistCoursePay = Math.round(courseNet * courseBack);
   }
 
-  const therapistOptPay = Math.round(optPrice * optionBack);
+  // オプション固定バック（sale_optionsから計算済みの場合はそちらを優先）
+  const therapistOptPay = (row.opt_fixed_back_pay !== null && row.opt_fixed_back_pay !== undefined)
+    ? row.opt_fixed_back_pay
+    : Math.round(optPrice * optionBack);
   const therapistPay    = therapistCoursePay + therapistOptPay + nomFee - miscFee - accomFee;
 
   return { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack, fixedBack };
@@ -2343,6 +2346,20 @@ async function apiGet(action, params = {}) {
       const menuByMin = {}; // course_min → menu_id
       (menuData || []).forEach(m => { menuByMin[m.duration_min] = m.id; });
 
+      // sale_optionsを一括取得（オプション固定バック計算用）
+      const resvIdsForOpts = (salesRes.data || []).map(r => r.reservation_id).filter(Boolean);
+      let saleOptsMap = {}; // reservation_id → [{menu_id, amount}]
+      if (resvIdsForOpts.length) {
+        const { data: saleOptsData } = await _sb.from('sale_options')
+          .select('reservation_id, menu_id, amount')
+          .in('reservation_id', resvIdsForOpts);
+        (saleOptsData || []).forEach(o => {
+          if (!o.reservation_id) return;
+          if (!saleOptsMap[o.reservation_id]) saleOptsMap[o.reservation_id] = [];
+          saleOptsMap[o.reservation_id].push({ menu_id: o.menu_id, amount: o.amount });
+        });
+      }
+
       // 新規客判定：電話番号ベースで期間前の売上を確認
       const custTels = [...new Set((salesRes.data || []).map(r => r.customer_tel).filter(Boolean))];
       let prevSalesTels = new Set();
@@ -2392,11 +2409,27 @@ async function apiGet(action, params = {}) {
         const menuId = menuByMin[r.course_min];
         const fixedBackAmount = (tInfo.id && menuId && menuBackMap[tInfo.id + '_' + menuId] !== undefined)
           ? menuBackMap[tInfo.id + '_' + menuId] : null;
+
+        // オプション固定バックを計算
+        const saleOpts = saleOptsMap[r.reservation_id] || [];
+        let optFixedBackPay = null;
+        if (saleOpts.length > 0) {
+          // sale_optionsがある場合: 各オプションに固定バックがあればそれを使用、なければバック率で計算
+          optFixedBackPay = 0;
+          saleOpts.forEach(o => {
+            const optBack = tInfo.id && o.menu_id && menuBackMap[tInfo.id + '_' + o.menu_id] !== undefined
+              ? menuBackMap[tInfo.id + '_' + o.menu_id]
+              : Math.round(o.amount * (tInfo.option_back ?? 1.0));
+            optFixedBackPay += optBack;
+          });
+        }
+
         const rowWithBack = {
           ...r,
           therapist_course_back: tInfo.course_back,
           therapist_option_back: tInfo.option_back,
-          fixed_back_amount:     fixedBackAmount
+          fixed_back_amount:     fixedBackAmount,
+          opt_fixed_back_pay:    optFixedBackPay
         };
         const { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack }
           = _calcPayroll(rowWithBack, ss);
@@ -11095,13 +11128,25 @@ async function openHimeModal() {
       + '<option value="custom">その他</option>';
   } catch(e) { console.warn(e); }
 
-  // 指名種別をマスタから生成
+  // 指名種別をマスタから生成（セラピスト個別指名料対応）
   const himNomSel = document.getElementById('hime-nomination');
-  himNomSel.innerHTML = [
-    { value: 'nomination', label: '指名',   fee: NOMINATION_FEE.nomination || 0 },
-    { value: 'honshimei',  label: '本指名', fee: NOMINATION_FEE.honshimei  || 0 }
-  ].map(i => `<option value="${i.value}">${i.label} ¥${i.fee.toLocaleString()}</option>`).join('');
-  himNomSel.value = 'nomination';
+  {
+    const th = therapists.find(t => t.name === loggedInTherapist);
+    const hasPerFee = th && th.nominationFee !== null && th.nominationFee !== undefined;
+    const himItems = hasPerFee
+      ? [
+          { value: 'nomination', label: '指名',   fee: Number(th.nominationFee) },
+          { value: 'honshimei',  label: '本指名', fee: Number(th.nominationFee) }
+        ]
+      : [
+          { value: 'nomination', label: '指名',   fee: NOMINATION_FEE.nomination || 0 },
+          { value: 'honshimei',  label: '本指名', fee: NOMINATION_FEE.honshimei  || 0 }
+        ];
+    himNomSel.innerHTML = himItems.map(i =>
+      `<option value="${i.value}">${i.label} ¥${i.fee.toLocaleString()}</option>`
+    ).join('');
+    himNomSel.value = 'nomination';
+  }
 
   document.getElementById('hime-custom-wrap').style.display = 'none';
   document.getElementById('hime-discount').value   = '0';
@@ -11937,14 +11982,16 @@ async function openMenuBackModal(userId, name, therapistId) {
     (backs || []).forEach(b => { backMap[b.menu_id] = b.back_amount; });
 
     const courses = (menus || []).filter(m => m.type === 'course' && m.active !== false);
-    if (!courses.length) {
-      document.getElementById('menu-back-list').innerHTML = '<p style="color:var(--muted)">コースメニューが登録されていません</p>';
+    const options = (menus || []).filter(m => m.type === 'option' && m.active !== false);
+
+    if (!courses.length && !options.length) {
+      document.getElementById('menu-back-list').innerHTML = '<p style="color:var(--muted)">メニューが登録されていません</p>';
       return;
     }
 
-    document.getElementById('menu-back-list').innerHTML = courses.map(m => `
+    const renderRow = m => `
       <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-        <div style="flex:1;font-size:14px">${m.name}<span style="font-size:12px;color:var(--muted);margin-left:6px">${m.col3}分</span></div>
+        <div style="flex:1;font-size:14px">${m.name}${m.col3 ? '<span style="font-size:12px;color:var(--muted);margin-left:6px">' + m.col3 + '分</span>' : ''}</div>
         <div style="display:flex;align-items:center;gap:4px">
           <input type="number" min="0" step="100" placeholder="バック率で計算"
             value="${backMap[m.id] !== undefined ? backMap[m.id] : ''}"
@@ -11954,7 +12001,16 @@ async function openMenuBackModal(userId, name, therapistId) {
             style="width:110px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
           <span style="font-size:12px;color:var(--muted)">円</span>
         </div>
-      </div>`).join('');
+      </div>`;
+
+    const sectionLabel = (label) =>
+      `<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;padding:10px 0 4px;border-bottom:2px solid var(--border);margin-bottom:4px">${label}</div>`;
+
+    let html = '';
+    if (courses.length) html += sectionLabel('■ コース') + courses.map(renderRow).join('');
+    if (options.length) html += sectionLabel('■ オプション・延長') + options.map(renderRow).join('');
+
+    document.getElementById('menu-back-list').innerHTML = html;
   } catch(e) {
     document.getElementById('menu-back-list').innerHTML = '<p style="color:red">' + e.message + '</p>';
   }
