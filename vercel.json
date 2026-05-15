@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/shift-reminder",
+      "path": "/shift-reminder",
       "schedule": "0 * * * *"
     }
   ]
