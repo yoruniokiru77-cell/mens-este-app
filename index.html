@@ -9741,6 +9741,7 @@ async function populateTherapistSelect(keepValue) {
           const exists = Array.from(sel.options).some(o => o.value === savedValue);
           if (exists) { sel.value = savedValue; }
         }
+        if (sel.value) populateNominationSelects(sel.value);
         return;
       } else {
         // シフトなし → 全員表示（注記付き）
@@ -9754,11 +9755,14 @@ async function populateTherapistSelect(keepValue) {
           sel.selectedIndex = 1;
         }
         sel.title = '※ 選択した日時にシフトが確定しているセラピストがいません';
+        if (sel.value) populateNominationSelects(sel.value);
         return;
       }
     } catch(e) { console.warn('シフト取得エラー:', e); }
   }
   sel.innerHTML = therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+  // 初期表示時もセラピスト個別指名料を反映
+  if (sel.value) populateNominationSelects(sel.value);
 }
 
 async function checkInterval() {
