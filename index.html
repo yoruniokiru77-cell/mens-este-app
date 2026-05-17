@@ -4500,14 +4500,14 @@ async function sendPayrollLine(uid, name, dateLabel) {
     try {
       const isIwaki = STORE_ID === '11111111-0000-0000-0000-000000000001';
       if (isIwaki) {
-        // いわきは cash.html で作成済みのレコードをマーク
+        // いわきは cash.html で作成済みのレコードに給料額も保存
+        const payNum = parseInt((pay || '¥0').replace(/[^0-9-]/g, '')) || 0;
         await _sb.from('cash_logs')
-          .update({ is_collected: false })
+          .update({ is_collected: false, therapist_pay: payNum })
           .eq('store_id', STORE_ID)
           .eq('therapist_name', name)
           .eq('work_date', dateStr)
-          .eq('status', 'closed')
-          .is('is_collected', null);
+          .eq('status', 'closed');
       } else {
         // 水戸・神栖: 店落ち額でcash_logsを新規作成（回収管理用）
         const storeDropNum = parseInt((store || '¥0').replace(/[^0-9-]/g, '')) || 0;
