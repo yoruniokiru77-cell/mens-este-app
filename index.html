@@ -9750,8 +9750,9 @@ async function populateTherapistSelect(keepValue) {
       }).map(s => s.therapist);
 
       if (onDuty.length) {
-        // シフト確定のセラピストのみ表示
-        sel.innerHTML = therapists
+        // シフト確定のセラピストのみ表示（未割り当て選択肢を先頭に追加）
+        sel.innerHTML = `<option value="">── 未割り当て ──</option>` +
+          therapists
           .filter(t => onDuty.includes(t.name))
           .map(t => `<option value="${t.name}">${t.name}</option>`).join('');
         sel.title = '※ 選択した日時にシフトが確定しているセラピストのみ表示';
@@ -9763,15 +9764,15 @@ async function populateTherapistSelect(keepValue) {
         if (sel.value) populateNominationSelects(sel.value);
         return;
       } else {
-        // シフトなし → 全員表示（注記付き）
-        sel.innerHTML = `<option value="" disabled style="color:var(--muted)">── シフト確定なし（全員表示）──</option>` +
+        // シフトなし → 全員表示（未割り当て選択肢を先頭に追加）
+        sel.innerHTML = `<option value="">── 未割り当て ──</option>` +
           therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
         // 保存値を復元
         if (savedValue) {
           const exists = Array.from(sel.options).some(o => o.value === savedValue);
-          if (exists) { sel.value = savedValue; } else { sel.selectedIndex = 1; }
+          if (exists) { sel.value = savedValue; } else { sel.value = ''; }
         } else {
-          sel.selectedIndex = 1;
+          sel.value = '';
         }
         sel.title = '※ 選択した日時にシフトが確定しているセラピストがいません';
         if (sel.value) populateNominationSelects(sel.value);
