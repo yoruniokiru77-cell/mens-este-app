@@ -8206,7 +8206,8 @@ async function loadTherapistMaster() {
 // ============================================================
 // シフトカレンダー（週間表示）
 // ============================================================
-let _calendarWeekOffset = 0; // 0=今週, 1=来週, -1=先週
+let _calendarWeekOffset = 0;
+const _notifiedTherapists = new Set(); // 今セッションで通知済みのセラピスト名 // 0=今週, 1=来週, -1=先週
 
 async function loadCalUnsubmitted() {
   const listEl  = document.getElementById('cal-unsubmitted-list');
@@ -8807,10 +8808,12 @@ function renderShiftCalendar(el, days, shifts) {
                 <td style="padding:6px 8px;font-size:12px;font-weight:700;border-bottom:1px solid var(--border);border-right:2px solid var(--border);vertical-align:top;position:sticky;left:0;background:var(--surface);z-index:1;white-space:nowrap">
                   <div style="display:flex;align-items:center;gap:4px;justify-content:space-between">
                     <span>👤 ${th}</span>
-                    ${isAdminMode ? `<button
-                      data-therapist="${th}"
-                      onclick="event.stopPropagation();notifyShiftToTherapist(this.dataset.therapist)"
-                      style="background:#06c755;color:#fff;border:none;border-radius:4px;padding:2px 5px;font-size:10px;cursor:pointer;font-weight:700;white-space:nowrap;min-height:0">📨</button>` : ''}
+                    ${isAdminMode ? (_notifiedTherapists.has(th)
+                      ? `<span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;white-space:nowrap">✅ 送信済</span>`
+                      : `<button
+                          data-therapist="${th}"
+                          onclick="event.stopPropagation();notifyShiftToTherapist(this.dataset.therapist)"
+                          style="background:#06c755;color:#fff;border:none;border-radius:4px;padding:2px 5px;font-size:10px;cursor:pointer;font-weight:700;white-space:nowrap;min-height:0">📨</button>`) : ''}
                   </div>
                 </td>
                 ${days.map((d, i) => {
@@ -9229,14 +9232,21 @@ function renderResvByTherapist(data, el) {
 
 function renderResvTable(data) {
   const el = document.getElementById('resv-table-wrap');
-  if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">予約なし</p>'; return; }
   window._resvTableData = data;
 
-  // セラピスト別ビュー
+  // セラピスト別ビュー: 予約0件でもシフトがあれば表示
   if (_resvViewMode === 'therapist') {
+    const hasShifts = window._resvShiftMap && Object.keys(window._resvShiftMap).length > 0;
+    if (!data.length && !hasShifts) {
+      el.innerHTML = '<p style="color:var(--muted)">予約なし</p>';
+      return;
+    }
     renderResvByTherapist(data, el);
     return;
   }
+
+  // 時間順ビュー: 予約0件なら「予約なし」表示
+  if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">予約なし</p>'; return; }
 
   // 時間順ビュー（デフォルト）
   const totalSales = data.filter(r => r.status !== 'cancelled').reduce((s, r) => s + Number(r.price || 0), 0);
@@ -12253,6 +12263,8 @@ async function notifyShiftToTherapist(therapistName) {
     const msg = '【シフト承認のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
       '\n' + weekLabel + ' のシフト\n\n' + lines.join('\n');
     await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+    _notifiedTherapists.add(therapistName);
+    loadShiftCalendar(); // バッジ更新のため再描画
     showToast('📨 ' + therapistName + ' にLINE通知しました');
   } catch(e) {
     alert('通知エラー: ' + e.message);
@@ -12298,9 +12310,11 @@ async function notifyAllApprovedShifts() {
         '\n' + weekLabel + ' のシフト\n\n' + lines.join('\n');
       try {
         await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+        _notifiedTherapists.add(name);
         notified++;
       } catch(e) { skipped++; console.warn(name + ' への通知失敗:', e); }
     }
+    loadShiftCalendar(); // バッジ更新のため再描画
     showToast('📨 ' + notified + '名に通知しました' + (skipped > 0 ? '（' + skipped + '名スキップ）' : ''));
   } catch(e) {
     alert('エラー: ' + e.message);
