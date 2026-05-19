@@ -9186,9 +9186,9 @@ function renderResvByTherapist(data, el) {
             <span style="font-size:12px;opacity:.85">${shiftLabel || (valid.length + '件 ¥' + sales.toLocaleString())}</span>
           </div>
           <div style="border-radius:0 0 8px 8px;border:1px solid var(--border);border-top:none;padding:8px">
-                ${rows.length === 0
-                  ? `<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">予約なし</div>`
-                  : rows.map((r, _i) => {
+                ${(function() {
+                  if (rows.length === 0) return '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">予約なし</div>';
+                  return rows.map((r, _i) => {
                   const globalIdx = data.indexOf(r);
                   const cancelled = r.status === 'cancelled';
                   const rowStyle  = cancelled ? 'opacity:0.45;background:#f3f4f6;' : r.isNewCustomer ? 'background:#fdf4ff;' : r.isHime && !r.isHimeApproved ? 'background:#fef3f9;' : '';
@@ -9219,8 +9219,8 @@ function renderResvByTherapist(data, el) {
                       ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" data-therapist="${r.therapist||''}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name,this.dataset.therapist)">👤 顧客詳細</button>` : ''}
                     </div>
                   </div>`;
-                }).join('')}
-                `}
+                }).join('');
+                })()}
             </div>
           </div>`;
     }).join('')}`;
