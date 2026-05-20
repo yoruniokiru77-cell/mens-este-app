@@ -8429,6 +8429,10 @@ function setCalAddType(type) {
   // ラベル変更
   const nameLabel = document.getElementById('cal-add-name-label');
   if (nameLabel) nameLabel.textContent = type === 'interview' ? '名前（仮名可）' : '予定名・担当者';
+  // 面接・特別の場合: 既存のマスタ外セラピストをプルダウンに読み込む
+  if (type !== 'shift') {
+    loadCalAddExistingTherapists();
+  }
 }
 
 async function openCalAddShift(therapistName, dateStr) {
@@ -8661,6 +8665,43 @@ async function _calMenuDelete() {
 }
 
 // 面接・特別予定セラピストのシフトを全削除
+
+// 面接・特別追加モーダル: 既存のマスタ外セラピスト一覧をプルダウンに設定
+async function loadCalAddExistingTherapists() {
+  const sel = document.getElementById('cal-add-existing');
+  if (!sel) return;
+  try {
+    // shiftsテーブルからtherapistsマスタに存在しない名前を取得
+    const { data: shiftData } = await _sb.from('shifts')
+      .select('therapist_name')
+      .eq('store_id', STORE_ID)
+      .neq('therapist_name', null);
+    const masterNames = new Set(therapists.map(t => t.name));
+    const existingNames = [...new Set(
+      (shiftData || []).map(s => s.therapist_name).filter(n => n && !masterNames.has(n))
+    )].sort();
+    sel.innerHTML = '<option value="">── 新規入力 ──</option>' +
+      existingNames.map(n => `<option value="${n}">${n}</option>`).join('');
+  } catch(e) {
+    console.warn('既存面接セラピスト取得エラー:', e);
+  }
+}
+
+// 既存選択時に名前入力欄に反映
+function onCalAddExistingChange(val) {
+  const input = document.getElementById('cal-add-name');
+  if (!input) return;
+  if (val) {
+    input.value = val;
+    input.style.opacity = '0.5';
+    input.readOnly = true;
+  } else {
+    input.value = '';
+    input.style.opacity = '1';
+    input.readOnly = false;
+  }
+}
+
 async function deleteInterviewShifts(therapistName) {
   if (!confirm(`「${therapistName}」の全シフトを削除しますか？`)) return;
   try {
@@ -13028,10 +13069,13 @@ window.addEventListener('DOMContentLoaded', init);
       <select id="cal-add-therapist" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px"></select>
     </div>
 
-    <!-- 面接・特別：名前入力 -->
+    <!-- 面接・特別：既存セラピスト選択 or 新規入力 -->
     <div id="cal-add-field-name" class="form-group" style="display:none;margin-bottom:12px">
       <label id="cal-add-name-label">名前（仮名可）</label>
-      <input type="text" id="cal-add-name" placeholder="例: 面接A / さくら" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+      <select id="cal-add-existing" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:6px" onchange="onCalAddExistingChange(this.value)">
+        <option value="">── 新規入力 ──</option>
+      </select>
+      <input type="text" id="cal-add-name" placeholder="例: [面接] さくら" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
     </div>
 
     <div class="form-group" style="margin-bottom:12px">
