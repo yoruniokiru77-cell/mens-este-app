@@ -9254,10 +9254,11 @@ function renderResvByTherapist(data, el) {
 
       return `
         <div style="margin-bottom:16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--primary);color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;gap:6px;overflow:hidden">
-            <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0">👤 ${th}${(window._resvRoomMap && window._resvRoomMap[th]) ? ` <span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:4px;white-space:nowrap">🚪 ${window._resvRoomMap[th]}</span>` : ''}</span>
-            ${availLabel ? `<span style="white-space:nowrap;flex-shrink:0">${availLabel}</span>` : ''}
-            <span style="font-size:12px;opacity:.85;white-space:nowrap;flex-shrink:0">${shiftLabel || (valid.length + '件 ¥' + sales.toLocaleString())}</span>
+          <div style="display:flex;align-items:center;flex-wrap:wrap;padding:8px 10px;background:var(--primary);color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;gap:4px 8px">
+            <span style="white-space:nowrap">👤 ${th}</span>
+            ${(window._resvRoomMap && window._resvRoomMap[th]) ? `<span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;white-space:nowrap">🚪 ${window._resvRoomMap[th]}</span>` : ''}
+            ${availLabel ? `<span style="white-space:nowrap;font-size:12px">${availLabel}</span>` : ''}
+            <span style="font-size:12px;opacity:.85;white-space:nowrap;margin-left:auto">${shiftLabel || (valid.length + '件 ¥' + sales.toLocaleString())}</span>
           </div>
           <div style="border-radius:0 0 8px 8px;border:1px solid var(--border);border-top:none;padding:8px">
                 ${(function() {
