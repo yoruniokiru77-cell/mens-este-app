@@ -8660,6 +8660,25 @@ async function _calMenuDelete() {
   finally { hideOverlay(); }
 }
 
+// 面接・特別予定セラピストのシフトを全削除
+async function deleteInterviewShifts(therapistName) {
+  if (!confirm(`「${therapistName}」の全シフトを削除しますか？`)) return;
+  try {
+    showOverlay();
+    const { error } = await _sb.from('shifts')
+      .delete()
+      .eq('store_id', STORE_ID)
+      .eq('therapist_name', therapistName);
+    if (error) throw new Error(error.message);
+    showToast(`「${therapistName}」のシフトを削除しました`);
+    loadShiftCalendar();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
 function setCalView(mode) {
   _calViewMode = mode;
   const btnDate = document.getElementById('cal-view-date');
@@ -8778,11 +8797,17 @@ function renderShiftCalendar(el, days, shifts) {
       byThDate[s.therapist][s.date].push(s);
     });
 
-    // キャストマスタ全員（therapistsグローバル変数）+ シフトにしか出ない人
+    // キャストマスタ全員（therapistsグローバル変数）+ 表示週のシフトにしか出ない人
     const masterNames = Array.isArray(therapists) && therapists.length
       ? therapists.map(t => t.name)
       : [];
-    const shiftOnlyNames = Object.keys(byThDate).filter(n => !masterNames.includes(n)).sort();
+    // 表示週の日付文字列セット
+    const weekDateSet = new Set(days.map(d => fmtCalDate(d)));
+    // 表示週にシフトがある名前のみ（マスタ外）
+    const shiftOnlyNames = Object.keys(byThDate).filter(n =>
+      !masterNames.includes(n) &&
+      Object.keys(byThDate[n]).some(dateStr => weekDateSet.has(dateStr))
+    ).sort();
     const allTherapists = [...masterNames, ...shiftOnlyNames];
 
     if (!allTherapists.length) {
@@ -8808,12 +8833,16 @@ function renderShiftCalendar(el, days, shifts) {
                 <td style="padding:6px 8px;font-size:12px;font-weight:700;border-bottom:1px solid var(--border);border-right:2px solid var(--border);vertical-align:top;position:sticky;left:0;background:var(--surface);z-index:1;white-space:nowrap">
                   <div style="display:flex;align-items:center;gap:4px;justify-content:space-between">
                     <span>👤 ${th}</span>
-                    ${isAdminMode ? (_notifiedTherapists.has(th)
-                      ? `<span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;white-space:nowrap">✅ 送信済</span>`
-                      : `<button
-                          data-therapist="${th}"
-                          onclick="event.stopPropagation();notifyShiftToTherapist(this.dataset.therapist)"
-                          style="background:#06c755;color:#fff;border:none;border-radius:4px;padding:2px 5px;font-size:10px;cursor:pointer;font-weight:700;white-space:nowrap;min-height:0">📨</button>`) : ''}
+                    ${isAdminMode ? (shiftOnlyNames.includes(th)
+                      ? `<button
+                          onclick="event.stopPropagation();deleteInterviewShifts('${th}')"
+                          style="background:#dc2626;color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:10px;cursor:pointer;font-weight:700;white-space:nowrap;min-height:0">✕ 削除</button>`
+                      : _notifiedTherapists.has(th)
+                        ? `<span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;white-space:nowrap">✅ 送信済</span>`
+                        : `<button
+                            data-therapist="${th}"
+                            onclick="event.stopPropagation();notifyShiftToTherapist(this.dataset.therapist)"
+                            style="background:#06c755;color:#fff;border:none;border-radius:4px;padding:2px 5px;font-size:10px;cursor:pointer;font-weight:700;white-space:nowrap;min-height:0">📨</button>`) : ''}
                   </div>
                 </td>
                 ${days.map((d, i) => {
