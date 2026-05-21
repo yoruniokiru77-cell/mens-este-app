@@ -8496,7 +8496,8 @@ async function confirmCalAddShift() {
   if (!date)                    { alert('日付を入力してください'); return; }
   if (!startTime || !endTime)   { alert('時間を入力してください'); return; }
   if (_timeToMinutes(startTime) >= _timeToMinutes(endTime)) { alert('終了時間は開始時間より後にしてください'); return; }
-  if (_calAddType === 'shift' && !roomVal) { alert('ルームを選択してください'); return; }
+  const statusVal = document.getElementById('cal-add-status').value;
+  if (_calAddType === 'shift' && !roomVal && statusVal === 'approved') { alert('承認済みの場合はルームを選択してください'); return; }
 
   let therapistName;
 
