@@ -12701,9 +12701,24 @@ async function loadCheckoutPage() {
       return (sd === todayStr || sd === yesterdayStr) && s.roomName;
     });
 
+    // checkout_logsから退勤完了済みのルームを取得
+    const { data: doneLogsToday } = await _sb.from('checkout_logs')
+      .select('room_name, work_date')
+      .eq('store_id', STORE_ID)
+      .eq('therapist_name', loggedInTherapist)
+      .in('work_date', [todayStr, yesterdayStr]);
+    // 完了済みセット: "work_date_room_name"
+    const doneSet = new Set((doneLogsToday || []).map(l => l.work_date + '_' + l.room_name));
+
+    // 退勤完了済みのルームを除外（前日完了済みは翌朝表示しない）
+    const filteredShifts = todayShifts.filter(s => {
+      const sd = s.date.replace(/\//g, '-');
+      return !doneSet.has(sd + '_' + s.roomName);
+    });
+
     // ルームの重複を除く（前日・当日で同じルームは1つにまとめる）
     const seenRooms = new Set();
-    const uniqueShifts = todayShifts.filter(s => {
+    const uniqueShifts = filteredShifts.filter(s => {
       if (seenRooms.has(s.roomName)) return false;
       seenRooms.add(s.roomName);
       return true;
