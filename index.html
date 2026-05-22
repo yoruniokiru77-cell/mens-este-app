@@ -7670,10 +7670,12 @@ async function saveMasterCustomer() {
 
 async function editMasterCustomer(no, name, tel, status, ngTherapists) {
   // Supabaseから最新のデータを取得
-  const { data } = await _sb.from('customers').select('*')
-    .eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
+  const { data: custRows } = await _sb.from('customers').select('*')
+    .eq('store_id', STORE_ID).eq('customer_no', no).limit(1);
+  const data = custRows && custRows.length ? custRows[0] : null;
 
   document.getElementById('ce-customer-no-val').value = String(no);
+  document.getElementById('ce-customer-id').value = data ? (data.id || '') : '';
   document.getElementById('ce-tel-original').value    = tel;
   document.getElementById('ce-customer-no').textContent = 'C' + String(no).padStart(4,'0');
   document.getElementById('ce-name').value           = data ? data.name  : name;
@@ -7767,20 +7769,16 @@ async function saveCustomerEdit() {
 
   try {
     showOverlay();
-    // customer_noで直接更新（数値・文字列両対応）
-    // customer_noは数値型のカラムの可能性があるので両方試す
-    let cust = null, findErr = null;
-    const tryNum = Number(no);
-    if (!isNaN(tryNum)) {
-      const r1 = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', tryNum).maybeSingle();
-      cust = r1.data; findErr = r1.error;
+    // customer IDで直接更新（UUIDを優先・なければcustomer_noで検索）
+    const custId = document.getElementById('ce-customer-id').value;
+    let targetId = custId || null;
+    if (!targetId) {
+      // フォールバック: customer_noで検索（limit(1)で複数件対応）
+      const { data: rows } = await _sb.from('customers').select('id')
+        .eq('store_id', STORE_ID).eq('customer_no', no).limit(1);
+      if (!rows || !rows.length) { alert('顧客が見つかりません（No: ' + no + '）'); hideOverlay(); return; }
+      targetId = rows[0].id;
     }
-    if (!cust) {
-      const r2 = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', String(no)).maybeSingle();
-      if (!findErr) { cust = r2.data; findErr = r2.error; }
-    }
-    if (findErr) throw new Error(findErr.message);
-    if (!cust) { alert('顧客が見つかりません（No: ' + no + '）'); hideOverlay(); return; }
 
     const ngArr = ngRaw ? ngRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
     const { error: updErr } = await _sb.from('customers').update({
@@ -7791,7 +7789,7 @@ async function saveCustomerEdit() {
       memo:             memo || null,
       cancel_count:     cancelCount,
       last_cancel_date: lastCancel || null
-    }).eq('id', cust.id);
+    }).eq('id', targetId);
     if (updErr) throw new Error(updErr.message);
 
     showToast('更新しました（' + name + '様）');
@@ -13455,6 +13453,7 @@ window.addEventListener('DOMContentLoaded', init);
       <button class="btn btn-secondary" onclick="closeCustomerEditModal()">キャンセル</button>
     </div>
     <input type="hidden" id="ce-customer-no-val">
+    <input type="hidden" id="ce-customer-id">
     <input type="hidden" id="ce-tel-original">
   </div>
 </div>
