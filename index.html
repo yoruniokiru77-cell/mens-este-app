@@ -2693,12 +2693,75 @@ async function apiGet(action, params = {}) {
     }
 
     case 'addInterviewShift': {
+      const dateStr   = params.date.replace(/\//g, '-');
+      const startTime = _normalizeTime(params.startTime);
+      const endTime   = _normalizeTime(params.endTime);
+
+      // 同じルーム・日付・時間帯の重複チェック（ルームが指定されている場合のみ）
+      if (params.roomName) {
+        const { data: existing } = await _sb.from('shifts')
+          .select('id, therapist_name, start_time, end_time')
+          .eq('store_id', STORE_ID)
+          .eq('date', dateStr)
+          .eq('room_name', params.roomName)
+          .eq('status', 'approved');
+
+        // 時間が重複しているシフトを検出
+        const toMin = t => {
+          if (!t) return 0;
+          const [h, m] = t.split(':').map(Number);
+          return h * 60 + m;
+        };
+        const newStart = toMin(startTime);
+        const newEnd   = toMin(endTime);
+
+        const conflict = (existing || []).find(s => {
+          const sStart = toMin(s.start_time);
+          const sEnd   = toMin(s.end_time);
+          return newStart < sEnd && newEnd > sStart;
+        });
+
+        if (conflict) {
+          throw new Error(
+            `ルーム「${params.roomName}」の ${conflict.start_time}〜${conflict.end_time} に` +
+            `「${conflict.therapist_name}」のシフトが既に入っています`
+          );
+        }
+      }
+
+      // セラピスト名の重複チェック（同名・同日・時間重複）
+      if (params.therapist) {
+        const { data: sameName } = await _sb.from('shifts')
+          .select('id, start_time, end_time')
+          .eq('store_id', STORE_ID)
+          .eq('date', dateStr)
+          .eq('therapist_name', params.therapist)
+          .eq('status', 'approved');
+
+        const toMin = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+        const newStart = toMin(startTime);
+        const newEnd   = toMin(endTime);
+
+        const nameConflict = (sameName || []).find(s => {
+          const sStart = toMin(s.start_time);
+          const sEnd   = toMin(s.end_time);
+          return newStart < sEnd && newEnd > sStart;
+        });
+
+        if (nameConflict) {
+          throw new Error(
+            `「${params.therapist}」は ${nameConflict.start_time}〜${nameConflict.end_time} に` +
+            `既にシフトが登録されています`
+          );
+        }
+      }
+
       const { error } = await _sb.from('shifts').insert({
         store_id:       STORE_ID,
         therapist_name: params.therapist,
-        date:           params.date.replace(/\//g, '-'),
-        start_time:     _normalizeTime(params.startTime),
-        end_time:       _normalizeTime(params.endTime),
+        date:           dateStr,
+        start_time:     startTime,
+        end_time:       endTime,
         status:         'approved',
         room_id:        params.roomId   || null,
         room_name:      params.roomName || null,
