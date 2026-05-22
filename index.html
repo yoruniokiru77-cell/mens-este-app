@@ -7640,7 +7640,8 @@ function renderCustomerMaster(el, data, total, page, perPage) {
             <td>
               <button class="btn btn-secondary btn-sm"
                 data-no="${String(c.customerNo)}"
-                onclick="editMasterCustomer(this.dataset.no,'${c.name}','${(c.tel||'').replace(/'/g,'&#39;')}','${c.status||'normal'}','${(c.ngTherapists||'').replace(/'/g,'&#39;')}')">編集</button>
+                data-row="${c.row||''}"
+                onclick="editMasterCustomer(this.dataset.no,'${c.name}','${(c.tel||'').replace(/'/g,'&#39;')}','${c.status||'normal'}','${(c.ngTherapists||'').replace(/'/g,'&#39;')}',this.dataset.row)">編集</button>
             </td>
           </tr>`;
           }).join('')}
@@ -7668,11 +7669,19 @@ async function saveMasterCustomer() {
   } catch(e) { alert('エラー: ' + e.message); }
 }
 
-async function editMasterCustomer(no, name, tel, status, ngTherapists) {
-  // Supabaseから最新のデータを取得
-  const { data: custRows } = await _sb.from('customers').select('*')
-    .eq('store_id', STORE_ID).eq('customer_no', no).limit(1);
-  const data = custRows && custRows.length ? custRows[0] : null;
+async function editMasterCustomer(no, name, tel, status, ngTherapists, rowId) {
+  // Supabaseから最新のデータを取得（UUIDで直接取得）
+  let data = null;
+  if (rowId) {
+    const { data: d } = await _sb.from('customers').select('*').eq('id', rowId).maybeSingle();
+    data = d;
+  }
+  if (!data) {
+    // フォールバック: customer_noで検索
+    const { data: custRows } = await _sb.from('customers').select('*')
+      .eq('store_id', STORE_ID).eq('customer_no', no).limit(1);
+    data = custRows && custRows.length ? custRows[0] : null;
+  }
 
   document.getElementById('ce-customer-no-val').value = String(no);
   document.getElementById('ce-customer-id').value = data ? (data.id || '') : '';
