@@ -827,6 +827,10 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <div style="display:flex;gap:6px">
         <button class="btn btn-secondary btn-sm" onclick="loadShiftCalendar()">更新</button>
         <button class="btn btn-sm" id="btn-notify-all-shifts" style="display:none;background:#06c755;color:#fff;border-color:#06c755" onclick="notifyAllApprovedShifts()">📨 まとめて通知</button>
+        <button class="btn btn-sm" id="btn-shift-deadline" style="display:none;background:var(--accent);color:#fff;border-color:var(--accent)" onclick="toggleShiftDeadline()">🔒 来週シフト締め切り</button>
+      </div>
+      <div id="shift-deadline-banner" style="display:none;background:#fef3c7;border:1.5px solid #f59e0b;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;color:#92400e;margin-top:6px">
+        ⚠️ 来週（<span id="deadline-week-label"></span>）のシフトは受付締め切り済みです
       </div>
     </div>
     <!-- 表示切替 -->
@@ -2577,6 +2581,33 @@ async function apiGet(action, params = {}) {
       }));
       const { error } = await _sb.from('shifts').insert(rows);
       if (error) throw new Error(error.message);
+
+      // 締め切り済みの週に申請が来た場合は店舗LINEに通知
+      try {
+        const { data: ss } = await _sb.from('store_settings')
+          .select('shift_deadline_week, store_line_name').eq('store_id', STORE_ID).maybeSingle();
+        if (ss && ss.shift_deadline_week) {
+          // 申請した日付が締め切り週に含まれているか確認
+          const deadlineMon = new Date(ss.shift_deadline_week);
+          const deadlineSun = new Date(deadlineMon); deadlineSun.setDate(deadlineMon.getDate() + 6);
+          const isDeadlineWeek = items.some(item => {
+            const d = new Date(item.date);
+            return d >= deadlineMon && d <= deadlineSun;
+          });
+          if (isDeadlineWeek && ss.store_line_name) {
+            const storeT = await _sb.from('therapists')
+              .select('line_user_id').eq('store_id', STORE_ID).eq('name', ss.store_line_name).maybeSingle();
+            if (storeT.data && storeT.data.line_user_id) {
+              const weekLabel = ss.shift_deadline_week.replace(/-/g, '/');
+              const msg = `【⚠️ 締め切り後シフト申請】
+${params.therapist} さんから締め切り済みの週（${weekLabel}〜）にシフト申請が届きました。
+確認してください。`;
+              await fetch(`${SUPABASE_URL}/functions/v1/line-push?action=sendLineMessage&userId=${encodeURIComponent(storeT.data.line_user_id)}&message=${encodeURIComponent(msg)}`);
+            }
+          }
+        }
+      } catch(e) { console.warn('締め切り通知エラー:', e); }
+
       return { ok: true, count: rows.length };
     }
 
@@ -3659,6 +3690,14 @@ case 'sendLineMessage': {
       };
     }
 
+    case 'saveShiftDeadline': {
+      const { error } = await _sb.from('store_settings')
+        .update({ shift_deadline_week: params.week || null })
+        .eq('store_id', STORE_ID);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
     case 'saveStoreSettings': {
       const { data: ex } = await _sb.from('store_settings').select('id').eq('store_id', STORE_ID).maybeSingle();
       const upd = {};
@@ -3765,7 +3804,7 @@ function clearCache(action) {
 // ============================================================
 // ページ切替
 // ============================================================
-function showPage(name) {
+async function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('#bottom-nav button').forEach(b => b.classList.remove('active'));
@@ -3783,6 +3822,16 @@ function showPage(name) {
   if (name === 'shift-calendar')   initShiftCalendar();
   const notifyBtn = document.getElementById('btn-notify-all-shifts');
   if (notifyBtn) notifyBtn.style.display = isAdminMode ? '' : 'none';
+  const deadlineBtn = document.getElementById('btn-shift-deadline');
+  if (deadlineBtn) deadlineBtn.style.display = isAdminMode ? '' : 'none';
+  // 締め切り情報をDBから読み込む
+  if (isAdminMode) {
+    try {
+      const ss = await apiGet('getStoreSettings');
+      _currentDeadlineWeek = ss.shift_deadline_week || null;
+      updateDeadlineBanner();
+    } catch(e) { console.warn('締め切り情報読み込みエラー:', e); }
+  }
   if (name === 'my-reservations')  initMyReservations();
   if (name === 'customer-list')    initCustomerList();
   if (name === 'manual-view')      loadManualView();
@@ -4248,8 +4297,8 @@ function renderPayrollCards(data) {
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <div style="font-size:12px;color:var(--muted)">次回繰越入力</div>
                 <div style="display:flex;align-items:center;gap:4px">
-                  <input type="number" id="sdb-${uid}" value="${bal}" step="100" inputmode="numeric"
-                    style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:14px;text-align:right;font-weight:700"
+                  <input type="number" id="sdb-${uid}" value="${bal}" step="100"
+                    style="width:100px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:14px;text-align:right;font-weight:700"
                     placeholder="0">
                   <span style="font-size:12px;color:var(--muted)">円</span>
                 </div>
@@ -12376,6 +12425,82 @@ async function saveLineEntry() {
     document.getElementById('line-name').value = '';
     document.getElementById('line-userid').value = '';
   } catch(e) { alert('エラー: ' + e.message); }
+}
+
+
+// ============================================================
+// シフト締め切り管理
+// ============================================================
+
+// 来週の月曜日の日付文字列を返す
+function _getNextWeekMonday() {
+  const now = new Date();
+  const day = now.getDay(); // 0=日, 1=月...
+  const diff = day === 0 ? 1 : 8 - day;
+  const mon = new Date(now);
+  mon.setDate(now.getDate() + diff);
+  return mon.getFullYear() + '-' +
+    String(mon.getMonth() + 1).padStart(2, '0') + '-' +
+    String(mon.getDate()).padStart(2, '0');
+}
+
+// 週ラベル（月曜〜日曜）を返す
+function _getWeekLabel(monStr) {
+  const mon = new Date(monStr);
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+  const fmt = d => (d.getMonth() + 1) + '/' + d.getDate();
+  return fmt(mon) + '〜' + fmt(sun);
+}
+
+let _currentDeadlineWeek = null; // 現在の締め切り週
+
+// 締め切りボタンのトグル
+async function toggleShiftDeadline() {
+  const nextMon = _getNextWeekMonday();
+  const weekLabel = _getWeekLabel(nextMon);
+
+  if (_currentDeadlineWeek === nextMon) {
+    // 締め切り解除
+    if (!confirm(`来週（${weekLabel}）のシフト締め切りを解除しますか？`)) return;
+    try {
+      await apiGet('saveShiftDeadline', { week: null });
+      _currentDeadlineWeek = null;
+      updateDeadlineBanner();
+      showToast('締め切りを解除しました');
+    } catch(e) { alert('エラー: ' + e.message); }
+  } else {
+    // 締め切り設定
+    if (!confirm(`来週（${weekLabel}）のシフトを締め切りますか？\n\n締め切り後に申請が来た場合は店舗LINEに通知されます。`)) return;
+    try {
+      await apiGet('saveShiftDeadline', { week: nextMon });
+      _currentDeadlineWeek = nextMon;
+      updateDeadlineBanner();
+      showToast(`来週（${weekLabel}）のシフトを締め切りました`);
+    } catch(e) { alert('エラー: ' + e.message); }
+  }
+}
+
+// バナー・ボタン表示を更新
+function updateDeadlineBanner() {
+  const banner = document.getElementById('shift-deadline-banner');
+  const btn    = document.getElementById('btn-shift-deadline');
+  const label  = document.getElementById('deadline-week-label');
+  const nextMon = _getNextWeekMonday();
+  const isDeadline = _currentDeadlineWeek === nextMon;
+
+  if (banner) banner.style.display = isDeadline ? 'block' : 'none';
+  if (label)  label.textContent    = isDeadline ? _getWeekLabel(_currentDeadlineWeek) : '';
+  if (btn) {
+    if (isDeadline) {
+      btn.textContent = '🔓 締め切り解除';
+      btn.style.background = '#6b7280';
+      btn.style.borderColor = '#6b7280';
+    } else {
+      btn.textContent = '🔒 来週シフト締め切り';
+      btn.style.background = 'var(--accent)';
+      btn.style.borderColor = 'var(--accent)';
+    }
+  }
 }
 
 // ============================================================
