@@ -6079,7 +6079,13 @@ function renderShiftList(el, data, isAdmin) {
                 <td><span class="badge ${s.cls}">${s.label}</span></td>
                 ${isAdmin ? `<td style="font-size:12px">${attBadge}</td>` : ''}
                 <td style="white-space:nowrap">${r.roomName ? `<span style="background:${rc.bg};color:${rc.text};padding:2px 6px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">🚪 ${r.roomName}</span>` : '-'}</td>
-                <td style="color:var(--muted);font-size:12px">${r.memo || '-'}</td>
+                <td style="font-size:12px">${
+                  r.status === 'rejected' && r.memo
+                    ? `<span style="color:#dc2626;font-weight:600">❌ ${r.memo}</span>`
+                    : r.status === 'rejected'
+                    ? '-'
+                    : `<span style="color:var(--muted)">${r.memo || '-'}</span>`
+                }</td>
                 <td style="font-size:11px;color:var(--muted)">${r.submittedAt}</td>
                 ${!isAdmin ? `
                 <td style="white-space:nowrap">
