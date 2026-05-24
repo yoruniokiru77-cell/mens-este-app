@@ -10078,7 +10078,14 @@ async function submitReservation() {
       apiGet('getReservations', { date: nextDateStr2 })
     ]);
     const allResvForConflict = [...resvToday2, ...resvNext2];
-    const interval = (therapists.find(t => t.name === therapistName) || {}).interval || 0;
+    // therapistsキャッシュから取得、なければDBから直接取得
+    let interval = (therapists.find(t => t.name === therapistName) || {}).interval;
+    if (interval === undefined || interval === null) {
+      try {
+        interval = await apiGet('getTherapistInterval', { name: therapistName });
+      } catch(e) { interval = 0; }
+    }
+    interval = Number(interval) || 0;
     const dtMs     = dt.getTime();
     // 新規予約の占有終了（コース＋インターバル）
     const newEndMs = dtMs + (mins + interval) * 60000;
