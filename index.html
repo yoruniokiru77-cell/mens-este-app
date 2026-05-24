@@ -2310,7 +2310,8 @@ async function apiGet(action, params = {}) {
 
     case 'getTherapistsFromSales': {
       const { data } = await _sb.from('sales').select('therapist_name').eq('store_id', STORE_ID);
-      return [...new Set((data||[]).map(r => r.therapist_name).filter(Boolean))];
+      const ADMIN_EXCL2 = ['店舗', '管理者'];
+      return [...new Set((data||[]).map(r => r.therapist_name).filter(n => n && !ADMIN_EXCL2.includes(n)))];
     }
 
     // ===== 給料計算 =====
@@ -2850,7 +2851,8 @@ ${params.therapist} さんから締め切り済みの週（${weekLabel}〜）に
       ]);
       const all           = (tRes.data || []).filter(t => t.name && t.name !== '管理者');
       const submittedSet  = new Set((sRes.data || []).map(s => s.therapist_name));
-      const unsubmitted   = all.filter(t => !submittedSet.has(t.name)).map(t => ({ name: t.name, userId: t.line_user_id||'' }));
+      const ADMIN_EXCL = ['店舗', '管理者'];
+      const unsubmitted   = all.filter(t => !submittedSet.has(t.name) && !ADMIN_EXCL.includes(t.name)).map(t => ({ name: t.name, userId: t.line_user_id||'' }));
       const submitted     = all.filter(t =>  submittedSet.has(t.name)).map(t => t.name);
       return { unsubmitted, submitted, weekLabel: monStr.replace(/-/g,'/') + ' 〜 ' + sunStr.replace(/-/g,'/') };
     }
@@ -8966,8 +8968,9 @@ function renderShiftCalendar(el, days, shifts) {
     });
 
     // キャストマスタ全員（therapistsグローバル変数）+ 表示週のシフトにしか出ない人
+    const ADMIN_NAMES = ['店舗', '管理者']; // カレンダー・未提出者から除外する名前
     const masterNames = Array.isArray(therapists) && therapists.length
-      ? therapists.map(t => t.name)
+      ? therapists.map(t => t.name).filter(n => !ADMIN_NAMES.includes(n))
       : [];
     // 表示週の日付文字列セット
     const weekDateSet = new Set(days.map(d => fmtCalDate(d)));
@@ -9973,9 +9976,9 @@ async function populateTherapistSelect(keepValue) {
         if (sel.value) populateNominationSelects(sel.value);
         return;
       } else {
-        // シフトなし → 全員表示（未割り当て選択肢を先頭に追加）
+        // シフトなし → 全員表示（未割り当て選択肢を先頭に追加・管理者アカウント除外）
         sel.innerHTML = `<option value="">── 未割り当て ──</option>` +
-          therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+          therapists.filter(t => !['店舗','管理者'].includes(t.name)).map(t => `<option value="${t.name}">${t.name}</option>`).join('');
         // 保存値を復元
         if (savedValue) {
           const exists = Array.from(sel.options).some(o => o.value === savedValue);
@@ -9990,7 +9993,7 @@ async function populateTherapistSelect(keepValue) {
     } catch(e) { console.warn('シフト取得エラー:', e); }
   }
   sel.innerHTML = `<option value="">── 未割り当て ──</option>` +
-    therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+    therapists.filter(t => !['店舗','管理者'].includes(t.name)).map(t => `<option value="${t.name}">${t.name}</option>`).join('');
   // 初期表示時もセラピスト個別指名料を反映
   if (sel.value) populateNominationSelects(sel.value);
 }
