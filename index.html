@@ -6270,10 +6270,11 @@ function initSalesReport() {
   if (!startEl.value) startEl.value = first;
   if (!endEl.value)   endEl.value   = today;
 
-  // セラピスト選択肢
+  // セラピスト選択肢（管理者アカウントを除外）
+  const ADMIN_EXCL_R = ['店舗', '管理者'];
   const sel = document.getElementById('report-therapist');
   if (sel.options.length <= 1 && therapists.length) {
-    therapists.forEach(t => {
+    therapists.filter(t => !ADMIN_EXCL_R.includes(t.name)).forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.name;
       opt.textContent = t.name;
