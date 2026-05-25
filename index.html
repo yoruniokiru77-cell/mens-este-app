@@ -537,7 +537,6 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     <button onclick="showPage('customer-master')" id="tab-customer-master">👥 顧客マスタ</button>
     <button onclick="showPage('master-mgmt')" id="tab-master-mgmt">⚙ マスタ管理</button>
     <button onclick="showPage('line-mgmt')" id="tab-line-mgmt" style="display:none">💬 LINE管理</button>
-    <button onclick="showPage('broadcast')" id="tab-broadcast">📢 アナウンス</button>
     <button onclick="showPage('shift-submit')" id="tab-shift-submit" style="display:none">📆 シフト提出</button>
     <button onclick="showPage('my-reservations')" id="tab-my-reservations" style="display:none">📋 予約確認</button>
     <button onclick="showPage('sales-input')" id="tab-sales-input" style="display:none">📝 売上入力</button>
@@ -658,12 +657,12 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <div class="grid2">
         <div class="form-group">
           <label>お客様名 <span style="color:var(--accent);font-size:11px">※必須</span></label>
-          <input type="text" id="resv-customer-name" autocomplete="off" placeholder="例: サカバ"
+          <input type="text" id="resv-customer-name" placeholder="例: サカバ"
             oninput="lookupCustomerByName(this.value)">
         </div>
         <div class="form-group">
           <label>電話番号</label>
-          <input type="text" id="resv-customer-tel-full" autocomplete="off" placeholder="例: 09012341234"
+          <input type="text" id="resv-customer-tel-full" placeholder="例: 09012341234"
             oninput="this.value=this.value.replace(/[^0-9]/g,'');lookupCustomerByTel(this.value)">
         </div>
       </div>
@@ -818,21 +817,16 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       </div>
       <div id="cal-unsubmitted-list">読み込み中...</div>
     </div>
-    <!-- 週ナビゲーション -->
-    <div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:8px">
-      <button onclick="changeCalendarWeek(-1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">◀</button>
-      <span id="calendar-week-label" style="font-size:15px;font-weight:700;min-width:180px;text-align:center"></span>
-      <button onclick="changeCalendarWeek(1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">▶</button>
-    </div>
-    <!-- アクションボタン -->
-    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
-      <button class="btn btn-secondary btn-sm" onclick="loadShiftCalendar()">更新</button>
-      <button class="btn btn-sm" id="btn-notify-all-shifts" style="display:none;background:#06c755;color:#fff;border-color:#06c755" onclick="notifyAllApprovedShifts()">📨 まとめて通知</button>
-      <button class="btn btn-sm" id="btn-shift-deadline" style="display:none;background:var(--accent);color:#fff;border-color:var(--accent)" onclick="toggleShiftDeadline()">🔒 来週シフト締め切り</button>
-    </div>
-    <!-- 締め切りバナー -->
-    <div id="shift-deadline-banner" style="display:none;background:#fef3c7;border:1.5px solid #f59e0b;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;color:#92400e;margin-bottom:6px">
-      ⚠️ 来週（<span id="deadline-week-label"></span>）のシフトは受付締め切り済みです
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <button onclick="changeCalendarWeek(-1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">◀</button>
+        <span id="calendar-week-label" style="font-size:15px;font-weight:700;min-width:180px;text-align:center"></span>
+        <button onclick="changeCalendarWeek(1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">▶</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" onclick="loadShiftCalendar()">更新</button>
+        <button class="btn btn-sm" id="btn-notify-all-shifts" style="display:none;background:#06c755;color:#fff;border-color:#06c755" onclick="notifyAllApprovedShifts()">📨 まとめて通知</button>
+      </div>
     </div>
     <!-- 表示切替 -->
     <div style="display:flex;gap:6px;margin-bottom:10px">
@@ -950,7 +944,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         </div>
         <div class="form-group">
           <label>お客様名</label>
-          <input type="text" id="sales-customer-name" autocomplete="off">
+          <input type="text" id="sales-customer-name">
         </div>
 
         <!-- オプション選択 -->
@@ -1579,41 +1573,8 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     </div>
   </div>
 
-  <!-- ===== 一括送信ページ ===== -->
-  <div id="page-broadcast" class="page">
-    <div class="card">
-      <div class="sec-title" style="margin-bottom:14px">📢 一括メッセージ送信</div>
-
-      <div class="form-group" style="margin-bottom:12px">
-        <label>メッセージ</label>
-        <textarea id="broadcast-message" rows="5" placeholder="セラピスト全員またはチェックした人に送信されます..." style="width:100%;resize:vertical;font-size:14px;line-height:1.6"></textarea>
-      </div>
-
-      <div style="margin-bottom:10px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-          <label style="font-size:13px;font-weight:600;color:var(--muted)">送信対象（LINE登録済みのみ）</label>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-secondary btn-sm" onclick="broadcastSelectAll(true)">全員選択</button>
-            <button class="btn btn-secondary btn-sm" onclick="broadcastSelectAll(false)">全員解除</button>
-          </div>
-        </div>
-        <div id="broadcast-therapist-list" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;background:var(--bg);border-radius:8px;min-height:48px">
-          <span style="color:var(--muted);font-size:13px">読み込み中...</span>
-        </div>
-      </div>
-
-      <div style="display:flex;gap:8px;align-items:center;margin-top:12px">
-        <button class="btn btn-primary" onclick="sendBroadcastMessage()" id="broadcast-send-btn">📤 送信する</button>
-        <span id="broadcast-selected-count" style="font-size:13px;color:var(--muted)"></span>
-      </div>
-
-      <div id="broadcast-result" style="display:none;margin-top:12px"></div>
-    </div>
-  </div>
-
   <!-- ===== LINE管理ページ ===== -->
   <div id="page-line-mgmt" class="page">
-
     <div class="card" style="margin-bottom:14px">
       <div class="sec-title" style="margin-bottom:14px">手動登録</div>
       <div class="grid2">
@@ -1963,10 +1924,7 @@ function _calcPayroll(row, storeSettings, opts = {}) {
     therapistCoursePay = Math.round(courseNet * courseBack);
   }
 
-  // オプション固定バック（sale_optionsから計算済みの場合はそちらを優先）
-  const therapistOptPay = (row.opt_fixed_back_pay !== null && row.opt_fixed_back_pay !== undefined)
-    ? row.opt_fixed_back_pay
-    : Math.round(optPrice * optionBack);
+  const therapistOptPay = Math.round(optPrice * optionBack);
   const therapistPay    = therapistCoursePay + therapistOptPay + nomFee - miscFee - accomFee;
 
   return { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack, fixedBack };
@@ -2156,11 +2114,10 @@ async function apiGet(action, params = {}) {
         }
       } catch(e) { isNewCustomer = false; }
 
-      const therapistNameVal = params.isUnassigned ? null : (params.therapist || null);
       const { error } = await _sb.from('reservations').insert({
         store_id:        STORE_ID,
-        therapist_name:  therapistNameVal,
-        therapist_id:    therapistNameVal ? await _getTherapistId(therapistNameVal) : null,
+        therapist_name:  params.therapist,
+        therapist_id:    await _getTherapistId(params.therapist),
         customer_name:   params.customer,
         customer_no:     params.customerNo || '',
         customer_tel:    params.tel || '',
@@ -2173,7 +2130,6 @@ async function apiGet(action, params = {}) {
         discount:        Number(params.discount || 0),
         nomination:      params.nomination || 'free',
         is_new_customer: isNewCustomer,
-        is_unassigned:   params.isUnassigned ? true : false,
         memo:            params.memo || null
       });
       if (error) throw new Error(error.message);
@@ -2310,8 +2266,7 @@ async function apiGet(action, params = {}) {
 
     case 'getTherapistsFromSales': {
       const { data } = await _sb.from('sales').select('therapist_name').eq('store_id', STORE_ID);
-      const ADMIN_EXCL2 = ['店舗', '管理者'];
-      return [...new Set((data||[]).map(r => r.therapist_name).filter(n => n && !ADMIN_EXCL2.includes(n)))];
+      return [...new Set((data||[]).map(r => r.therapist_name).filter(Boolean))];
     }
 
     // ===== 給料計算 =====
@@ -2353,20 +2308,6 @@ async function apiGet(action, params = {}) {
         .eq('store_id', STORE_ID).eq('type', 'course').eq('active', true);
       const menuByMin = {}; // course_min → menu_id
       (menuData || []).forEach(m => { menuByMin[m.duration_min] = m.id; });
-
-      // sale_optionsを一括取得（オプション固定バック計算用）
-      const resvIdsForOpts = (salesRes.data || []).map(r => r.reservation_id).filter(Boolean);
-      let saleOptsMap = {}; // reservation_id → [{menu_id, amount}]
-      if (resvIdsForOpts.length) {
-        const { data: saleOptsData } = await _sb.from('sale_options')
-          .select('reservation_id, menu_id, amount')
-          .in('reservation_id', resvIdsForOpts);
-        (saleOptsData || []).forEach(o => {
-          if (!o.reservation_id) return;
-          if (!saleOptsMap[o.reservation_id]) saleOptsMap[o.reservation_id] = [];
-          saleOptsMap[o.reservation_id].push({ menu_id: o.menu_id, amount: o.amount });
-        });
-      }
 
       // 新規客判定：電話番号ベースで期間前の売上を確認
       const custTels = [...new Set((salesRes.data || []).map(r => r.customer_tel).filter(Boolean))];
@@ -2417,27 +2358,11 @@ async function apiGet(action, params = {}) {
         const menuId = menuByMin[r.course_min];
         const fixedBackAmount = (tInfo.id && menuId && menuBackMap[tInfo.id + '_' + menuId] !== undefined)
           ? menuBackMap[tInfo.id + '_' + menuId] : null;
-
-        // オプション固定バックを計算
-        const saleOpts = saleOptsMap[r.reservation_id] || [];
-        let optFixedBackPay = null;
-        if (saleOpts.length > 0) {
-          // sale_optionsがある場合: 各オプションに固定バックがあればそれを使用、なければバック率で計算
-          optFixedBackPay = 0;
-          saleOpts.forEach(o => {
-            const optBack = tInfo.id && o.menu_id && menuBackMap[tInfo.id + '_' + o.menu_id] !== undefined
-              ? menuBackMap[tInfo.id + '_' + o.menu_id]
-              : Math.round(o.amount * (tInfo.option_back ?? 1.0));
-            optFixedBackPay += optBack;
-          });
-        }
-
         const rowWithBack = {
           ...r,
           therapist_course_back: tInfo.course_back,
           therapist_option_back: tInfo.option_back,
-          fixed_back_amount:     fixedBackAmount,
-          opt_fixed_back_pay:    optFixedBackPay
+          fixed_back_amount:     fixedBackAmount
         };
         const { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack }
           = _calcPayroll(rowWithBack, ss);
@@ -2583,33 +2508,6 @@ async function apiGet(action, params = {}) {
       }));
       const { error } = await _sb.from('shifts').insert(rows);
       if (error) throw new Error(error.message);
-
-      // 締め切り済みの週に申請が来た場合は店舗LINEに通知
-      try {
-        const { data: ss } = await _sb.from('store_settings')
-          .select('shift_deadline_week, store_line_name').eq('store_id', STORE_ID).maybeSingle();
-        if (ss && ss.shift_deadline_week) {
-          // 申請した日付が締め切り週に含まれているか確認
-          const deadlineMon = new Date(ss.shift_deadline_week);
-          const deadlineSun = new Date(deadlineMon); deadlineSun.setDate(deadlineMon.getDate() + 6);
-          const isDeadlineWeek = items.some(item => {
-            const d = new Date(item.date);
-            return d >= deadlineMon && d <= deadlineSun;
-          });
-          if (isDeadlineWeek && ss.store_line_name) {
-            const storeT = await _sb.from('therapists')
-              .select('line_user_id').eq('store_id', STORE_ID).eq('name', ss.store_line_name).maybeSingle();
-            if (storeT.data && storeT.data.line_user_id) {
-              const weekLabel = ss.shift_deadline_week.replace(/-/g, '/');
-              const msg = `【⚠️ 締め切り後シフト申請】
-${params.therapist} さんから締め切り済みの週（${weekLabel}〜）にシフト申請が届きました。
-確認してください。`;
-              await fetch(`${SUPABASE_URL}/functions/v1/line-push?action=sendLineMessage&userId=${encodeURIComponent(storeT.data.line_user_id)}&message=${encodeURIComponent(msg)}`);
-            }
-          }
-        }
-      } catch(e) { console.warn('締め切り通知エラー:', e); }
-
       return { ok: true, count: rows.length };
     }
 
@@ -2726,75 +2624,12 @@ ${params.therapist} さんから締め切り済みの週（${weekLabel}〜）に
     }
 
     case 'addInterviewShift': {
-      const dateStr   = params.date.replace(/\//g, '-');
-      const startTime = _normalizeTime(params.startTime);
-      const endTime   = _normalizeTime(params.endTime);
-
-      // 同じルーム・日付・時間帯の重複チェック（ルームが指定されている場合のみ）
-      if (params.roomName) {
-        const { data: existing } = await _sb.from('shifts')
-          .select('id, therapist_name, start_time, end_time')
-          .eq('store_id', STORE_ID)
-          .eq('date', dateStr)
-          .eq('room_name', params.roomName)
-          .eq('status', 'approved');
-
-        // 時間が重複しているシフトを検出
-        const toMin = t => {
-          if (!t) return 0;
-          const [h, m] = t.split(':').map(Number);
-          return h * 60 + m;
-        };
-        const newStart = toMin(startTime);
-        const newEnd   = toMin(endTime);
-
-        const conflict = (existing || []).find(s => {
-          const sStart = toMin(s.start_time);
-          const sEnd   = toMin(s.end_time);
-          return newStart < sEnd && newEnd > sStart;
-        });
-
-        if (conflict) {
-          throw new Error(
-            `ルーム「${params.roomName}」の ${conflict.start_time}〜${conflict.end_time} に` +
-            `「${conflict.therapist_name}」のシフトが既に入っています`
-          );
-        }
-      }
-
-      // セラピスト名の重複チェック（同名・同日・時間重複）
-      if (params.therapist) {
-        const { data: sameName } = await _sb.from('shifts')
-          .select('id, start_time, end_time')
-          .eq('store_id', STORE_ID)
-          .eq('date', dateStr)
-          .eq('therapist_name', params.therapist)
-          .eq('status', 'approved');
-
-        const toMin = t => { if (!t) return 0; const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-        const newStart = toMin(startTime);
-        const newEnd   = toMin(endTime);
-
-        const nameConflict = (sameName || []).find(s => {
-          const sStart = toMin(s.start_time);
-          const sEnd   = toMin(s.end_time);
-          return newStart < sEnd && newEnd > sStart;
-        });
-
-        if (nameConflict) {
-          throw new Error(
-            `「${params.therapist}」は ${nameConflict.start_time}〜${nameConflict.end_time} に` +
-            `既にシフトが登録されています`
-          );
-        }
-      }
-
       const { error } = await _sb.from('shifts').insert({
         store_id:       STORE_ID,
         therapist_name: params.therapist,
-        date:           dateStr,
-        start_time:     startTime,
-        end_time:       endTime,
+        date:           params.date.replace(/\//g, '-'),
+        start_time:     _normalizeTime(params.startTime),
+        end_time:       _normalizeTime(params.endTime),
         status:         'approved',
         room_id:        params.roomId   || null,
         room_name:      params.roomName || null,
@@ -2851,8 +2686,7 @@ ${params.therapist} さんから締め切り済みの週（${weekLabel}〜）に
       ]);
       const all           = (tRes.data || []).filter(t => t.name && t.name !== '管理者');
       const submittedSet  = new Set((sRes.data || []).map(s => s.therapist_name));
-      const ADMIN_EXCL = ['店舗', '管理者'];
-      const unsubmitted   = all.filter(t => !submittedSet.has(t.name) && !ADMIN_EXCL.includes(t.name)).map(t => ({ name: t.name, userId: t.line_user_id||'' }));
+      const unsubmitted   = all.filter(t => !submittedSet.has(t.name)).map(t => ({ name: t.name, userId: t.line_user_id||'' }));
       const submitted     = all.filter(t =>  submittedSet.has(t.name)).map(t => t.name);
       return { unsubmitted, submitted, weekLabel: monStr.replace(/-/g,'/') + ' 〜 ' + sunStr.replace(/-/g,'/') };
     }
@@ -3074,28 +2908,6 @@ case 'sendReminderToOne': {
         })()
       ]);
 
-      // salesテーブルからも取得して予約データの不足分を補完
-      const resvIds = (histRes.data || []).map(r => r.id).filter(Boolean);
-      let salesMap = {};
-      let saleOptionsMap = {};
-      if (resvIds.length) {
-        const [salesRes2, saleOptsRes] = await Promise.all([
-          _sb.from('sales')
-            .select('reservation_id, course_price, option_price, nomination_fee, discount, price, memo')
-            .in('reservation_id', resvIds),
-          _sb.from('sale_options')
-            .select('reservation_id, menu_name, amount')
-            .in('reservation_id', resvIds)
-            .order('created_at', { ascending: true })
-        ]);
-        (salesRes2.data || []).forEach(s => { if (s.reservation_id) salesMap[s.reservation_id] = s; });
-        (saleOptsRes.data || []).forEach(o => {
-          if (!o.reservation_id) return;
-          if (!saleOptionsMap[o.reservation_id]) saleOptionsMap[o.reservation_id] = [];
-          saleOptionsMap[o.reservation_id].push({ name: o.menu_name, amount: o.amount });
-        });
-      }
-
       const customer = custData ? {
         found: true,
         id:           custData.id || '',
@@ -3104,26 +2916,13 @@ case 'sendReminderToOne': {
         status:       custData.status||'normal',
         ngTherapists: custData.ng_therapists||[]
       } : { found: false };
-      const history = (histRes.data || []).map(r => {
-        // salesデータが存在すれば補完（課金確定データを優先）
-        const s = salesMap[r.id] || {};
-        const coursePr = s.course_price || r.course_price || 0;
-        const optPr    = s.option_price  !== undefined ? (s.option_price||0)  : (r.option_price||0);
-        const nomFee   = s.nomination_fee !== undefined ? (s.nomination_fee||0) : (r.nomination_fee||0);
-        const discount = s.discount !== undefined ? (s.discount||0) : (r.discount||0);
-        const price    = s.price || r.price || 0;
-        const memo     = s.memo || r.memo || '';
-        return {
-          date: _fmtDatetimeJp(r.date), therapist: r.therapist_name||'',
-          course: r.course_min, customer: r.customer_name||'',
-          price, discount, nomination: r.nomination,
-          option_price: optPr, nomination_fee: nomFee,
-          course_price: coursePr, memo,
-          options: saleOptionsMap[r.id] || []
-        };
-      });
+      const history = (histRes.data || []).map(r => ({
+        date: _fmtDatetimeJp(r.date), therapist: r.therapist_name||'',
+        course: r.course_min, customer: r.customer_name||'',
+        price: r.price, discount: r.discount, nomination: r.nomination
+      }));
       const memos = (memoRes.data || []).map(r => ({
-        id: r.id||'', therapist: r.therapist_name||'', memo: r.memo||'',
+        therapist: r.therapist_name||'', memo: r.memo||'',
         date: _fmtDateJp(r.created_at)
       }));
       return { history, memos, customer };
@@ -3151,44 +2950,6 @@ case 'sendReminderToOne': {
         memo:           params.memo
       });
       if (error) throw new Error(error.message);
-      return { ok: true };
-    }
-
-    case 'updateCustomerMemo': {
-      const { error } = await _sb.from('customer_memos')
-        .update({ memo: params.memo })
-        .eq('id', params.id);
-      if (error) throw new Error(error.message);
-      return { ok: true };
-    }
-
-    case 'deleteCustomerMemo': {
-      const { error: delErr } = await _sb.from('customer_memos')
-        .delete()
-        .eq('id', params.id);
-      if (delErr) throw new Error(delErr.message);
-      return { ok: true };
-    }
-
-    case 'saveSaleOptions': {
-      // reservation_idがない場合はスキップ
-      const resvId = params.reservationId || null;
-      if (!resvId) return { ok: true };
-      // 既存オプションを削除してから再INSERT
-      await _sb.from('sale_options').delete()
-        .eq('store_id', STORE_ID).eq('reservation_id', resvId);
-      const opts = params.options || [];
-      if (opts.length > 0) {
-        const rows = opts.map(o => ({
-          store_id:       STORE_ID,
-          reservation_id: resvId,
-          menu_id:        o.menuId || null,
-          menu_name:      o.menuName || '',
-          amount:         Number(o.amount) || 0
-        }));
-        const { error } = await _sb.from('sale_options').insert(rows);
-        if (error) throw new Error(error.message);
-      }
       return { ok: true };
     }
 
@@ -3662,7 +3423,6 @@ case 'verifyTokenAction': {
           myVisitCount,
           isHime:        r.is_hime || false,
           isHimeApproved: r.is_hime_approved || false,
-          isUnassigned:  r.is_unassigned || (!r.therapist_name),
           _id:          r.id
         };
       });
@@ -3691,14 +3451,6 @@ case 'sendLineMessage': {
         extension_min:   data.extension_min   || 30,
         extension_price: data.extension_price || 3000
       };
-    }
-
-    case 'saveShiftDeadline': {
-      const { error } = await _sb.from('store_settings')
-        .update({ shift_deadline_week: params.week || null })
-        .eq('store_id', STORE_ID);
-      if (error) throw new Error(error.message);
-      return { ok: true };
     }
 
     case 'saveStoreSettings': {
@@ -3807,7 +3559,7 @@ function clearCache(action) {
 // ============================================================
 // ページ切替
 // ============================================================
-async function showPage(name) {
+function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('#bottom-nav button').forEach(b => b.classList.remove('active'));
@@ -3825,21 +3577,10 @@ async function showPage(name) {
   if (name === 'shift-calendar')   initShiftCalendar();
   const notifyBtn = document.getElementById('btn-notify-all-shifts');
   if (notifyBtn) notifyBtn.style.display = isAdminMode ? '' : 'none';
-  const deadlineBtn = document.getElementById('btn-shift-deadline');
-  if (deadlineBtn) deadlineBtn.style.display = isAdminMode ? '' : 'none';
-  // 締め切り情報をDBから読み込む
-  if (isAdminMode) {
-    try {
-      const ss = await apiGet('getStoreSettings');
-      _currentDeadlineWeek = ss.shift_deadline_week || null;
-      updateDeadlineBanner();
-    } catch(e) { console.warn('締め切り情報読み込みエラー:', e); }
-  }
   if (name === 'my-reservations')  initMyReservations();
   if (name === 'customer-list')    initCustomerList();
   if (name === 'manual-view')      loadManualView();
   if (name === 'line-mgmt')        loadLineUsers();
-  if (name === 'broadcast')        loadBroadcastTherapistList();
   if (name === 'customer-master')  loadCustomerMaster();
   if (name === 'master-mgmt')      initMasterMgmt();
   if (name === 'sales-input') initSalesInput();
@@ -4300,8 +4041,8 @@ function renderPayrollCards(data) {
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <div style="font-size:12px;color:var(--muted)">次回繰越入力</div>
                 <div style="display:flex;align-items:center;gap:4px">
-                  <input type="number" id="sdb-${uid}" value="${bal}" step="100"
-                    style="width:100px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:14px;text-align:right;font-weight:700"
+                  <input type="number" id="sdb-${uid}" value="${bal}" step="100" inputmode="numeric"
+                    style="width:90px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:14px;text-align:right;font-weight:700"
                     placeholder="0">
                   <span style="font-size:12px;color:var(--muted)">円</span>
                 </div>
@@ -4618,32 +4359,18 @@ async function sendPayrollLine(uid, name, dateLabel) {
     try {
       const isIwaki = STORE_ID === '11111111-0000-0000-0000-000000000001';
       if (isIwaki) {
-        // いわきは cash.html で作成済みのレコードに給料額も保存
-        const payNum = parseInt((pay || '¥0').replace(/[^0-9-]/g, '')) || 0;
+        // いわきは cash.html で作成済みのレコードをマーク
         await _sb.from('cash_logs')
-          .update({ is_collected: false, therapist_pay: payNum })
+          .update({ is_collected: false })
           .eq('store_id', STORE_ID)
           .eq('therapist_name', name)
           .eq('work_date', dateStr)
-          .eq('status', 'closed');
+          .eq('status', 'closed')
+          .is('is_collected', null);
       } else {
         // 水戸・神栖: 店落ち額でcash_logsを新規作成（回収管理用）
         const storeDropNum = parseInt((store || '¥0').replace(/[^0-9-]/g, '')) || 0;
         if (storeDropNum > 0) {
-          // シフトからroom_nameを取得
-          const dateStrForShift = dateStr; // YYYY-MM-DD
-          let roomNameForLog = '';
-          try {
-            const { data: shiftData } = await _sb.from('shifts')
-              .select('room_name')
-              .eq('store_id', STORE_ID)
-              .eq('therapist_name', name)
-              .eq('date', dateStrForShift)
-              .eq('status', 'approved')
-              .maybeSingle();
-            if (shiftData && shiftData.room_name) roomNameForLog = shiftData.room_name;
-          } catch(e) { console.warn('シフトroom_name取得エラー:', e); }
-
           // 同日・同セラピストのレコードが既になければ作成
           const { data: existing } = await _sb.from('cash_logs')
             .select('id')
@@ -4655,18 +4382,15 @@ async function sendPayrollLine(uid, name, dateLabel) {
             await _sb.from('cash_logs').insert({
               store_id:       STORE_ID,
               therapist_name: name,
-              room_name:      roomNameForLog,
+              room_name:      '',
               work_date:      dateStr,
               store_drop:     storeDropNum,
               status:         'closed',
               is_collected:   false
             });
           } else {
-            // 既存レコードのroom_nameが空なら更新
-            const updateData = { store_drop: storeDropNum, is_collected: false };
-            if (roomNameForLog) updateData.room_name = roomNameForLog;
             await _sb.from('cash_logs')
-              .update(updateData)
+              .update({ store_drop: storeDropNum, is_collected: false })
               .eq('id', existing.id);
           }
         }
@@ -6131,13 +5855,7 @@ function renderShiftList(el, data, isAdmin) {
                 <td><span class="badge ${s.cls}">${s.label}</span></td>
                 ${isAdmin ? `<td style="font-size:12px">${attBadge}</td>` : ''}
                 <td style="white-space:nowrap">${r.roomName ? `<span style="background:${rc.bg};color:${rc.text};padding:2px 6px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">🚪 ${r.roomName}</span>` : '-'}</td>
-                <td style="font-size:12px">${
-                  r.status === 'rejected' && r.memo
-                    ? `<span style="color:#dc2626;font-weight:600">❌ ${r.memo}</span>`
-                    : r.status === 'rejected'
-                    ? '-'
-                    : `<span style="color:var(--muted)">${r.memo || '-'}</span>`
-                }</td>
+                <td style="color:var(--muted);font-size:12px">${r.memo || '-'}</td>
                 <td style="font-size:11px;color:var(--muted)">${r.submittedAt}</td>
                 ${!isAdmin ? `
                 <td style="white-space:nowrap">
@@ -6270,11 +5988,10 @@ function initSalesReport() {
   if (!startEl.value) startEl.value = first;
   if (!endEl.value)   endEl.value   = today;
 
-  // セラピスト選択肢（管理者アカウントを除外）
-  const ADMIN_EXCL_R = ['店舗', '管理者'];
+  // セラピスト選択肢
   const sel = document.getElementById('report-therapist');
   if (sel.options.length <= 1 && therapists.length) {
-    therapists.filter(t => !ADMIN_EXCL_R.includes(t.name)).forEach(t => {
+    therapists.forEach(t => {
       const opt = document.createElement('option');
       opt.value = t.name;
       opt.textContent = t.name;
@@ -6934,19 +6651,6 @@ async function saveSalesEdit() {
       _adminSalesResvId = null;
       showToast('売上を登録しました');
     }
-    // 選択オプションをsale_optionsに保存
-    try {
-      let resvIdForOpts = _adminSalesResvId || null;
-      if (!resvIdForOpts && _editSalesRow) {
-        const { data: sRow } = await _sb.from('sales').select('reservation_id').eq('id', _editSalesRow).maybeSingle();
-        if (sRow) resvIdForOpts = sRow.reservation_id || null;
-      }
-      if (resvIdForOpts) {
-        const selectedOpts = getEditSelectedOptionsData();
-        await apiGet('saveSaleOptions', { reservationId: resvIdForOpts, options: selectedOpts });
-      }
-    } catch(e) { console.warn('sale_options保存エラー:', e); }
-
     closeSalesEditModal();
     // 予約一覧から開いた場合は予約一覧を更新
     if (document.getElementById('page-reservation').classList.contains('active')) {
@@ -7200,67 +6904,34 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
          </div>`
       : '<span style="color:var(--muted)">顧客情報なし</span>';
 
-    // メモ（編集ボタン付き）
+    // メモ
     const memosEl = document.getElementById('customer-modal-memos');
     if (!res.memos.length) {
       memosEl.innerHTML = '<p style="color:var(--muted);font-size:13px">メモなし</p>';
     } else {
-      memosEl.innerHTML = res.memos.map(m => {
-        // 編集可能か: 管理者はすべて / セラピストは自分のメモのみ
-        const canEdit = isAdminMode || m.therapist === loggedInTherapist;
-        const safeText = m.memo.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,'\\n');
-        return `
+      memosEl.innerHTML = res.memos.map(m => `
         <div style="background:var(--bg);border-radius:8px;padding:10px;margin-bottom:6px;font-size:13px">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:6px">
-            <div id="memo-item-${m.id}" style="flex:1;white-space:pre-wrap;word-break:break-all">${m.memo.replace(/</g,'&lt;')}</div>
-            ${canEdit && m.id ? `<div style="display:flex;gap:4px;flex-shrink:0">
-              <button onclick="startEditMemo('${m.id}', '${safeText}')" style="border:none;background:none;cursor:pointer;font-size:14px;padding:0 4px;color:var(--accent2)" title="編集">✏️</button>
-              <button onclick="deleteCustomerMemo('${m.id}')" style="border:none;background:none;cursor:pointer;font-size:14px;padding:0 4px;color:var(--muted)" title="削除">🗑</button>
-            </div>` : ''}
-          </div>
+          <div>${m.memo}</div>
           <div style="color:var(--muted);font-size:11px;margin-top:4px">${isAdminMode && m.therapist ? m.therapist + '　' : ''}${m.date}</div>
-        </div>`;
-      }).join('');
+        </div>`).join('');
     }
 
-    // 来店履歴（タップで詳細展開）
+    // 来店履歴
     const histEl = document.getElementById('customer-modal-history');
     if (!res.history.length) {
       histEl.innerHTML = '<p style="color:var(--muted);font-size:13px">来店履歴なし</p>';
     } else {
-      histEl.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">💡 行をタップすると詳細を確認できます</div>` +
-        res.history.map((h, idx) => {
-          const hasOpt  = h.option_price > 0;
-          const hasNom  = h.nomination_fee > 0;
-          const hasDis  = h.discount > 0;
-          const hasMemo = h.memo && h.memo.trim();
-          const hasDetail = hasOpt || hasNom || hasDis || hasMemo;
-          return `
-          <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden">
-            <div onclick="toggleHistDetail(${idx})" style="display:flex;align-items:center;gap:6px;padding:10px;cursor:pointer;background:var(--bg);user-select:none">
-              <div style="flex:1;display:grid;grid-template-columns:auto auto${isAdminMode ? ' auto' : ''} auto;gap:6px 12px;align-items:center">
-                <span style="font-size:11px;white-space:nowrap;color:var(--muted)">${h.date}</span>
-                <span style="font-size:12px">${h.course}分</span>
-                ${isAdminMode ? `<span style="font-size:11px;color:var(--muted)">${h.therapist||'-'}</span>` : ''}
-                <span style="font-size:12px;font-weight:600">¥${Number(h.price).toLocaleString()}</span>
-              </div>
-              ${hasDetail ? '<span style="color:var(--muted);font-size:14px;flex-shrink:0">›</span>' : '<span style="color:transparent;font-size:14px;flex-shrink:0">›</span>'}
-            </div>
-            <div id="hist-detail-${idx}" style="display:none;padding:10px 12px;background:var(--surface);border-top:1px solid var(--border);font-size:13px">
-              <div style="display:flex;flex-direction:column;gap:4px">
-                ${h.course_price > 0 ? `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">コース（${h.course}分）</span><span>¥${Number(h.course_price).toLocaleString()}</span></div>` : ''}
-                ${h.options && h.options.length > 0
-                  ? h.options.map(o => `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">　${o.name}</span><span>¥${Number(o.amount).toLocaleString()}</span></div>`).join('')
-                  : (hasOpt ? `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">オプション計</span><span>¥${Number(h.option_price).toLocaleString()}</span></div>` : '')}
-                ${hasNom ? `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">${NOMINATION_LABEL[h.nomination] || h.nomination || '指名料'}</span><span>¥${Number(h.nomination_fee).toLocaleString()}</span></div>` : ''}
-                ${hasDis ? `<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">割引</span><span style="color:var(--accent)">-¥${Number(h.discount).toLocaleString()}</span></div>` : ''}
-                <div style="display:flex;justify-content:space-between;font-weight:600;border-top:1px solid var(--border);padding-top:4px;margin-top:2px"><span>合計</span><span>¥${Number(h.price).toLocaleString()}</span></div>
-                ${hasMemo ? `<div style="margin-top:6px;padding:8px;background:var(--bg);border-radius:6px;color:var(--muted);white-space:pre-wrap;word-break:break-all">📝 ${h.memo.replace(/</g,'&lt;')}</div>` : ''}
-                ${!hasDetail ? '<div style="color:var(--muted)">詳細情報なし</div>' : ''}
-              </div>
-            </div>
-          </div>`;
-        }).join('');
+      histEl.innerHTML = `<div class="table-wrap"><table>
+        <thead><tr><th>日時</th><th>コース</th><th>指名</th>${isAdminMode ? '<th>担当</th>' : ''}<th>金額</th></tr></thead>
+        <tbody>${res.history.map(h => `
+          <tr>
+            <td style="font-size:12px;white-space:nowrap">${h.date}</td>
+            <td>${h.course}分</td>
+            <td style="font-size:12px">${NOMINATION_LABEL[h.nomination] || h.nomination || '-'}</td>
+            ${isAdminMode ? `<td style="font-size:12px;white-space:nowrap">${h.therapist || '-'}</td>` : ''}
+            <td>¥${Number(h.price).toLocaleString()}</td>
+          </tr>`).join('')}
+        </tbody></table></div>`;
     }
     // NG管理セクション（管理者のみ）
     if (isAdminMode && c && c.found) {
@@ -7624,66 +7295,6 @@ async function saveCustomerMemo() {
 }
 
 
-// メモをインライン編集モードに切り替え
-function startEditMemo(memoId, currentText) {
-  const wrapper = document.getElementById('memo-item-' + memoId);
-  if (!wrapper) return;
-  wrapper.innerHTML = `
-    <textarea id="memo-edit-ta-${memoId}" style="width:100%;min-height:60px;font-size:13px;padding:6px;border:1.5px solid var(--accent2);border-radius:6px;resize:vertical;box-sizing:border-box">${currentText.replace(/</g,'&lt;')}</textarea>
-    <div style="display:flex;gap:6px;margin-top:6px">
-      <button class="btn btn-primary btn-sm" onclick="submitEditMemo('${memoId}')">保存</button>
-      <button class="btn btn-secondary btn-sm" onclick="cancelEditMemo('${memoId}','${currentText.replace(/'/g,"\\'").replace(/\n/g,'\\n')}')">キャンセル</button>
-    </div>`;
-  const ta = document.getElementById('memo-edit-ta-' + memoId);
-  if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
-}
-
-// メモ編集を保存
-async function submitEditMemo(memoId) {
-  const ta = document.getElementById('memo-edit-ta-' + memoId);
-  if (!ta) return;
-  const newMemo = ta.value.trim();
-  if (!newMemo) { alert('メモを入力してください'); return; }
-  try {
-    await apiGet('updateCustomerMemo', { id: memoId, memo: newMemo });
-    showToast('メモを更新しました');
-    // 再読み込み
-    const input = document.getElementById('customer-memo-input');
-    const no = input.dataset.customerNo || '';
-    const tel = input.dataset.customerTel || '';
-    openCustomerDetail(no, tel);
-  } catch(e) { alert('エラー: ' + e.message); }
-}
-
-// メモ編集をキャンセル（元のテキストに戻す）
-function cancelEditMemo(memoId, originalText) {
-  const wrapper = document.getElementById('memo-item-' + memoId);
-  if (!wrapper) return;
-  wrapper.textContent = originalText.replace(/\\n/g, '\n');
-}
-
-// メモを削除
-async function deleteCustomerMemo(memoId) {
-  if (!confirm('このメモを削除しますか？')) return;
-  try {
-    await apiGet('deleteCustomerMemo', { id: memoId });
-    showToast('メモを削除しました');
-    const input = document.getElementById('customer-memo-input');
-    const no = input.dataset.customerNo || '';
-    const tel = input.dataset.customerTel || '';
-    openCustomerDetail(no, tel);
-  } catch(e) { alert('エラー: ' + e.message); }
-}
-
-// 来店履歴の詳細アコーディオン開閉
-function toggleHistDetail(idx) {
-  const detail = document.getElementById('hist-detail-' + idx);
-  if (!detail) return;
-  const isOpen = detail.style.display !== 'none';
-  detail.style.display = isOpen ? 'none' : 'block';
-}
-
-
 // ============================================================
 // 顧客マスタ（管理者）
 // ============================================================
@@ -7762,8 +7373,7 @@ function renderCustomerMaster(el, data, total, page, perPage) {
             <td>
               <button class="btn btn-secondary btn-sm"
                 data-no="${String(c.customerNo)}"
-                data-row="${c.row||''}"
-                onclick="editMasterCustomer(this.dataset.no,'${c.name}','${(c.tel||'').replace(/'/g,'&#39;')}','${c.status||'normal'}','${(c.ngTherapists||'').replace(/'/g,'&#39;')}',this.dataset.row)">編集</button>
+                onclick="editMasterCustomer(this.dataset.no,'${c.name}','${(c.tel||'').replace(/'/g,'&#39;')}','${c.status||'normal'}','${(c.ngTherapists||'').replace(/'/g,'&#39;')}')">編集</button>
             </td>
           </tr>`;
           }).join('')}
@@ -7791,22 +7401,12 @@ async function saveMasterCustomer() {
   } catch(e) { alert('エラー: ' + e.message); }
 }
 
-async function editMasterCustomer(no, name, tel, status, ngTherapists, rowId) {
-  // Supabaseから最新のデータを取得（UUIDで直接取得）
-  let data = null;
-  if (rowId) {
-    const { data: d } = await _sb.from('customers').select('*').eq('id', rowId).maybeSingle();
-    data = d;
-  }
-  if (!data) {
-    // フォールバック: customer_noで検索
-    const { data: custRows } = await _sb.from('customers').select('*')
-      .eq('store_id', STORE_ID).eq('customer_no', no).limit(1);
-    data = custRows && custRows.length ? custRows[0] : null;
-  }
+async function editMasterCustomer(no, name, tel, status, ngTherapists) {
+  // Supabaseから最新のデータを取得
+  const { data } = await _sb.from('customers').select('*')
+    .eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
 
   document.getElementById('ce-customer-no-val').value = String(no);
-  document.getElementById('ce-customer-id').value = data ? (data.id || '') : '';
   document.getElementById('ce-tel-original').value    = tel;
   document.getElementById('ce-customer-no').textContent = 'C' + String(no).padStart(4,'0');
   document.getElementById('ce-name').value           = data ? data.name  : name;
@@ -7900,16 +7500,20 @@ async function saveCustomerEdit() {
 
   try {
     showOverlay();
-    // customer IDで直接更新（UUIDを優先・なければcustomer_noで検索）
-    const custId = document.getElementById('ce-customer-id').value;
-    let targetId = custId || null;
-    if (!targetId) {
-      // フォールバック: customer_noで検索（limit(1)で複数件対応）
-      const { data: rows } = await _sb.from('customers').select('id')
-        .eq('store_id', STORE_ID).eq('customer_no', no).limit(1);
-      if (!rows || !rows.length) { alert('顧客が見つかりません（No: ' + no + '）'); hideOverlay(); return; }
-      targetId = rows[0].id;
+    // customer_noで直接更新（数値・文字列両対応）
+    // customer_noは数値型のカラムの可能性があるので両方試す
+    let cust = null, findErr = null;
+    const tryNum = Number(no);
+    if (!isNaN(tryNum)) {
+      const r1 = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', tryNum).maybeSingle();
+      cust = r1.data; findErr = r1.error;
     }
+    if (!cust) {
+      const r2 = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', String(no)).maybeSingle();
+      if (!findErr) { cust = r2.data; findErr = r2.error; }
+    }
+    if (findErr) throw new Error(findErr.message);
+    if (!cust) { alert('顧客が見つかりません（No: ' + no + '）'); hideOverlay(); return; }
 
     const ngArr = ngRaw ? ngRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
     const { error: updErr } = await _sb.from('customers').update({
@@ -7920,7 +7524,7 @@ async function saveCustomerEdit() {
       memo:             memo || null,
       cancel_count:     cancelCount,
       last_cancel_date: lastCancel || null
-    }).eq('id', targetId);
+    }).eq('id', cust.id);
     if (updErr) throw new Error(updErr.message);
 
     showToast('更新しました（' + name + '様）');
@@ -8335,8 +7939,7 @@ async function loadTherapistMaster() {
 // ============================================================
 // シフトカレンダー（週間表示）
 // ============================================================
-let _calendarWeekOffset = 0;
-const _notifiedTherapists = new Set(); // 今セッションで通知済みのセラピスト名 // 0=今週, 1=来週, -1=先週
+let _calendarWeekOffset = 0; // 0=今週, 1=来週, -1=先週
 
 async function loadCalUnsubmitted() {
   const listEl  = document.getElementById('cal-unsubmitted-list');
@@ -8558,10 +8161,6 @@ function setCalAddType(type) {
   // ラベル変更
   const nameLabel = document.getElementById('cal-add-name-label');
   if (nameLabel) nameLabel.textContent = type === 'interview' ? '名前（仮名可）' : '予定名・担当者';
-  // 面接・特別の場合: 既存のマスタ外セラピストをプルダウンに読み込む
-  if (type !== 'shift') {
-    loadCalAddExistingTherapists();
-  }
 }
 
 async function openCalAddShift(therapistName, dateStr) {
@@ -8625,8 +8224,7 @@ async function confirmCalAddShift() {
   if (!date)                    { alert('日付を入力してください'); return; }
   if (!startTime || !endTime)   { alert('時間を入力してください'); return; }
   if (_timeToMinutes(startTime) >= _timeToMinutes(endTime)) { alert('終了時間は開始時間より後にしてください'); return; }
-  const statusVal = document.getElementById('cal-add-status').value;
-  if (_calAddType === 'shift' && !roomVal && statusVal === 'approved') { alert('承認済みの場合はルームを選択してください'); return; }
+  if (_calAddType === 'shift' && !roomVal) { alert('ルームを選択してください'); return; }
 
   let therapistName;
 
@@ -8794,62 +8392,6 @@ async function _calMenuDelete() {
   finally { hideOverlay(); }
 }
 
-// 面接・特別予定セラピストのシフトを全削除
-
-// 面接・特別追加モーダル: 既存のマスタ外セラピスト一覧をプルダウンに設定
-async function loadCalAddExistingTherapists() {
-  const sel = document.getElementById('cal-add-existing');
-  if (!sel) return;
-  try {
-    // shiftsテーブルからtherapistsマスタに存在しない名前を取得
-    const { data: shiftData } = await _sb.from('shifts')
-      .select('therapist_name')
-      .eq('store_id', STORE_ID)
-      .neq('therapist_name', null);
-    const masterNames = new Set(therapists.map(t => t.name));
-    const existingNames = [...new Set(
-      (shiftData || []).map(s => s.therapist_name).filter(n => n && !masterNames.has(n))
-    )].sort();
-    sel.innerHTML = '<option value="">── 新規入力 ──</option>' +
-      existingNames.map(n => `<option value="${n}">${n}</option>`).join('');
-  } catch(e) {
-    console.warn('既存面接セラピスト取得エラー:', e);
-  }
-}
-
-// 既存選択時に名前入力欄に反映
-function onCalAddExistingChange(val) {
-  const input = document.getElementById('cal-add-name');
-  if (!input) return;
-  if (val) {
-    input.value = val;
-    input.style.opacity = '0.5';
-    input.readOnly = true;
-  } else {
-    input.value = '';
-    input.style.opacity = '1';
-    input.readOnly = false;
-  }
-}
-
-async function deleteInterviewShifts(therapistName) {
-  if (!confirm(`「${therapistName}」の全シフトを削除しますか？`)) return;
-  try {
-    showOverlay();
-    const { error } = await _sb.from('shifts')
-      .delete()
-      .eq('store_id', STORE_ID)
-      .eq('therapist_name', therapistName);
-    if (error) throw new Error(error.message);
-    showToast(`「${therapistName}」のシフトを削除しました`);
-    loadShiftCalendar();
-  } catch(e) {
-    alert('エラー: ' + e.message);
-  } finally {
-    hideOverlay();
-  }
-}
-
 function setCalView(mode) {
   _calViewMode = mode;
   const btnDate = document.getElementById('cal-view-date');
@@ -8968,18 +8510,11 @@ function renderShiftCalendar(el, days, shifts) {
       byThDate[s.therapist][s.date].push(s);
     });
 
-    // キャストマスタ全員（therapistsグローバル変数）+ 表示週のシフトにしか出ない人
-    const ADMIN_NAMES = ['店舗', '管理者']; // カレンダー・未提出者から除外する名前
+    // キャストマスタ全員（therapistsグローバル変数）+ シフトにしか出ない人
     const masterNames = Array.isArray(therapists) && therapists.length
-      ? therapists.map(t => t.name).filter(n => !ADMIN_NAMES.includes(n))
+      ? therapists.map(t => t.name)
       : [];
-    // 表示週の日付文字列セット
-    const weekDateSet = new Set(days.map(d => fmtCalDate(d)));
-    // 表示週にシフトがある名前のみ（マスタ外）
-    const shiftOnlyNames = Object.keys(byThDate).filter(n =>
-      !masterNames.includes(n) &&
-      Object.keys(byThDate[n]).some(dateStr => weekDateSet.has(dateStr))
-    ).sort();
+    const shiftOnlyNames = Object.keys(byThDate).filter(n => !masterNames.includes(n)).sort();
     const allTherapists = [...masterNames, ...shiftOnlyNames];
 
     if (!allTherapists.length) {
@@ -9005,16 +8540,10 @@ function renderShiftCalendar(el, days, shifts) {
                 <td style="padding:6px 8px;font-size:12px;font-weight:700;border-bottom:1px solid var(--border);border-right:2px solid var(--border);vertical-align:top;position:sticky;left:0;background:var(--surface);z-index:1;white-space:nowrap">
                   <div style="display:flex;align-items:center;gap:4px;justify-content:space-between">
                     <span>👤 ${th}</span>
-                    ${isAdminMode ? (shiftOnlyNames.includes(th)
-                      ? `<button
-                          onclick="event.stopPropagation();deleteInterviewShifts('${th}')"
-                          style="background:#dc2626;color:#fff;border:none;border-radius:4px;padding:2px 6px;font-size:10px;cursor:pointer;font-weight:700;white-space:nowrap;min-height:0">✕ 削除</button>`
-                      : _notifiedTherapists.has(th)
-                        ? `<span style="background:#d1fae5;color:#065f46;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;white-space:nowrap">✅ 送信済</span>`
-                        : `<button
-                            data-therapist="${th}"
-                            onclick="event.stopPropagation();notifyShiftToTherapist(this.dataset.therapist)"
-                            style="background:#06c755;color:#fff;border:none;border-radius:4px;padding:2px 5px;font-size:10px;cursor:pointer;font-weight:700;white-space:nowrap;min-height:0">📨</button>`) : ''}
+                    ${isAdminMode ? `<button
+                      data-therapist="${th}"
+                      onclick="event.stopPropagation();notifyShiftToTherapist(this.dataset.therapist)"
+                      style="background:#06c755;color:#fff;border:none;border-radius:4px;padding:2px 5px;font-size:10px;cursor:pointer;font-weight:700;white-space:nowrap;min-height:0">📨</button>` : ''}
                   </div>
                 </td>
                 ${days.map((d, i) => {
@@ -9285,12 +8814,6 @@ function renderResvByTherapist(data, el) {
     if (!groups[th]) groups[th] = [];
     groups[th].push(r);
   });
-  // シフトがあるが予約がないセラピストも追加
-  if (window._resvShiftMap) {
-    Object.keys(window._resvShiftMap).forEach(th => {
-      if (!groups[th]) groups[th] = [];
-    });
-  }
   const therapistNames = Object.keys(groups).sort();
 
   const totalSales = data.filter(r => r.status !== 'cancelled').reduce((s, r) => s + Number(r.price || 0), 0);
@@ -9385,27 +8908,22 @@ function renderResvByTherapist(data, el) {
 
       return `
         <div style="margin-bottom:16px">
-          <div style="display:flex;align-items:center;flex-wrap:wrap;padding:8px 10px;background:var(--primary);color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;gap:4px 8px">
-            <span style="white-space:nowrap">👤 ${th}</span>
-            ${(window._resvRoomMap && window._resvRoomMap[th]) ? `<span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;white-space:nowrap">🚪 ${window._resvRoomMap[th]}</span>` : ''}
-            ${availLabel ? `<span style="white-space:nowrap;font-size:12px">${availLabel}</span>` : ''}
-            <span style="font-size:12px;opacity:.85;white-space:nowrap;margin-left:auto">${shiftLabel || (valid.length + '件 ¥' + sales.toLocaleString())}</span>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--primary);color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;flex-wrap:wrap;gap:6px">
+            <span>👤 ${th}${(window._resvRoomMap && window._resvRoomMap[th]) ? ` <span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:4px">🚪 ${window._resvRoomMap[th]}</span>` : ''}${availLabel}</span>
+            <span style="font-size:12px;opacity:.85">${shiftLabel || (valid.length + '件 ¥' + sales.toLocaleString())}</span>
           </div>
           <div style="border-radius:0 0 8px 8px;border:1px solid var(--border);border-top:none;padding:8px">
-                ${(function() {
-                  if (rows.length === 0) return '<div style="padding:14px;text-align:center;color:var(--muted);font-size:13px">予約なし</div>';
-                  return rows.map((r, _i) => {
+                ${rows.map((r, _i) => {
                   const globalIdx = data.indexOf(r);
                   const cancelled = r.status === 'cancelled';
                   const rowStyle  = cancelled ? 'opacity:0.45;background:#f3f4f6;' : r.isNewCustomer ? 'background:#fdf4ff;' : r.isHime && !r.isHimeApproved ? 'background:#fef3f9;' : '';
                   const newBadge  = r.isNewCustomer ? ' <span style="font-size:10px;font-weight:700;color:#7c3aed;background:#ede9fe;padding:1px 6px;border-radius:10px">NEW</span>' : '';
                   const himeBadge = r.isHime ? ' <span style="font-size:11px;font-weight:700;color:#be185d;background:#fce7f3;padding:1px 6px;border-radius:10px">🌸</span>' : '';
                   const himePending = r.isHime && !r.isHimeApproved && !cancelled;
-                  const unassigned  = r.isUnassigned && !cancelled;
                   return `
                   <div style="border-radius:8px;padding:10px 12px;margin-bottom:6px;${rowStyle}border:1px solid ${cancelled ? '#e5e7eb' : 'var(--border)'}">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                      <div style="font-size:14px;font-weight:700">${r.date.split(' ')[1]}${cancelled ? ' <span style="font-size:10px;color:#9ca3af;font-weight:600">キャンセル</span>' : himePending ? ' <span style="font-size:10px;color:#db2777;font-weight:600">承認待ち</span>' : unassigned ? ' <span style="font-size:10px;color:#ea580c;font-weight:600">⚠ 未割り当て</span>' : ''}</div>
+                      <div style="font-size:14px;font-weight:700">${r.date.split(' ')[1]}${cancelled ? ' <span style="font-size:10px;color:#9ca3af;font-weight:600">キャンセル</span>' : himePending ? ' <span style="font-size:10px;color:#db2777;font-weight:600">承認待ち</span>' : ''}</div>
                       <div style="font-size:12px;color:var(--muted)">${r.course}分　¥${Number(r.price).toLocaleString()}${Number(r.discount) > 0 ? `　<span style="color:#dc2626">割引-¥${Number(r.discount).toLocaleString()}</span>` : ''}</div>
                     </div>
                     <div style="font-size:13px;margin-bottom:8px">${formatCustomer(r.customerNo, r.customer)}${newBadge}${himeBadge}　<span style="color:var(--muted);font-size:12px">${NOMINATION_LABEL[r.nomination] || r.nomination}</span>${r.visitCount > 0 ? ' <span style="font-size:10px;color:#059669;background:#ecfdf5;padding:1px 6px;border-radius:10px;font-weight:600">全' + r.visitCount + '回</span>' : ''}${r.monthlyVisitCount > 0 ? ' <span style="font-size:10px;color:#2563eb;background:#eff6ff;padding:1px 6px;border-radius:10px;font-weight:600">今月' + r.monthlyVisitCount + '回</span>' : ''}</div>
@@ -9413,9 +8931,6 @@ function renderResvByTherapist(data, el) {
                     <div style="display:flex;gap:6px;flex-wrap:wrap;isolation:isolate">
                       ${himePending
                         ? `<button class="btn btn-sm" style="background:linear-gradient(135deg,#f9a8d4,#ec4899);color:#fff;font-weight:700;padding:5px 10px;font-size:12px" onclick="openHimeApproveModal('${r.id}')">🌸 承認</button>`
-                        : unassigned
-                        ? `<button class="btn btn-sm" style="background:#ea580c;color:#fff;font-weight:700;padding:5px 10px;font-size:12px" onclick="openAssignTherapistModal('${r._id}','${globalIdx}')">👤 セラピスト割り当て</button>
-                           <button class="btn btn-danger btn-sm" onclick="cancelResvLine(${globalIdx})">キャンセル</button>`
                         : cancelled
                         ? '<span style="font-size:12px;color:#9ca3af">キャンセル済み</span>'
                         : `<button class="btn btn-secondary btn-sm" onclick="openEditResv(${globalIdx})">変更</button>
@@ -9425,8 +8940,7 @@ function renderResvByTherapist(data, el) {
                       ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" data-therapist="${r.therapist||''}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name,this.dataset.therapist)">👤 顧客詳細</button>` : ''}
                     </div>
                   </div>`;
-                }).join('');
-                })()}
+                }).join('')}
             </div>
           </div>`;
     }).join('')}`;
@@ -9434,21 +8948,14 @@ function renderResvByTherapist(data, el) {
 
 function renderResvTable(data) {
   const el = document.getElementById('resv-table-wrap');
+  if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">予約なし</p>'; return; }
   window._resvTableData = data;
 
-  // セラピスト別ビュー: 予約0件でもシフトがあれば表示
+  // セラピスト別ビュー
   if (_resvViewMode === 'therapist') {
-    const hasShifts = window._resvShiftMap && Object.keys(window._resvShiftMap).length > 0;
-    if (!data.length && !hasShifts) {
-      el.innerHTML = '<p style="color:var(--muted)">予約なし</p>';
-      return;
-    }
     renderResvByTherapist(data, el);
     return;
   }
-
-  // 時間順ビュー: 予約0件なら「予約なし」表示
-  if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">予約なし</p>'; return; }
 
   // 時間順ビュー（デフォルト）
   const totalSales = data.filter(r => r.status !== 'cancelled').reduce((s, r) => s + Number(r.price || 0), 0);
@@ -9466,7 +8973,7 @@ function renderResvTable(data) {
         return `
         <div id="resv-row-${i}" style="border-radius:8px;padding:10px 12px;margin-bottom:6px;${rowStyle}border:1px solid ${cancelled ? '#e5e7eb' : 'var(--border)'}">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-            <div style="font-size:14px;font-weight:700">${r.date.split(' ')[1]}　${r.therapist || '<span style="color:#ea580c">未割り当て</span>'}${cancelled ? ' <span style="font-size:10px;color:#9ca3af;font-weight:600">キャンセル</span>' : himePending ? ' <span style="font-size:10px;color:#db2777;font-weight:600">承認待ち</span>' : r.isUnassigned && !cancelled ? ' <span style="font-size:10px;color:#ea580c;font-weight:600">⚠ 未割り当て</span>' : ''}</div>
+            <div style="font-size:14px;font-weight:700">${r.date.split(' ')[1]}　${r.therapist}${cancelled ? ' <span style="font-size:10px;color:#9ca3af;font-weight:600">キャンセル</span>' : himePending ? ' <span style="font-size:10px;color:#db2777;font-weight:600">承認待ち</span>' : ''}</div>
             <div style="font-size:12px;color:var(--muted)">${r.course}分　¥${Number(r.price).toLocaleString()}${Number(r.discount) > 0 ? `　<span style="color:#dc2626">割引-¥${Number(r.discount).toLocaleString()}</span>` : ''}</div>
           </div>
           <div style="font-size:13px;margin-bottom:8px">${formatCustomer(r.customerNo, r.customer)}${newBadge}${himeBadge}　<span style="color:var(--muted);font-size:12px">${NOMINATION_LABEL[r.nomination] || r.nomination}</span>${r.visitCount > 0 ? ' <span style="font-size:10px;color:#059669;background:#ecfdf5;padding:1px 6px;border-radius:10px;font-weight:600">全' + r.visitCount + '回</span>' : ''}${r.monthlyVisitCount > 0 ? ' <span style="font-size:10px;color:#2563eb;background:#eff6ff;padding:1px 6px;border-radius:10px;font-weight:600">今月' + r.monthlyVisitCount + '回</span>' : ''}</div>
@@ -9474,9 +8981,6 @@ function renderResvTable(data) {
           <div style="display:flex;gap:6px;flex-wrap:wrap;isolation:isolate">
             ${himePending
               ? `<button class="btn btn-sm" style="background:linear-gradient(135deg,#f9a8d4,#ec4899);color:#fff;font-weight:700;padding:5px 10px;font-size:12px" onclick="openHimeApproveModal('${r.id}')">🌸 承認</button>`
-              : r.isUnassigned && !cancelled
-              ? `<button class="btn btn-sm" style="background:#ea580c;color:#fff;font-weight:700;padding:5px 10px;font-size:12px" onclick="openAssignTherapistModal('${r._id}','${i}')">👤 セラピスト割り当て</button>
-                 <button class="btn btn-danger btn-sm" onclick="cancelResvLine(${i})">キャンセル</button>`
               : cancelled
               ? '<span style="font-size:12px;color:#9ca3af">キャンセル済み</span>'
               : `<button class="btn btn-secondary btn-sm" onclick="openEditResv(${i})">変更</button>
@@ -9749,7 +9253,7 @@ async function updateResvRow() {
       const storeName = storeData ? storeData.name : '';
       const dt = new Date(dateVal);
       const pad = n => String(n).padStart(2,'0');
-      const dateStr = dt.getFullYear() + '/' + pad(dt.getMonth()+1) + '/' + pad(dt.getDate()) + ' ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
+      const dateStr = _fmtDatetimeJp(dateVal);
       const nomLabel = { free:'フリー', nomination:'指名', honshimei:'本指名' };
       const subtotal = coursePrice + nomFee;
       const finalPrice = subtotal - (discount || 0);
@@ -9963,9 +9467,8 @@ async function populateTherapistSelect(keepValue) {
       }).map(s => s.therapist);
 
       if (onDuty.length) {
-        // シフト確定のセラピストのみ表示（未割り当て選択肢を先頭に追加）
-        sel.innerHTML = `<option value="">── 未割り当て ──</option>` +
-          therapists
+        // シフト確定のセラピストのみ表示
+        sel.innerHTML = therapists
           .filter(t => onDuty.includes(t.name))
           .map(t => `<option value="${t.name}">${t.name}</option>`).join('');
         sel.title = '※ 選択した日時にシフトが確定しているセラピストのみ表示';
@@ -9974,29 +9477,24 @@ async function populateTherapistSelect(keepValue) {
           const exists = Array.from(sel.options).some(o => o.value === savedValue);
           if (exists) { sel.value = savedValue; }
         }
-        if (sel.value) populateNominationSelects(sel.value);
         return;
       } else {
-        // シフトなし → 全員表示（未割り当て選択肢を先頭に追加・管理者アカウント除外）
-        sel.innerHTML = `<option value="">── 未割り当て ──</option>` +
-          therapists.filter(t => !['店舗','管理者'].includes(t.name)).map(t => `<option value="${t.name}">${t.name}</option>`).join('');
+        // シフトなし → 全員表示（注記付き）
+        sel.innerHTML = `<option value="" disabled style="color:var(--muted)">── シフト確定なし（全員表示）──</option>` +
+          therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
         // 保存値を復元
         if (savedValue) {
           const exists = Array.from(sel.options).some(o => o.value === savedValue);
-          if (exists) { sel.value = savedValue; } else { sel.value = ''; }
+          if (exists) { sel.value = savedValue; } else { sel.selectedIndex = 1; }
         } else {
-          sel.value = '';
+          sel.selectedIndex = 1;
         }
         sel.title = '※ 選択した日時にシフトが確定しているセラピストがいません';
-        if (sel.value) populateNominationSelects(sel.value);
         return;
       }
     } catch(e) { console.warn('シフト取得エラー:', e); }
   }
-  sel.innerHTML = `<option value="">── 未割り当て ──</option>` +
-    therapists.filter(t => !['店舗','管理者'].includes(t.name)).map(t => `<option value="${t.name}">${t.name}</option>`).join('');
-  // 初期表示時もセラピスト個別指名料を反映
-  if (sel.value) populateNominationSelects(sel.value);
+  sel.innerHTML = therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
 }
 
 async function checkInterval() {
@@ -10017,10 +9515,10 @@ async function submitReservation() {
   const memo          = (document.getElementById('resv-memo') ? document.getElementById('resv-memo').value.trim() : '');
 
   // 必須チェック
-  if (!dateVal)      { alert('日時を入力してください'); return; }
-  if (!mins)         { alert('コースを選択してください'); return; }
-  if (!customerName) { alert('お客様名を入力してください'); return; }
-  const isUnassigned = !therapistName; // セラピスト未割り当て
+  if (!dateVal)       { alert('日時を入力してください'); return; }
+  if (!therapistName) { alert('セラピストを選択してください'); return; }
+  if (!mins)          { alert('コースを選択してください'); return; }
+  if (!customerName)  { alert('お客様名を入力してください'); return; }
 
   const dt      = new Date(dateVal);
   const dateStr = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
@@ -10040,9 +9538,9 @@ async function submitReservation() {
 
   try {
     showOverlay();
-    const shifts = isUnassigned ? [] : await apiGet('getShifts', { month, status: 'approved' });
+    const shifts = await apiGet('getShifts', { month, status: 'approved' });
 
-    // シフト終了時間超過チェック（27時ルール対応・未割り当てはスキップ）
+    // シフト終了時間超過チェック（27時ルール対応）
     const dtH2 = dt.getHours();
     const reqMin2 = _timeToMin27(timeStr);
     const prevDt2 = new Date(dt); prevDt2.setDate(prevDt2.getDate() - 1);
@@ -10072,8 +9570,7 @@ async function submitReservation() {
     }
 
 
-    // 予約重複チェック（27時ルール対応：翌日分も取得・未割り当てはスキップ）
-    if (!isUnassigned) {
+    // 予約重複チェック（27時ルール対応：翌日分も取得）
     const nextDateObj2 = new Date(dt); nextDateObj2.setDate(nextDateObj2.getDate() + 1);
     const nextPad2 = n => String(n).padStart(2,'0');
     const nextDateStr2 = nextDateObj2.getFullYear() + '-' + nextPad2(nextDateObj2.getMonth()+1) + '-' + nextPad2(nextDateObj2.getDate());
@@ -10082,14 +9579,7 @@ async function submitReservation() {
       apiGet('getReservations', { date: nextDateStr2 })
     ]);
     const allResvForConflict = [...resvToday2, ...resvNext2];
-    // therapistsキャッシュから取得、なければDBから直接取得
-    let interval = (therapists.find(t => t.name === therapistName) || {}).interval;
-    if (interval === undefined || interval === null) {
-      try {
-        interval = await apiGet('getTherapistInterval', { name: therapistName });
-      } catch(e) { interval = 0; }
-    }
-    interval = Number(interval) || 0;
+    const interval = (therapists.find(t => t.name === therapistName) || {}).interval || 0;
     const dtMs     = dt.getTime();
     // 新規予約の占有終了（コース＋インターバル）
     const newEndMs = dtMs + (mins + interval) * 60000;
@@ -10119,32 +9609,23 @@ async function submitReservation() {
       if (!confirm(`⚠ ${therapistName} さんの予約と重複しています。\n既存: ${conflict.date} ${conflict.course}分コース\n（インターバル${interval}分含む）\n\nこのまま登録しますか？`)) return;
       showOverlay();
     }
-    } // end if (!isUnassigned)
 
     await saveCustomerIfNeeded();
     await apiGet('addReservation', {
       date:         dateVal,
-      therapist:    isUnassigned ? '' : therapistName,
+      therapist:    therapistName,
       course:       String(mins),
       customer:     customerName,
       customerNo,
       tel,
-      price:        isUnassigned ? coursePrice : coursePrice + nomFee,
+      price:        coursePrice + nomFee,
       coursePrice,
-      nominationFee: isUnassigned ? 0 : nomFee,
+      nominationFee: nomFee,
       discount,
-      nomination:   isUnassigned ? 'unassigned' : nomination,
-      memo,
-      isUnassigned
+      nomination,
+      memo
     });
 
-    if (isUnassigned) {
-      showToast('未割り当て予約を登録しました');
-      loadReservations();
-      resetResvForm();
-      hideOverlay();
-      return;
-    }
     // 予約完了モーダル表示
     await showResvCompleteModal({ therapistName, dateVal, mins, coursePrice, nomFee, nomination, customerName, customerNo, myShift });
 
@@ -10234,8 +9715,12 @@ async function showResvCompleteModal(p) {
   const dt    = new Date(p.dateVal);
   const WDAYS = ['日','月','火','水','木','金','土'];
   const pad   = n => String(n).padStart(2,'0');
-  const dateDisp = pad(dt.getMonth()+1) + '/' + pad(dt.getDate())
-    + '（' + WDAYS[dt.getDay()] + '） ' + pad(dt.getHours()) + ':' + pad(dt.getMinutes());
+  // 27時ルール対応: _fmtDatetimeJpで前日24+h形式に変換
+  const _fmtParts = _fmtDatetimeJp(p.dateVal).split(' ');
+  const _fmtDate  = _fmtParts[0] || '';
+  const _fmtTime  = _fmtParts[1] || '';
+  const _fmtDow   = WDAYS[new Date((_fmtDate.replace(/\//g,'-')) + 'T12:00:00').getDay()];
+  const dateDisp  = _fmtDate + '（' + _fmtDow + '） ' + _fmtTime;
   const therapistDispM = p.nomination === 'free' ? 'フリー' : p.therapistName;
 
   document.getElementById('resv-complete-info').textContent = '';
@@ -10386,7 +9871,7 @@ async function saveAndSendLine() {
     // LINE送信
     const t = therapists.find(t => t.name === therapistName);
     if (t && t.userId) {
-      const dateStr = new Date(dateVal).toLocaleString('ja-JP', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+      const dateStr = _fmtDatetimeJp(dateVal);
       const customerLabel = formatCustomer(params.customerNo, params.customer);
       const nomLabel = NOMINATION_LABEL[params.nomination] || '';
       const customerType = isNewCustomer ? '新規' : '店リピ';
@@ -11065,76 +10550,6 @@ function getOptionsLabel() {
   return parts.join('、');
 }
 
-// 選択中のオプションを { menuId, menuName, amount } の配列で返す（セラピスト売上入力側）
-function getSelectedOptionsData() {
-  const result = [];
-  _dynamicOptions.forEach((opt, i) => {
-    const id = 'dyn-opt-' + i;
-    if (opt.optionType === 'fixed') {
-      const chk = document.getElementById(id);
-      if (chk && chk.checked) result.push({ menuId: opt.id||null, menuName: opt.name, amount: Number(opt.optionPrice)||0 });
-    } else if (opt.optionType === 'time_unit') {
-      const chk = document.getElementById(id + '-check');
-      const rng = document.getElementById(id + '-range');
-      if (chk && chk.checked && rng) {
-        const mins   = Number(rng.value) || opt.unitMin;
-        const units  = Math.round(mins / (opt.unitMin || 1));
-        const amount = units * (Number(opt.unitPrice) || 0);
-        result.push({ menuId: opt.id||null, menuName: opt.name + mins + '分', amount });
-      }
-    } else { // free
-      const chk = document.getElementById(id + '-check');
-      const amt = document.getElementById(id + '-amount');
-      if (chk && chk.checked && amt && amt.value) {
-        result.push({ menuId: opt.id||null, menuName: opt.name, amount: Number(amt.value)||0 });
-      }
-    }
-  });
-  // その他（延長は除外: course_priceに含まれるため）
-  const otherChk = document.getElementById('opt-other-check');
-  const otherAmt = document.getElementById('opt-other-amount');
-  if (otherChk && otherChk.checked && otherAmt && otherAmt.value) {
-    result.push({ menuId: null, menuName: 'その他', amount: Number(otherAmt.value)||0 });
-  }
-  return result;
-}
-
-// 選択中のオプションを { menuId, menuName, amount } の配列で返す（管理者売上編集側）
-function getEditSelectedOptionsData() {
-  const result = [];
-  _editDynamicOptions.forEach((opt, i) => {
-    const id = 'se-dyn-opt-' + i;
-    if (opt.optionType === 'fixed') {
-      const chk = document.getElementById(id);
-      if (chk && chk.checked) result.push({ menuId: opt.id||null, menuName: opt.name, amount: Number(opt.optionPrice)||0 });
-    } else if (opt.optionType === 'time_unit') {
-      const chk = document.getElementById(id);
-      const rng = document.getElementById(id + '-min');
-      if (chk && chk.checked && rng) {
-        const mins   = Number(rng.value) || opt.unitMin;
-        const units  = Math.round(mins / (opt.unitMin || 1));
-        const amount = units * (Number(opt.unitPrice) || 0);
-        result.push({ menuId: opt.id||null, menuName: opt.name + mins + '分', amount });
-      }
-    } else { // free
-      const chk = document.getElementById(id);
-      const amt = document.getElementById(id + '-amount');
-      if (chk && chk.checked && amt) {
-        const amount = Number(amt.value) || 0;
-        if (amount > 0) result.push({ menuId: opt.id||null, menuName: opt.name, amount });
-      }
-    }
-  });
-  // その他
-  const otherEl  = document.getElementById('se-opt-other');
-  const otherAmt = document.getElementById('se-opt-other-amount');
-  if (otherEl && otherEl.checked && otherAmt && otherAmt.value) {
-    result.push({ menuId: null, menuName: 'その他', amount: Number(otherAmt.value)||0 });
-  }
-  return result;
-}
-
-
 // 「オプション無し」選択時：全オプションをクリア
 function clearAllOptions() {
   _dynamicOptions.forEach((opt, i) => {
@@ -11308,13 +10723,6 @@ async function submitSalesEntry() {
     //   }
     // } catch(e) { console.warn('店舗LINE通知エラー:', e); }
 
-    // 選択オプションをsale_optionsに保存
-    if (params.reservationId) {
-      try {
-        const selectedOpts = getSelectedOptionsData();
-        await apiGet('saveSaleOptions', { reservationId: params.reservationId, options: selectedOpts });
-      } catch(e) { console.warn('sale_options保存エラー:', e); }
-    }
     showToast(wasUpdated ? '売上を更新しました' : '売上を登録しました');
     window._salesOriginal = null;
     const nameEl = document.getElementById('sales-customer-name');
@@ -11383,25 +10791,13 @@ async function openHimeModal() {
       + '<option value="custom">その他</option>';
   } catch(e) { console.warn(e); }
 
-  // 指名種別をマスタから生成（セラピスト個別指名料対応）
+  // 指名種別をマスタから生成
   const himNomSel = document.getElementById('hime-nomination');
-  {
-    const th = therapists.find(t => t.name === loggedInTherapist);
-    const hasPerFee = th && th.nominationFee !== null && th.nominationFee !== undefined;
-    const himItems = hasPerFee
-      ? [
-          { value: 'nomination', label: '指名',   fee: Number(th.nominationFee) },
-          { value: 'honshimei',  label: '本指名', fee: Number(th.nominationFee) }
-        ]
-      : [
-          { value: 'nomination', label: '指名',   fee: NOMINATION_FEE.nomination || 0 },
-          { value: 'honshimei',  label: '本指名', fee: NOMINATION_FEE.honshimei  || 0 }
-        ];
-    himNomSel.innerHTML = himItems.map(i =>
-      `<option value="${i.value}">${i.label} ¥${i.fee.toLocaleString()}</option>`
-    ).join('');
-    himNomSel.value = 'nomination';
-  }
+  himNomSel.innerHTML = [
+    { value: 'nomination', label: '指名',   fee: NOMINATION_FEE.nomination || 0 },
+    { value: 'honshimei',  label: '本指名', fee: NOMINATION_FEE.honshimei  || 0 }
+  ].map(i => `<option value="${i.value}">${i.label} ¥${i.fee.toLocaleString()}</option>`).join('');
+  himNomSel.value = 'nomination';
 
   document.getElementById('hime-custom-wrap').style.display = 'none';
   document.getElementById('hime-discount').value   = '0';
@@ -12071,8 +11467,6 @@ async function loadLineUsers() {
           </tbody>
         </table>
       </div>`;
-    // 一括送信用のセラピストリストも更新
-    loadBroadcastTherapistList();
   } catch(e) { alert('エラー: ' + e.message); }
 }
 
@@ -12120,207 +11514,6 @@ async function saveLineUser(userId, name) {
 }
 
 // ============================================================
-
-// ============================================================
-// 一括メッセージ送信（LINE管理ページ）
-// ============================================================
-let _broadcastTherapists = []; // { name, userId }
-
-// LINE管理ページを開いた際にセラピスト一覧を読み込む（loadLineUsers内で呼ぶ）
-async function loadBroadcastTherapistList() {
-  const wrap = document.getElementById('broadcast-therapist-list');
-  if (!wrap) return;
-  try {
-    const data = await apiGet('getLineUsers');
-    // LINE登録済み（userId あり）のみ表示
-    _broadcastTherapists = (data || []).filter(t => t.userId);
-    if (!_broadcastTherapists.length) {
-      wrap.innerHTML = '<span style="color:var(--muted);font-size:13px">LINE登録済みのセラピストがいません</span>';
-      return;
-    }
-    wrap.innerHTML = _broadcastTherapists.map(t => `
-      <label style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:5px 12px;cursor:pointer;font-size:13px;user-select:none">
-        <input type="checkbox" class="broadcast-chk" data-userid="${t.userId}" data-name="${t.name.replace(/"/g,'&quot;')}"
-               onchange="updateBroadcastCount()" checked style="accent-color:var(--accent2);width:14px;height:14px">
-        ${t.name}
-      </label>`).join('');
-    updateBroadcastCount();
-  } catch(e) {
-    wrap.innerHTML = '<span style="color:var(--muted);font-size:13px">読み込みエラー</span>';
-  }
-}
-
-// 全員選択 / 解除
-function broadcastSelectAll(checked) {
-  document.querySelectorAll('.broadcast-chk').forEach(el => { el.checked = checked; });
-  updateBroadcastCount();
-}
-
-// 選択中の人数を表示
-function updateBroadcastCount() {
-  const total    = document.querySelectorAll('.broadcast-chk').length;
-  const selected = document.querySelectorAll('.broadcast-chk:checked').length;
-  const el = document.getElementById('broadcast-selected-count');
-  if (el) el.textContent = selected + ' / ' + total + ' 人選択中';
-}
-
-// 送信実行
-async function sendBroadcastMessage() {
-  const msg = (document.getElementById('broadcast-message').value || '').trim();
-  if (!msg) { alert('メッセージを入力してください'); return; }
-
-  const targets = [...document.querySelectorAll('.broadcast-chk:checked')].map(el => ({
-    name:   el.dataset.name,
-    userId: el.dataset.userid
-  }));
-  if (!targets.length) { alert('送信対象を1人以上選択してください'); return; }
-
-  if (!confirm(targets.length + '人に以下のメッセージを送信しますか？\n\n' + msg)) return;
-
-  const btn    = document.getElementById('broadcast-send-btn');
-  const result = document.getElementById('broadcast-result');
-  btn.disabled = true;
-  btn.textContent = '送信中...';
-  result.style.display = 'none';
-  result.innerHTML = '';
-
-  const results = [];
-  for (const t of targets) {
-    try {
-      await apiGet('sendLineMessage', { userId: t.userId, message: msg });
-      results.push({ name: t.name, ok: true });
-    } catch(e) {
-      results.push({ name: t.name, ok: false, err: e.message });
-    }
-  }
-
-  const okCount  = results.filter(r => r.ok).length;
-  const ngList   = results.filter(r => !r.ok);
-  result.style.display = 'block';
-  result.innerHTML = `
-    <div style="background:${okCount===targets.length?'#d1fae5':'#fef3c7'};border-radius:8px;padding:12px;font-size:13px">
-      <div style="font-weight:600;margin-bottom:6px">
-        ${okCount===targets.length ? '✅' : '⚠️'} ${okCount} / ${targets.length} 人に送信完了
-      </div>
-      ${ngList.length ? '<div style="color:#991b1b;margin-top:6px">送信失敗: ' + ngList.map(r=>r.name).join('、') + '</div>' : ''}
-      <div style="margin-top:8px">
-        ${results.map(r => `<span style="display:inline-flex;align-items:center;gap:4px;margin:2px 4px;padding:2px 8px;border-radius:12px;background:${r.ok?'#6ee7b7':'#fca5a5'};font-size:12px">${r.ok?'✓':'✗'} ${r.name}</span>`).join('')}
-      </div>
-    </div>`;
-
-  if (okCount === targets.length) {
-    document.getElementById('broadcast-message').value = '';
-    showToast('送信が完了しました');
-  }
-  btn.disabled  = false;
-  btn.textContent = '📤 送信する';
-}
-
-
-// ============================================================
-// 未割り当て予約: セラピスト割り当てモーダル
-// ============================================================
-let _assignResvId  = null;
-let _assignResvIdx = null;
-
-async function openAssignTherapistModal(resvId, idx) {
-  _assignResvId  = resvId;
-  _assignResvIdx = Number(idx);
-
-  // 予約情報を表示
-  const r = (window._resvTableData || [])[_assignResvIdx];
-  const infoEl = document.getElementById('assign-resv-info');
-  if (r && infoEl) {
-    infoEl.innerHTML = `
-      <div><span style="color:var(--muted)">日時:</span> ${r.date}</div>
-      <div><span style="color:var(--muted)">コース:</span> ${r.course}分　¥${Number(r.price).toLocaleString()}</div>
-      <div><span style="color:var(--muted)">お客様:</span> ${r.customer}</div>`;
-  }
-
-  // セラピスト選択肢を生成（当日シフト承認済みのみ）
-  const sel = document.getElementById('assign-therapist-sel');
-  sel.innerHTML = '<option value="">選択してください</option>';
-  try {
-    const dateStr = r ? r.date.split(' ')[0].replace(/\//g, '-') : '';
-    const month   = dateStr.slice(0, 7);
-    const shifts  = dateStr ? await apiGet('getShifts', { month, status: 'approved' }) : [];
-    const dayShifts = shifts.filter(s => s.date === dateStr.replace(/-/g, '/'));
-    if (dayShifts.length) {
-      sel.innerHTML = '<option value="">選択してください</option>' +
-        dayShifts.map(s => `<option value="${s.therapist}">${s.therapist}</option>`).join('');
-    } else {
-      // シフトなければ全セラピスト
-      sel.innerHTML = '<option value="">選択してください</option>' +
-        therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
-    }
-  } catch(e) {
-    sel.innerHTML = '<option value="">選択してください</option>' +
-      therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
-  }
-
-  document.getElementById('assign-therapist-modal').style.display = 'flex';
-}
-
-function closeAssignTherapistModal() {
-  document.getElementById('assign-therapist-modal').style.display = 'none';
-  _assignResvId  = null;
-  _assignResvIdx = null;
-}
-
-async function confirmAssignTherapist() {
-  const therapistName = document.getElementById('assign-therapist-sel').value;
-  if (!therapistName) { alert('セラピストを選択してください'); return; }
-  if (!_assignResvId) return;
-
-  const r = (window._resvTableData || [])[_assignResvIdx];
-  if (!confirm(`${therapistName} さんを割り当てますか？`)) return;
-
-  try {
-    showOverlay();
-
-    // therapist_idを取得
-    const th = therapists.find(t => t.name === therapistName);
-    const therapistId = th ? th.id : null;
-    const nomFee = getNominationFee(therapistName, 'nomination');
-
-    // reservationsを更新
-    const { error } = await _sb.from('reservations')
-      .update({
-        therapist_name: therapistName,
-        therapist_id:   therapistId,
-        is_unassigned:  false,
-        nomination_fee: nomFee,
-        price:          Number(r ? r.price : 0) + nomFee
-      })
-      .eq('id', _assignResvId);
-    if (error) throw new Error(error.message);
-
-    // セラピストにLINE通知（予約確定通知と同じ内容）
-    const lineUser = (await apiGet('getLineUsers')).find(u => u.name === therapistName);
-    if (lineUser && lineUser.userId && r) {
-      const guideText = buildGuideText({
-        dateDisp:     r.date,
-        mins:         r.course,
-        price:        Number(r.price),
-        nomFee,
-        therapistDisp: therapistName,
-        guideText:    '',
-        includeCustomer: false
-      });
-      const msg = `【予約確定】\n${guideText}\nお客様: ${r.customer}`;
-      try { await apiGet('sendLineMessage', { userId: lineUser.userId, message: msg }); } catch(e) {}
-    }
-
-    showToast(therapistName + ' さんを割り当てました');
-    closeAssignTherapistModal();
-    loadReservations();
-  } catch(e) {
-    alert('エラー: ' + e.message);
-  } finally {
-    hideOverlay();
-  }
-}
-
 // 固定バックモーダル
 // ============================================================
 let _menuBackTherapistId = '';
@@ -12342,16 +11535,14 @@ async function openMenuBackModal(userId, name, therapistId) {
     (backs || []).forEach(b => { backMap[b.menu_id] = b.back_amount; });
 
     const courses = (menus || []).filter(m => m.type === 'course' && m.active !== false);
-    const options = (menus || []).filter(m => m.type === 'option' && m.active !== false);
-
-    if (!courses.length && !options.length) {
-      document.getElementById('menu-back-list').innerHTML = '<p style="color:var(--muted)">メニューが登録されていません</p>';
+    if (!courses.length) {
+      document.getElementById('menu-back-list').innerHTML = '<p style="color:var(--muted)">コースメニューが登録されていません</p>';
       return;
     }
 
-    const renderRow = m => `
+    document.getElementById('menu-back-list').innerHTML = courses.map(m => `
       <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-        <div style="flex:1;font-size:14px">${m.name}${m.col3 ? '<span style="font-size:12px;color:var(--muted);margin-left:6px">' + m.col3 + '分</span>' : ''}</div>
+        <div style="flex:1;font-size:14px">${m.name}<span style="font-size:12px;color:var(--muted);margin-left:6px">${m.col3}分</span></div>
         <div style="display:flex;align-items:center;gap:4px">
           <input type="number" min="0" step="100" placeholder="バック率で計算"
             value="${backMap[m.id] !== undefined ? backMap[m.id] : ''}"
@@ -12361,16 +11552,7 @@ async function openMenuBackModal(userId, name, therapistId) {
             style="width:110px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
           <span style="font-size:12px;color:var(--muted)">円</span>
         </div>
-      </div>`;
-
-    const sectionLabel = (label) =>
-      `<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;padding:10px 0 4px;border-bottom:2px solid var(--border);margin-bottom:4px">${label}</div>`;
-
-    let html = '';
-    if (courses.length) html += sectionLabel('■ コース') + courses.map(renderRow).join('');
-    if (options.length) html += sectionLabel('■ オプション・延長') + options.map(renderRow).join('');
-
-    document.getElementById('menu-back-list').innerHTML = html;
+      </div>`).join('');
   } catch(e) {
     document.getElementById('menu-back-list').innerHTML = '<p style="color:red">' + e.message + '</p>';
   }
@@ -12439,82 +11621,6 @@ async function saveLineEntry() {
   } catch(e) { alert('エラー: ' + e.message); }
 }
 
-
-// ============================================================
-// シフト締め切り管理
-// ============================================================
-
-// 来週の月曜日の日付文字列を返す
-function _getNextWeekMonday() {
-  const now = new Date();
-  const day = now.getDay(); // 0=日, 1=月...
-  const diff = day === 0 ? 1 : 8 - day;
-  const mon = new Date(now);
-  mon.setDate(now.getDate() + diff);
-  return mon.getFullYear() + '-' +
-    String(mon.getMonth() + 1).padStart(2, '0') + '-' +
-    String(mon.getDate()).padStart(2, '0');
-}
-
-// 週ラベル（月曜〜日曜）を返す
-function _getWeekLabel(monStr) {
-  const mon = new Date(monStr);
-  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
-  const fmt = d => (d.getMonth() + 1) + '/' + d.getDate();
-  return fmt(mon) + '〜' + fmt(sun);
-}
-
-let _currentDeadlineWeek = null; // 現在の締め切り週
-
-// 締め切りボタンのトグル
-async function toggleShiftDeadline() {
-  const nextMon = _getNextWeekMonday();
-  const weekLabel = _getWeekLabel(nextMon);
-
-  if (_currentDeadlineWeek === nextMon) {
-    // 締め切り解除
-    if (!confirm(`来週（${weekLabel}）のシフト締め切りを解除しますか？`)) return;
-    try {
-      await apiGet('saveShiftDeadline', { week: null });
-      _currentDeadlineWeek = null;
-      updateDeadlineBanner();
-      showToast('締め切りを解除しました');
-    } catch(e) { alert('エラー: ' + e.message); }
-  } else {
-    // 締め切り設定
-    if (!confirm(`来週（${weekLabel}）のシフトを締め切りますか？\n\n締め切り後に申請が来た場合は店舗LINEに通知されます。`)) return;
-    try {
-      await apiGet('saveShiftDeadline', { week: nextMon });
-      _currentDeadlineWeek = nextMon;
-      updateDeadlineBanner();
-      showToast(`来週（${weekLabel}）のシフトを締め切りました`);
-    } catch(e) { alert('エラー: ' + e.message); }
-  }
-}
-
-// バナー・ボタン表示を更新
-function updateDeadlineBanner() {
-  const banner = document.getElementById('shift-deadline-banner');
-  const btn    = document.getElementById('btn-shift-deadline');
-  const label  = document.getElementById('deadline-week-label');
-  const nextMon = _getNextWeekMonday();
-  const isDeadline = _currentDeadlineWeek === nextMon;
-
-  if (banner) banner.style.display = isDeadline ? 'block' : 'none';
-  if (label)  label.textContent    = isDeadline ? _getWeekLabel(_currentDeadlineWeek) : '';
-  if (btn) {
-    if (isDeadline) {
-      btn.textContent = '🔓 締め切り解除';
-      btn.style.background = '#6b7280';
-      btn.style.borderColor = '#6b7280';
-    } else {
-      btn.textContent = '🔒 来週シフト締め切り';
-      btn.style.background = 'var(--accent)';
-      btn.style.borderColor = 'var(--accent)';
-    }
-  }
-}
-
 // ============================================================
 // 店舗設定UI
 // ============================================================
@@ -12548,8 +11654,6 @@ async function notifyShiftToTherapist(therapistName) {
     const msg = '【シフト承認のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
       '\n' + weekLabel + ' のシフト\n\n' + lines.join('\n');
     await apiGet('sendLineMessage', { userId: t.userId, message: msg });
-    _notifiedTherapists.add(therapistName);
-    loadShiftCalendar(); // バッジ更新のため再描画
     showToast('📨 ' + therapistName + ' にLINE通知しました');
   } catch(e) {
     alert('通知エラー: ' + e.message);
@@ -12595,11 +11699,9 @@ async function notifyAllApprovedShifts() {
         '\n' + weekLabel + ' のシフト\n\n' + lines.join('\n');
       try {
         await apiGet('sendLineMessage', { userId: t.userId, message: msg });
-        _notifiedTherapists.add(name);
         notified++;
       } catch(e) { skipped++; console.warn(name + ' への通知失敗:', e); }
     }
-    loadShiftCalendar(); // バッジ更新のため再描画
     showToast('📨 ' + notified + '名に通知しました' + (skipped > 0 ? '（' + skipped + '名スキップ）' : ''));
   } catch(e) {
     alert('エラー: ' + e.message);
@@ -12907,24 +12009,9 @@ async function loadCheckoutPage() {
       return (sd === todayStr || sd === yesterdayStr) && s.roomName;
     });
 
-    // checkout_logsから退勤完了済みのルームを取得
-    const { data: doneLogsToday } = await _sb.from('checkout_logs')
-      .select('room_name, work_date')
-      .eq('store_id', STORE_ID)
-      .eq('therapist_name', loggedInTherapist)
-      .in('work_date', [todayStr, yesterdayStr]);
-    // 完了済みセット: "work_date_room_name"
-    const doneSet = new Set((doneLogsToday || []).map(l => l.work_date + '_' + l.room_name));
-
-    // 退勤完了済みのルームを除外（前日完了済みは翌朝表示しない）
-    const filteredShifts = todayShifts.filter(s => {
-      const sd = s.date.replace(/\//g, '-');
-      return !doneSet.has(sd + '_' + s.roomName);
-    });
-
     // ルームの重複を除く（前日・当日で同じルームは1つにまとめる）
     const seenRooms = new Set();
-    const uniqueShifts = filteredShifts.filter(s => {
+    const uniqueShifts = todayShifts.filter(s => {
       if (seenRooms.has(s.roomName)) return false;
       seenRooms.add(s.roomName);
       return true;
@@ -13299,13 +12386,10 @@ window.addEventListener('DOMContentLoaded', init);
       <select id="cal-add-therapist" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px"></select>
     </div>
 
-    <!-- 面接・特別：既存セラピスト選択 or 新規入力 -->
+    <!-- 面接・特別：名前入力 -->
     <div id="cal-add-field-name" class="form-group" style="display:none;margin-bottom:12px">
       <label id="cal-add-name-label">名前（仮名可）</label>
-      <select id="cal-add-existing" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;margin-bottom:6px" onchange="onCalAddExistingChange(this.value)">
-        <option value="">── 新規入力 ──</option>
-      </select>
-      <input type="text" id="cal-add-name" placeholder="例: [面接] さくら" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+      <input type="text" id="cal-add-name" placeholder="例: 面接A / さくら" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
     </div>
 
     <div class="form-group" style="margin-bottom:12px">
@@ -13510,11 +12594,11 @@ window.addEventListener('DOMContentLoaded', init);
       <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px">👤 お客様情報</div>
       <div class="form-group" style="margin-bottom:10px">
         <label>お客様名</label>
-        <input type="text" id="hime-customer-name" autocomplete="off" placeholder="例: C0041サカバ" oninput="himeLookupByName(this.value)">
+        <input type="text" id="hime-customer-name" placeholder="例: C0041サカバ" oninput="himeLookupByName(this.value)">
       </div>
       <div class="form-group" style="margin-bottom:0">
         <label id="hime-tel-label">電話番号</label>
-        <input type="text" id="hime-customer-tel" autocomplete="off" placeholder="例: 09012341234"
+        <input type="text" id="hime-customer-tel" placeholder="例: 09012341234"
           oninput="this.value=this.value.replace(/[^0-9]/g,'');himeLookupByTel(this.value)">
       </div>
       <div id="hime-customer-info" style="font-size:12px;margin-top:6px;display:none;padding:6px 10px;border-radius:6px"></div>
@@ -13683,7 +12767,6 @@ window.addEventListener('DOMContentLoaded', init);
       <button class="btn btn-secondary" onclick="closeCustomerEditModal()">キャンセル</button>
     </div>
     <input type="hidden" id="ce-customer-no-val">
-    <input type="hidden" id="ce-customer-id">
     <input type="hidden" id="ce-tel-original">
   </div>
 </div>
@@ -13815,21 +12898,5 @@ window.addEventListener('DOMContentLoaded', init);
   </div>
 </div>
 
-
-<!-- 未割り当て予約: セラピスト割り当てモーダル -->
-<div id="assign-therapist-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9600;align-items:center;justify-content:center;padding:20px">
-  <div class="card" style="width:100%;max-width:420px;margin:auto">
-    <div style="font-size:16px;font-weight:700;margin-bottom:14px;color:var(--accent)">👤 セラピスト割り当て</div>
-    <div id="assign-resv-info" style="background:var(--bg);border-radius:8px;padding:10px;font-size:13px;margin-bottom:14px"></div>
-    <div class="form-group" style="margin-bottom:14px">
-      <label>担当セラピスト</label>
-      <select id="assign-therapist-sel" style="width:100%"></select>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-primary" style="flex:1" onclick="confirmAssignTherapist()">✅ 割り当てる</button>
-      <button class="btn btn-secondary" style="flex:1" onclick="closeAssignTherapistModal()">キャンセル</button>
-    </div>
-  </div>
-</div>
 </body>
 </html>
