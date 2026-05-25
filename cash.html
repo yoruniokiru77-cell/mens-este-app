@@ -591,8 +591,7 @@ async function loadClosingData(log) {
 
   const today = todayStr();
 
-  // index.htmlで給料送信済みの場合はcash_logs.therapist_payをそのまま使用
-  // 未送信の場合のみsalesから独自計算
+  // index.htmlのsalesテーブルから本日の売上・給料を取込（27時ルール：当日03:00〜翌日02:59）
   try {
     const todayParts = today.split('-');
     const todayObj   = new Date(Number(todayParts[0]), Number(todayParts[1])-1, Number(todayParts[2]));
@@ -600,25 +599,6 @@ async function loadClosingData(log) {
     const _pad = n => String(n).padStart(2,'0');
     const todayStart = today + 'T03:00:00+09:00';
     const todayEnd   = nextDayObj.getFullYear() + '-' + _pad(nextDayObj.getMonth()+1) + '-' + _pad(nextDayObj.getDate()) + 'T02:59:59+09:00';
-
-    // 既にtherapist_payが保存済みならそれを使用（管理者画面の給料計算値を優先）
-    if (log.therapist_pay > 0) {
-      const totalSales = log.sales_amount || 0;
-      const totalPay   = log.therapist_pay;
-      const totalDrop  = totalSales - totalPay;
-      document.getElementById('cs-sales').textContent = '¥' + totalSales.toLocaleString();
-      document.getElementById('cs-pay').textContent   = '¥' + totalPay.toLocaleString();
-      document.getElementById('cs-drop').textContent  = '¥' + totalDrop.toLocaleString();
-      const opening  = log.opening_balance;
-      const expected = opening + totalSales - totalPay;
-      document.getElementById('calc-opening').textContent  = '¥' + opening.toLocaleString();
-      document.getElementById('calc-sales').textContent    = '¥' + totalSales.toLocaleString();
-      document.getElementById('calc-total').textContent    = '¥' + (opening + totalSales).toLocaleString();
-      document.getElementById('calc-pay').textContent      = '¥' + totalPay.toLocaleString();
-      document.getElementById('calc-expected').textContent = '¥' + expected.toLocaleString();
-      // therapist名は別途表示済みのためスキップ
-      return;
-    }
 
     const { data: sales } = await _sb.from('sales')
       .select('price, discount, course_price, option_price, nomination_fee, course_min, therapist_name')
@@ -633,6 +613,7 @@ async function loadClosingData(log) {
       .select('course_back, option_back')
       .eq('store_id', STORE_ID)
       .eq('name', log.therapist_name)
+      .eq('active', true)
       .maybeSingle();
 
     // 店舗設定の割引モード・デフォルトバック率を取得
@@ -1065,6 +1046,7 @@ async function recalcCashLog(logId, therapistName, workDate) {
       .select('course_back, option_back')
       .eq('store_id', STORE_ID)
       .eq('name', therapistName)
+      .eq('active', true)
       .maybeSingle();
 
     // 割引モード・デフォルトバック率を取得
