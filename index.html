@@ -3491,7 +3491,7 @@ case 'sendLineMessage': {
 // セラピスト名→UUID変換ヘルパー
 async function _getTherapistId(name) {
   if (!name) return null;
-  const { data } = await _sb.from('therapists').select('id').eq('store_id', STORE_ID).eq('name', name).maybeSingle();
+  const { data } = await _sb.from('therapists').select('id').eq('store_id', STORE_ID).eq('name', name).eq('active', true).maybeSingle();
   return data ? data.id : null;
 }
 
