@@ -5506,6 +5506,8 @@ async function checkRoomConflict(date, startTime, endTime, excludeRow, warningEl
       if (s.status !== 'approved') return false;
       if (s.row === excludeRow)    return false;
       if (s.roomName !== roomName) return false;
+      // 欠勤・無断欠勤は除外
+      if (s.attendanceType === 'absent' || s.attendanceType === 'noshow') return false;
       const d1 = (s.date||'').replace(/\//g,'-');
       const d2 = (date||'').replace(/\//g,'-');
       if (d1 !== d2) return false;
@@ -8731,10 +8733,11 @@ async function loadReservations() {
       if (s.therapist) {
         if (!window._resvShiftMap[s.therapist]) window._resvShiftMap[s.therapist] = [];
         window._resvShiftMap[s.therapist].push({
-          start:    s.startTime || '',
-          end:      s.endTime   || '',
-          roomName: s.roomName  || '',
-          intervalMin: 30
+          start:          s.startTime      || '',
+          end:            s.endTime        || '',
+          roomName:       s.roomName       || '',
+          attendanceType: s.attendanceType || 'normal',
+          intervalMin:    30
         });
       }
     });
@@ -8906,10 +8909,24 @@ function renderResvByTherapist(data, el) {
         }
       }
 
+      // 勤怠状況によるヘッダー色制御
+      const attendance = shifts ? shifts.map(s => s.attendanceType || 'normal') : [];
+      let headerBg = 'var(--primary)';
+      let attendanceBadge = '';
+      if (attendance.includes('absent') || attendance.includes('noshow')) {
+        headerBg = '#dc2626';
+        const label = attendance.includes('noshow') ? '無断欠勤' : '欠勤';
+        attendanceBadge = `<span style="font-size:11px;font-weight:700;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:6px">🔴 ${label}</span>`;
+      } else if (attendance.includes('late') || attendance.includes('early_leave')) {
+        headerBg = '#d97706';
+        const label = attendance.includes('late') ? '遅刻' : '早退';
+        attendanceBadge = `<span style="font-size:11px;font-weight:700;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:6px">⚠ ${label}</span>`;
+      }
+
       return `
         <div style="margin-bottom:16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--primary);color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;flex-wrap:wrap;gap:6px">
-            <span>👤 ${th}${(window._resvRoomMap && window._resvRoomMap[th]) ? ` <span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:4px">🚪 ${window._resvRoomMap[th]}</span>` : ''}${availLabel}</span>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:${headerBg};color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;flex-wrap:wrap;gap:6px">
+            <span>👤 ${th}${(window._resvRoomMap && window._resvRoomMap[th]) ? ` <span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:4px">🚪 ${window._resvRoomMap[th]}</span>` : ''}${attendanceBadge}${availLabel}</span>
             <span style="font-size:12px;opacity:.85">${shiftLabel || (valid.length + '件 ¥' + sales.toLocaleString())}</span>
           </div>
           <div style="border-radius:0 0 8px 8px;border:1px solid var(--border);border-top:none;padding:8px">
