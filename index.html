@@ -9653,6 +9653,27 @@ async function submitReservation() {
 }
 
 // ============================================================
+// LINE WebView対応 カスタムconfirm
+// ============================================================
+function _confirm(message, okLabel = 'OK', cancelLabel = 'キャンセル') {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML = `
+      <div style="background:var(--surface);border-radius:14px;padding:24px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+        <div style="font-size:14px;color:var(--text);margin-bottom:20px;line-height:1.6;white-space:pre-line">${message}</div>
+        <div style="display:flex;gap:10px">
+          <button id="_confirm-ok" style="flex:1;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">${okLabel}</button>
+          <button id="_confirm-cancel" style="flex:1;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer">${cancelLabel}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#_confirm-ok').onclick     = () => { document.body.removeChild(overlay); resolve(true);  };
+    overlay.querySelector('#_confirm-cancel').onclick  = () => { document.body.removeChild(overlay); resolve(false); };
+  });
+}
+
+// ============================================================
 // 店舗別案内文フォーマット生成
 // ============================================================
 const NEVERLAND_STORE_ID = '44444444-0000-0000-0000-000000000004';
@@ -12095,7 +12116,7 @@ async function submitCheckout() {
     else byRoom[room].unchecked.push(item);
   });
 
-  if (!confirm('退勤を完了しますか？')) return;
+  if (!await _confirm('退勤を完了しますか？')) return;
 
   try {
     showOverlay();
