@@ -9161,7 +9161,18 @@ async function updateResvRow() {
       apiGet('getReservations', { date: dateStr }),
       apiGet('getReservations', { date: nextDateStr3 })
     ]);
-    const interval = (therapists.find(t => t.name === therapistName) || {}).interval || 0;
+    // インターバル取得（therapistsキャッシュが未ロード時はDB直接取得）
+    let interval = (therapists.find(t => t.name === therapistName) || {}).interval;
+    if (interval === undefined || interval === null) {
+      try {
+        interval = await apiGet('getTherapistInterval', { name: therapistName });
+      } catch (e) {
+        console.warn('[updateResvRow] Failed to get interval for', therapistName, e);
+        interval = 30;
+      }
+    }
+    if (interval === undefined || interval === null) interval = 30;
+    
     // 変更後の新規予約の占有終了（コース＋インターバル）
     const newEndMs3adjusted = dtMs3 + (mins + interval) * 60000;
     const conflict = [...resvToday3, ...resvNext3].find(r => {
@@ -9596,7 +9607,18 @@ async function submitReservation() {
       apiGet('getReservations', { date: nextDateStr2 })
     ]);
     const allResvForConflict = [...resvToday2, ...resvNext2];
-    const interval = (therapists.find(t => t.name === therapistName) || {}).interval || 0;
+    // インターバル取得（therapistsキャッシュが未ロード時はDB直接取得）
+    let interval = (therapists.find(t => t.name === therapistName) || {}).interval;
+    if (interval === undefined || interval === null) {
+      try {
+        interval = await apiGet('getTherapistInterval', { name: therapistName });
+      } catch (e) {
+        console.warn('[submitReservation] Failed to get interval for', therapistName, e);
+        interval = 30;
+      }
+    }
+    if (interval === undefined || interval === null) interval = 30;
+    
     const dtMs     = dt.getTime();
     // 新規予約の占有終了（コース＋インターバル）
     const newEndMs = dtMs + (mins + interval) * 60000;
@@ -9876,7 +9898,18 @@ async function saveAndSendLine() {
     } catch(esl) { console.warn('シフト超過チェックエラー:', esl); }
 
     const reservations = await apiGet('getReservations', { date: dateStr });
-    const interval = (therapists.find(t => t.name === therapistName) || {}).interval || 30;
+    // インターバル取得（therapistsキャッシュが未ロード時はDB直接取得）
+    let interval = (therapists.find(t => t.name === therapistName) || {}).interval;
+    if (interval === undefined || interval === null) {
+      try {
+        interval = await apiGet('getTherapistInterval', { name: therapistName });
+      } catch (e) {
+        console.warn('[saveAndSendLine] Failed to get interval for', therapistName, e);
+        interval = 30;
+      }
+    }
+    if (interval === undefined || interval === null) interval = 30;
+    
     const conflict = reservations.find(r => {
       if (r.therapist !== therapistName) return false;
       if (r.status === 'cancelled') return false;
