@@ -1610,19 +1610,18 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
 
 <!-- ===== スカウトモーダル ===== -->
 <div id="scout-modal" style="display:none;position:fixed;inset:0;z-index:300;overflow-y:auto;background:rgba(0,0,0,0.5)">
-  <div style="background:var(--card-bg);border-radius:12px;max-width:400px;margin:60px auto;padding:24px;border:1px solid var(--border)">
+  <div style="background:#ffffff;border-radius:12px;max-width:420px;margin:60px auto;padding:24px;border:1px solid #e2e8f0;box-shadow:0 8px 24px rgba(0,0,0,0.15)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-      <span style="font-weight:700;font-size:15px" id="scout-modal-title">スカウト設定</span>
-      <button onclick="_hideModal('scout-modal')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+      <span style="font-weight:700;font-size:15px;color:#0f172a" id="scout-modal-title">スカウト設定</span>
+      <button onclick="_hideModal('scout-modal')" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b;line-height:1">✕</button>
     </div>
     <div class="form-group">
-      <label>紹介元会社</label>
-      <!-- 会社リスト（✕ボタン付き） -->
-      <div id="scout-company-list" style="border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:8px"></div>
-      <button type="button" onclick="toggleScoutNewForm()" class="btn btn-sm" style="width:100%;margin-top:4px;font-size:13px">＋ 新規会社を追加</button>
+      <label style="color:#334155;font-weight:600;font-size:13px">紹介元会社を選択</label>
+      <div id="scout-company-list" style="border:1.5px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-top:6px;margin-bottom:10px;background:#ffffff"></div>
+      <button type="button" onclick="toggleScoutNewForm()" class="btn" style="width:100%;font-size:13px;border:1.5px dashed #94a3b8;color:#475569;background:#f8fafc">＋ 新規会社を追加</button>
     </div>
-    <div id="scout-new-company-form" style="display:none;background:var(--bg);border-radius:8px;padding:14px;margin-bottom:12px">
-      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;font-weight:600">新規会社を登録</div>
+    <div id="scout-new-company-form" style="display:none;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:12px">
+      <div style="font-size:12px;color:#475569;margin-bottom:10px;font-weight:600">新規会社を登録</div>
       <div class="form-group">
         <label>会社名</label>
         <input type="text" id="scout-new-name" placeholder="例: A社">
@@ -1637,9 +1636,9 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
           <input type="number" id="scout-new-fee" value="0" min="0">
         </div>
       </div>
-      <button type="button" onclick="addScoutCompany()" class="btn btn-primary btn-sm" style="width:100%">登録</button>
+      <button type="button" onclick="addScoutCompany()" class="btn btn-primary" style="width:100%">登録</button>
     </div>
-    <div style="display:flex;gap:10px;margin-top:6px">
+    <div style="display:flex;gap:10px;margin-top:8px">
       <button id="scout-modal-remove-btn" onclick="removeTherapistScout()" class="btn" style="flex:1;background:#fee2e2;color:#b91c1c;border-color:#fca5a5;display:none">紐付け解除</button>
       <button onclick="saveTherapistScout()" class="btn btn-primary" style="flex:2">保存</button>
     </div>
@@ -3390,43 +3389,66 @@ case 'sendReminderToOne': {
       const [y, m] = ym.split('-').map(Number);
       const startDt = new Date(y, m-1, 1, 3, 0, 0);
       const endDt   = new Date(y, m,   1, 2, 59, 59);
-      // therapist_scouts（会社情報込み）
-      const { data: scouts } = await _sb.from('therapist_scouts')
-        .select('*, therapists(id,name,course_back), scout_companies(*)')
+
+      // ① therapist_scouts を取得
+      const { data: scouts, error: scoutErr } = await _sb.from('therapist_scouts')
+        .select('therapist_id, company_id')
         .eq('store_id', STORE_ID).eq('active', true);
+      if (scoutErr) throw new Error('scouts: ' + scoutErr.message);
       if (!scouts || !scouts.length) return [];
+
       const therapistIds = scouts.map(s => s.therapist_id);
-      // 売上（コースのみ）
+      const companyIds   = [...new Set(scouts.map(s => s.company_id))];
+
+      // ② セラピスト情報を取得
+      const { data: therapistRows, error: tErr } = await _sb.from('therapists')
+        .select('id, name, course_back')
+        .in('id', therapistIds).eq('active', true);
+      if (tErr) throw new Error('therapists: ' + tErr.message);
+
+      // ③ 会社情報を取得
+      const { data: companyRows, error: cErr } = await _sb.from('scout_companies')
+        .select('id, name, back_rate, advisory_fee')
+        .in('id', companyIds).eq('active', true);
+      if (cErr) throw new Error('companies: ' + cErr.message);
+
+      // ④ 売上（コースのみ）
       const { data: sales } = await _sb.from('sales')
         .select('therapist_id, date, course_price')
         .eq('store_id', STORE_ID)
         .in('therapist_id', therapistIds)
         .gte('date', startDt.toISOString())
         .lte('date', endDt.toISOString());
-      // 承認済みシフト（欠勤・無断欠勤除く）
+
+      // ⑤ 承認済みシフト（欠勤・無断欠勤除く）
+      const therapistNames = (therapistRows || []).map(t => t.name);
       const mStr = String(m).padStart(2,'0');
       const { data: shifts } = await _sb.from('shifts')
         .select('therapist_name, date')
         .eq('store_id', STORE_ID)
-        .in('therapist_name', scouts.map(s => s.therapists?.name).filter(Boolean))
+        .in('therapist_name', therapistNames)
         .eq('status', 'approved')
-        .neq('attendance_type', 'absent').neq('attendance_type', 'noshow')
+        .neq('attendance_type', 'absent')
+        .neq('attendance_type', 'noshow')
         .gte('date', `${y}-${mStr}-01`)
         .lte('date', `${y}-${mStr}-31`);
+
+      // マップ化
+      const tMap  = Object.fromEntries((therapistRows || []).map(t => [t.id, t]));
+      const coMap = Object.fromEntries((companyRows || []).map(c => [c.id, c]));
+
       // セラピスト別に集計
       return scouts.map(s => {
-        const t  = s.therapists;
-        const co = s.scout_companies;
+        const t  = tMap[s.therapist_id];
+        const co = coMap[s.company_id];
         if (!t || !co) return null;
         const courseBack = Number(t.course_back) || 0;
         const backRate   = Number(co.back_rate) || 0;
         const advFee     = Number(co.advisory_fee) || 0;
-        // 日別売上
-        const tSales = (sales || []).filter(r => r.therapist_id === t.id);
-        // 日ごとにグループ化
+        // 日別売上グループ化
         const dayMap = {};
-        tSales.forEach(r => {
-          const d = new Date(r.date);
+        (sales || []).filter(r => r.therapist_id === t.id).forEach(r => {
+          const d   = new Date(r.date);
           const key = `${d.getMonth()+1}/${d.getDate()}`;
           if (!dayMap[key]) dayMap[key] = 0;
           dayMap[key] += Number(r.course_price) || 0;
@@ -3435,14 +3457,13 @@ case 'sendReminderToOne': {
           date,
           sb: Math.round(courseTotal * courseBack * backRate)
         }));
-        // 出勤日数
         const workDays = (shifts || []).filter(r => r.therapist_name === t.name).length;
-        const totalSb  = days.reduce((s, d) => s + d.sb, 0);
+        const totalSb  = days.reduce((sum, d) => sum + d.sb, 0);
         const advisory = workDays * advFee;
         return {
           therapistId: t.id, therapistName: t.name,
           companyId: co.id, companyName: co.name,
-          backRate: backRate, advisoryFee: advFee, courseBack: courseBack,
+          backRate, advisoryFee: advFee, courseBack,
           workDays, totalSb, advisory, total: totalSb + advisory, days
         };
       }).filter(Boolean);
@@ -8138,30 +8159,47 @@ async function openScoutModal(therapistId, therapistName) {
   document.getElementById('scout-new-company-form').style.display = 'none';
 
   renderScoutCompanyList(currentCompanyId);
+  const listEl = document.getElementById('scout-company-list');
+  if (currentCompanyId) listEl.dataset.selected = currentCompanyId;
+  else delete listEl.dataset.selected;
   _showModal('scout-modal');
 }
 
-// 会社リストを描画（ラジオボタン + ✕削除ボタン）
+// 会社リストを描画（ボタン形式で選択 + ✕削除ボタン）
 function renderScoutCompanyList(selectedId) {
   const el = document.getElementById('scout-company-list');
   if (!_scoutCompanies.length) {
-    el.innerHTML = '<p style="padding:10px 12px;font-size:13px;color:var(--muted)">会社が登録されていません</p>';
+    el.innerHTML = '<p style="padding:12px 14px;font-size:13px;color:#64748b">会社が登録されていません</p>';
     return;
   }
   el.innerHTML = _scoutCompanies.map((c, i) => {
     const isSelected = c.id === selectedId;
-    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;${i > 0 ? 'border-top:1px solid var(--border);' : ''}background:${isSelected ? 'var(--bg)' : ''}">
-      <input type="radio" name="scout-co" id="scout-co-${c.id}" value="${c.id}" ${isSelected ? 'checked' : ''}
-        style="accent-color:var(--accent);width:16px;height:16px;flex-shrink:0">
-      <label for="scout-co-${c.id}" style="flex:1;cursor:pointer;font-size:14px;font-weight:${isSelected ? '600' : '400'}">
-        ${c.name}
-        <span style="font-size:11px;color:var(--muted);margin-left:6px">${Math.round(c.back_rate * 100)}% / ¥${Number(c.advisory_fee).toLocaleString()}/日</span>
-      </label>
+    return `<div
+      id="scout-co-row-${c.id}"
+      onclick="selectScoutCompany('${c.id}')"
+      style="display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;
+             ${i > 0 ? 'border-top:1.5px solid #e2e8f0;' : ''}
+             background:${isSelected ? '#eff6ff' : '#ffffff'};
+             transition:background 0.15s">
+      <div style="width:18px;height:18px;border-radius:50%;border:2px solid ${isSelected ? '#3b82f6' : '#cbd5e1'};
+                  background:${isSelected ? '#3b82f6' : '#ffffff'};flex-shrink:0;display:flex;align-items:center;justify-content:center">
+        ${isSelected ? '<div style="width:7px;height:7px;border-radius:50%;background:#ffffff"></div>' : ''}
+      </div>
+      <div style="flex:1;min-width:0">
+        <span style="font-size:14px;font-weight:${isSelected ? '700' : '500'};color:${isSelected ? '#1d4ed8' : '#1e293b'}">${c.name}</span>
+        <span style="font-size:12px;color:#64748b;margin-left:8px">${Math.round(c.back_rate * 100)}% / ¥${Number(c.advisory_fee).toLocaleString()}/日</span>
+      </div>
       <button type="button" onclick="deleteScoutCompany('${c.id}','${c.name.replace(/'/g,"\\'")}',event)"
-        style="background:none;border:none;color:var(--muted);font-size:16px;cursor:pointer;padding:0 4px;line-height:1;flex-shrink:0"
+        style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0"
         title="削除">✕</button>
     </div>`;
   }).join('');
+}
+
+function selectScoutCompany(companyId) {
+  renderScoutCompanyList(companyId);
+  // 選択IDをdata属性に保持
+  document.getElementById('scout-company-list').dataset.selected = companyId;
 }
 
 function toggleScoutNewForm() {
@@ -8187,8 +8225,9 @@ async function addScoutCompany() {
   const dup = _scoutCompanies.find(c => normalize(c.name) === normalize(name));
   if (dup) {
     alert(`「${dup.name}」は既に登録されています。\n同じスペルの会社は1つとして扱われます。`);
-    // 既存会社を選択状態にしてフォームを閉じる
     renderScoutCompanyList(dup.id);
+    const listEl = document.getElementById('scout-company-list');
+    listEl.dataset.selected = dup.id;
     document.getElementById('scout-new-company-form').style.display = 'none';
     return;
   }
@@ -8197,6 +8236,8 @@ async function addScoutCompany() {
     const newCo = await apiGet('saveScoutCompany', { name, back_rate: rate, advisory_fee: fee });
     _scoutCompanies.push(newCo);
     renderScoutCompanyList(newCo.id);
+    const listEl = document.getElementById('scout-company-list');
+    listEl.dataset.selected = newCo.id;
     document.getElementById('scout-new-company-form').style.display = 'none';
   } catch(e) { alert('会社登録エラー: ' + e.message); }
 }
@@ -8211,21 +8252,26 @@ async function deleteScoutCompany(companyId, companyName, e) {
     await _sb.from('scout_companies').update({ active: false }).eq('id', companyId);
     _scoutCompanies = _scoutCompanies.filter(c => c.id !== companyId);
     // 削除した会社が選択中なら選択解除
-    const checkedRadio = document.querySelector(`input[name="scout-co"]:checked`);
-    renderScoutCompanyList(checkedRadio?.value !== companyId ? checkedRadio?.value : null);
+    const listEl    = document.getElementById('scout-company-list');
+    const prevSel   = listEl.dataset.selected;
+    const nextSel   = prevSel !== companyId ? prevSel : null;
+    renderScoutCompanyList(nextSel);
+    if (nextSel) listEl.dataset.selected = nextSel;
+    else delete listEl.dataset.selected;
     // セラピスト一覧も再描画
     loadLineUsers();
   } catch(e) { alert('削除エラー: ' + e.message); }
 }
 
 async function saveTherapistScout() {
-  const checked = document.querySelector('input[name="scout-co"]:checked');
-  if (!checked) {
+  const listEl  = document.getElementById('scout-company-list');
+  const companyId = listEl.dataset.selected || '';
+  if (!companyId) {
     alert('紹介元会社を選択してください');
     return;
   }
   try {
-    await apiGet('saveTherapistScout', { therapist_id: _scoutTargetId, company_id: checked.value });
+    await apiGet('saveTherapistScout', { therapist_id: _scoutTargetId, company_id: companyId });
     _hideModal('scout-modal');
     loadLineUsers();
   } catch(e) { alert('保存エラー: ' + e.message); }
@@ -8256,7 +8302,7 @@ async function loadScoutSummary() {
   listEl.innerHTML = '<p style="color:var(--muted)">集計中...</p>';
   try {
     const rows = await apiGet('getScoutSummary', { month });
-    if (!rows.length) {
+    if (!rows || !rows.length) {
       listEl.innerHTML = '<p style="color:var(--muted)">スカウト対象のセラピストがいません</p>';
       return;
     }
@@ -8334,7 +8380,8 @@ async function loadScoutSummary() {
     window._scoutByCompany = byCompany;
 
   } catch(e) {
-    listEl.innerHTML = '<p style="color:red">エラー: ' + e.message + '</p>';
+    console.error('[loadScoutSummary]', e);
+    listEl.innerHTML = `<p style="color:red">エラー: ${e.message}</p>`;
   }
 }
 
