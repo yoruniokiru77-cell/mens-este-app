@@ -8088,7 +8088,7 @@ async function deleteRoomMaster(row) {
 
 // ===== セラピストマスタ =====
 async function loadTherapistMaster() {
-  const el = document.getElementById('therapist-master-list');
+  const el = document.getElementById('line-users-table');
   try {
     const data = await apiGetCached('getTherapistMaster', {});
     if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">データなし</p>'; return; }
@@ -8203,7 +8203,7 @@ async function saveTherapistScout() {
     await apiGet('saveTherapistScout', { therapist_id: _scoutTargetId, company_id: companyId });
     _hideModal('scout-modal');
     clearCache('getTherapistMaster');
-    loadTherapistMaster();
+    loadLineUsers();
   } catch(e) { alert('保存エラー: ' + e.message); }
 }
 
@@ -8213,7 +8213,7 @@ async function removeTherapistScout() {
     await apiGet('deleteTherapistScout', { therapist_id: _scoutTargetId });
     _hideModal('scout-modal');
     clearCache('getTherapistMaster');
-    loadTherapistMaster();
+    loadLineUsers();
   } catch(e) { alert('解除エラー: ' + e.message); }
 }
 
@@ -11856,6 +11856,17 @@ async function loadLineUsers() {
       el.innerHTML = '<p style="color:var(--muted)">まだ登録されていません。セラピストにLINE Botを友達追加してもらい、源氏名を送ってもらってください。</p>';
       return;
     }
+    const isKamisu = STORE_ID === '33333333-0000-0000-0000-000000000003';
+    // 神栖店の場合はスカウト紐付けを取得
+    let scoutMap = {};
+    if (isKamisu) {
+      try {
+        const { data: scouts } = await _sb.from('therapist_scouts')
+          .select('therapist_id, scout_companies(name)')
+          .eq('store_id', STORE_ID).eq('active', true);
+        (scouts || []).forEach(s => { scoutMap[s.therapist_id] = s.scout_companies?.name || ''; });
+      } catch(e) { console.warn('scout fetch error', e); }
+    }
     el.innerHTML = `
       <div class="table-wrap">
         <table>
@@ -11870,6 +11881,7 @@ async function loadLineUsers() {
               <th>時給</th>
               <th>1日保証</th>
               <th>固定バック</th>
+              ${isKamisu ? '<th>スカウト</th>' : ''}
               <th>保存</th>
               <th>削除</th>
             </tr>
@@ -11882,6 +11894,9 @@ async function loadLineUsers() {
               const obPct = ob !== '' ? Math.round(ob * 100) : '';
               const registered = cb !== '';
               const nomFeeVal = u.nominationFee !== null && u.nominationFee !== undefined ? u.nominationFee : '';
+              const scoutLabel = isKamisu && scoutMap[u.id]
+                ? `<span style="font-size:12px;background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:10px;margin-right:6px">${scoutMap[u.id]}</span>`
+                : '';
               return `
               <tr id="line-row-${u.userId}">
                 <td><strong>${u.name || '<span style="color:var(--warning)">未設定</span>'}</strong></td>
@@ -11936,6 +11951,7 @@ async function loadLineUsers() {
                 <td>
                   <button class="btn btn-secondary btn-sm" onclick="openMenuBackModal('${u.userId}','${u.name}','${u.id||''}')">固定バック</button>
                 </td>
+                ${isKamisu ? `<td>${scoutLabel}<button class="btn btn-sm" style="font-size:12px;padding:3px 10px" onclick="openScoutModal('${u.id}','${u.name}')">🔍 スカウト</button></td>` : ''}
                 <td>
                   <button class="btn btn-primary btn-sm" onclick="saveLineUser('${u.userId}', '${u.name}')">保存</button>
                 </td>
