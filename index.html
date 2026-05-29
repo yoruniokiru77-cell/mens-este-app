@@ -9018,6 +9018,17 @@ function renderShiftCalendar(el, days, shifts) {
     const shiftOnlyNames = Object.keys(byThDate).filter(n => !masterNames.includes(n)).sort();
     const allTherapists = [...masterNames, ...shiftOnlyNames];
 
+    // シフト提出・承認ありを上に並べる
+    // 優先度: 1=承認済みあり, 2=提出済み(pending/rejected)あり, 3=シフトなし
+    const getPriority = name => {
+      const dateMap = byThDate[name] || {};
+      const allStatuses = Object.values(dateMap).flat().map(s => s.status);
+      if (allStatuses.includes('approved')) return 1;
+      if (allStatuses.some(s => s === 'pending' || s === 'rejected')) return 2;
+      return 3;
+    };
+    allTherapists.sort((a, b) => getPriority(a) - getPriority(b));
+
     if (!allTherapists.length) {
       el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">セラピストが登録されていません</p>' + _calLegend();
       return;
@@ -10464,6 +10475,7 @@ async function saveAndSendLine() {
       const customerLabel = formatCustomer(params.customerNo, params.customer);
       const nomLabel = NOMINATION_LABEL[params.nomination] || '';
       const customerType = isNewCustomer ? '新規' : '店リピ';
+      const subtotal   = price + nomFee;
       const finalPrice = subtotal - (discount || 0);
 
       let msg = `【予約確定】\n日時: ${dateStr}\nコース: ${mins}分\nお客様: ${customerLabel}（${customerType}）\n指名: ${nomLabel}\n金額: ¥${subtotal.toLocaleString()}`;
