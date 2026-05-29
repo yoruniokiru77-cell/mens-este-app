@@ -119,7 +119,8 @@ body.therapist-mode #bottom-nav {
 @media (min-width: 768px) {
   #page-shift-calendar,
   #page-master-mgmt,
-  #page-line-mgmt { max-width: 100%; padding: 14px 24px; }
+  #page-line-mgmt,
+  #page-scout { max-width: 100%; padding: 14px 24px; }
 }
 body.therapist-mode .page {
   padding-bottom: calc(var(--bottom-h) + env(safe-area-inset-bottom) + 12px);
@@ -537,6 +538,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     <button onclick="showPage('customer-master')" id="tab-customer-master">👥 顧客マスタ</button>
     <button onclick="showPage('master-mgmt')" id="tab-master-mgmt">⚙ マスタ管理</button>
     <button onclick="showPage('line-mgmt')" id="tab-line-mgmt" style="display:none">💬 LINE管理</button>
+    <button onclick="showPage('scout')" id="tab-scout" style="display:none">🔍 スカウト</button>
     <button onclick="showPage('shift-submit')" id="tab-shift-submit" style="display:none">📆 シフト提出</button>
     <button onclick="showPage('my-reservations')" id="tab-my-reservations" style="display:none">📋 予約確認</button>
     <button onclick="showPage('sales-input')" id="tab-sales-input" style="display:none">📝 売上入力</button>
@@ -1606,6 +1608,60 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
   </div>
 </div>
 
+<!-- ===== スカウトモーダル ===== -->
+<div id="scout-modal" style="display:none;position:fixed;inset:0;z-index:300;overflow-y:auto;background:rgba(0,0,0,0.5)">
+  <div style="background:var(--card-bg);border-radius:12px;max-width:400px;margin:60px auto;padding:24px;border:1px solid var(--border)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <span style="font-weight:700;font-size:15px" id="scout-modal-title">スカウト設定</span>
+      <button onclick="_hideModal('scout-modal')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+    </div>
+    <div class="form-group">
+      <label>紹介元会社</label>
+      <select id="scout-company-sel" onchange="onScoutCompanyChange()" style="width:100%">
+        <option value="">— 未設定 —</option>
+      </select>
+    </div>
+    <div id="scout-new-company-form" style="display:none;background:var(--bg);border-radius:8px;padding:14px;margin-bottom:12px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;font-weight:600">新規会社を登録</div>
+      <div class="form-group">
+        <label>会社名</label>
+        <input type="text" id="scout-new-name" placeholder="例: A社">
+      </div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>バック率（%）</label>
+          <input type="number" id="scout-new-rate" value="10" min="0" max="100" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>顧問料（円/日）</label>
+          <input type="number" id="scout-new-fee" value="0" min="0">
+        </div>
+      </div>
+    </div>
+    <div id="scout-company-info" style="display:none;background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px">
+      <div class="grid2">
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:2px">バック率</div><div id="scout-info-rate" style="font-size:18px;font-weight:700;color:var(--accent)"></div></div>
+        <div><div style="font-size:11px;color:var(--muted);margin-bottom:2px">顧問料</div><div id="scout-info-fee" style="font-size:18px;font-weight:700;color:var(--accent)"></div></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button id="scout-modal-remove-btn" onclick="removeTherapistScout()" class="btn" style="flex:1;background:#fee2e2;color:#b91c1c;border-color:#fca5a5;display:none">紐付け解除</button>
+      <button onclick="saveTherapistScout()" class="btn btn-primary" style="flex:2">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== スカウト集計ページ ===== -->
+<div id="page-scout" class="page">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+    <span style="font-weight:700;font-size:15px">🔍 スカウト集計</span>
+    <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+      <label style="font-size:13px;color:var(--muted)">集計月</label>
+      <input type="month" id="scout-month-sel" style="font-size:13px;padding:5px 10px" onchange="loadScoutSummary()">
+    </div>
+  </div>
+  <div id="scout-summary-list"><p style="color:var(--muted)">読み込み中...</p></div>
+</div>
 <script>
 // ============================================================
 // iOS対応モーダル表示
@@ -3284,11 +3340,117 @@ case 'sendReminderToOne': {
     case 'getTherapistMaster': {
       const { data } = await _sb.from('therapists').select('*').eq('store_id', STORE_ID).eq('active', true).order('registered_at');
       return (data || []).map(t => ({
-        name: t.name, userId: t.line_user_id||'',
+        id: t.id, name: t.name, userId: t.line_user_id||'',
         interval: t.interval_min??30,
         courseBack: t.course_back!==null ? Number(t.course_back) : '',
         email: t.email||''
       }));
+    }
+
+    // ===== スカウト =====
+    case 'getScoutCompanies': {
+      const { data } = await _sb.from('scout_companies')
+        .select('*').eq('store_id', STORE_ID).eq('active', true).order('created_at');
+      return data || [];
+    }
+    case 'saveScoutCompany': {
+      if (params.id) {
+        const { data, error } = await _sb.from('scout_companies')
+          .update({ name: params.name, back_rate: params.back_rate, advisory_fee: params.advisory_fee })
+          .eq('id', params.id).select().single();
+        if (error) throw new Error(error.message);
+        return data;
+      } else {
+        const { data, error } = await _sb.from('scout_companies')
+          .insert({ store_id: STORE_ID, name: params.name, back_rate: params.back_rate, advisory_fee: params.advisory_fee })
+          .select().single();
+        if (error) throw new Error(error.message);
+        return data;
+      }
+    }
+    case 'getTherapistScout': {
+      const { data } = await _sb.from('therapist_scouts')
+        .select('*, scout_companies(*)')
+        .eq('store_id', STORE_ID).eq('therapist_id', params.therapist_id).eq('active', true).maybeSingle();
+      return data || null;
+    }
+    case 'saveTherapistScout': {
+      // UPSERT: store_id+therapist_idのユニーク制約を利用
+      const { error } = await _sb.from('therapist_scouts')
+        .upsert({ store_id: STORE_ID, therapist_id: params.therapist_id, company_id: params.company_id, active: true },
+          { onConflict: 'store_id,therapist_id' });
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+    case 'deleteTherapistScout': {
+      const { error } = await _sb.from('therapist_scouts')
+        .update({ active: false })
+        .eq('store_id', STORE_ID).eq('therapist_id', params.therapist_id);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+    case 'getScoutSummary': {
+      // 指定月の売上・シフトデータを取得してスカウト集計
+      const ym = params.month; // "2026-05"
+      const [y, m] = ym.split('-').map(Number);
+      const startDt = new Date(y, m-1, 1, 3, 0, 0);
+      const endDt   = new Date(y, m,   1, 2, 59, 59);
+      // therapist_scouts（会社情報込み）
+      const { data: scouts } = await _sb.from('therapist_scouts')
+        .select('*, therapists(id,name,course_back), scout_companies(*)')
+        .eq('store_id', STORE_ID).eq('active', true);
+      if (!scouts || !scouts.length) return [];
+      const therapistIds = scouts.map(s => s.therapist_id);
+      // 売上（コースのみ）
+      const { data: sales } = await _sb.from('sales')
+        .select('therapist_id, date, course_price')
+        .eq('store_id', STORE_ID)
+        .in('therapist_id', therapistIds)
+        .gte('date', startDt.toISOString())
+        .lte('date', endDt.toISOString());
+      // 承認済みシフト（欠勤・無断欠勤除く）
+      const mStr = String(m).padStart(2,'0');
+      const { data: shifts } = await _sb.from('shifts')
+        .select('therapist_name, date')
+        .eq('store_id', STORE_ID)
+        .in('therapist_name', scouts.map(s => s.therapists?.name).filter(Boolean))
+        .eq('status', 'approved')
+        .neq('attendance_type', 'absent').neq('attendance_type', 'noshow')
+        .gte('date', `${y}-${mStr}-01`)
+        .lte('date', `${y}-${mStr}-31`);
+      // セラピスト別に集計
+      return scouts.map(s => {
+        const t  = s.therapists;
+        const co = s.scout_companies;
+        if (!t || !co) return null;
+        const courseBack = Number(t.course_back) || 0;
+        const backRate   = Number(co.back_rate) || 0;
+        const advFee     = Number(co.advisory_fee) || 0;
+        // 日別売上
+        const tSales = (sales || []).filter(r => r.therapist_id === t.id);
+        // 日ごとにグループ化
+        const dayMap = {};
+        tSales.forEach(r => {
+          const d = new Date(r.date);
+          const key = `${d.getMonth()+1}/${d.getDate()}`;
+          if (!dayMap[key]) dayMap[key] = 0;
+          dayMap[key] += Number(r.course_price) || 0;
+        });
+        const days = Object.entries(dayMap).map(([date, courseTotal]) => ({
+          date,
+          sb: Math.round(courseTotal * courseBack * backRate)
+        }));
+        // 出勤日数
+        const workDays = (shifts || []).filter(r => r.therapist_name === t.name).length;
+        const totalSb  = days.reduce((s, d) => s + d.sb, 0);
+        const advisory = workDays * advFee;
+        return {
+          therapistId: t.id, therapistName: t.name,
+          companyId: co.id, companyName: co.name,
+          backRate: backRate, advisoryFee: advFee, courseBack: courseBack,
+          workDays, totalSb, advisory, total: totalSb + advisory, days
+        };
+      }).filter(Boolean);
     }
 
     // ===== トークン認証 =====
@@ -3585,6 +3747,7 @@ function showPage(name) {
   if (name === 'master-mgmt')      initMasterMgmt();
   if (name === 'sales-input') initSalesInput();
   if (name === 'checkout')    loadCheckoutPage();
+  if (name === 'scout')       loadScoutSummary();
 }
 
 // ============================================================
@@ -3640,6 +3803,11 @@ async function init() {
 
 function startAdminMode() {
   showMainApp();
+  // 神栖店（Premium）のみスカウトタブを表示
+  if (STORE_ID === '33333333-0000-0000-0000-000000000003') {
+    const scoutTab = document.getElementById('tab-scout');
+    if (scoutTab) scoutTab.style.display = '';
+  }
   // 店舗名を表示
   _sb.from('stores').select('name').eq('id', STORE_ID).single()
     .then(({ data }) => {
@@ -7924,22 +8092,265 @@ async function loadTherapistMaster() {
   try {
     const data = await apiGetCached('getTherapistMaster', {});
     if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">データなし</p>'; return; }
+    const isKamisu = STORE_ID === '33333333-0000-0000-0000-000000000003';
+    // 神栖店の場合はスカウト紐付けを取得
+    let scoutMap = {};
+    if (isKamisu) {
+      try {
+        const { data: scouts } = await _sb.from('therapist_scouts')
+          .select('therapist_id, scout_companies(name)')
+          .eq('store_id', STORE_ID).eq('active', true);
+        (scouts || []).forEach(s => { scoutMap[s.therapist_id] = s.scout_companies?.name || ''; });
+      } catch(e) { console.warn('scout fetch error', e); }
+    }
     el.innerHTML = `<div class="table-wrap"><table>
-      <thead><tr><th>名前</th><th>コースバック</th><th>インターバル</th><th>メール</th></tr></thead>
+      <thead><tr><th>名前</th><th>コースバック</th><th>インターバル</th><th>メール</th>${isKamisu ? '<th>スカウト</th>' : ''}</tr></thead>
       <tbody>${data.map(t => `
         <tr>
           <td style="font-weight:600">${t.name}</td>
           <td>${t.courseBack !== '' ? Math.round(t.courseBack * 100) + '%' : '未設定'}</td>
           <td>${t.interval}分</td>
           <td style="font-size:12px;color:var(--muted)">${t.email || '-'}</td>
+          ${isKamisu ? `<td>
+            ${scoutMap[t.id]
+              ? `<span style="font-size:12px;background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:10px;margin-right:6px">${scoutMap[t.id]}</span>`
+              : ''}
+            <button class="btn btn-sm" style="font-size:12px;padding:3px 10px" onclick="openScoutModal('${t.id}','${t.name}')">🔍 スカウト</button>
+          </td>` : ''}
         </tr>`).join('')}
       </tbody></table></div>`;
   } catch(e) { el.innerHTML = '<p style="color:red">' + e.message + '</p>'; }
 }
 
-
 // ============================================================
-// シフトカレンダー（週間表示）
+// スカウトモード
+// ============================================================
+let _scoutTargetId   = null;  // 設定中のtherapist_id
+let _scoutCompanies  = [];    // 会社マスタキャッシュ
+
+async function openScoutModal(therapistId, therapistName) {
+  _scoutTargetId = therapistId;
+  document.getElementById('scout-modal-title').textContent = `🔍 スカウト設定 — ${therapistName}`;
+
+  // 会社一覧を取得
+  _scoutCompanies = await apiGet('getScoutCompanies', {});
+
+  // セレクトを構築
+  const sel = document.getElementById('scout-company-sel');
+  sel.innerHTML = '<option value="">— 未設定 —</option>'
+    + _scoutCompanies.map(c => `<option value="${c.id}">${c.name}</option>`).join('')
+    + '<option value="__new__">＋ 新規会社を登録...</option>';
+
+  // 現在の紐付けを取得して初期選択
+  const current = await apiGet('getTherapistScout', { therapist_id: therapistId });
+  if (current) {
+    sel.value = current.company_id;
+    document.getElementById('scout-modal-remove-btn').style.display = '';
+  } else {
+    sel.value = '';
+    document.getElementById('scout-modal-remove-btn').style.display = 'none';
+  }
+
+  onScoutCompanyChange();
+  _showModal('scout-modal');
+}
+
+function onScoutCompanyChange() {
+  const val  = document.getElementById('scout-company-sel').value;
+  const info = document.getElementById('scout-company-info');
+  const form = document.getElementById('scout-new-company-form');
+
+  if (val === '__new__') {
+    form.style.display = '';
+    info.style.display = 'none';
+    return;
+  }
+  form.style.display = 'none';
+
+  const co = _scoutCompanies.find(c => c.id === val);
+  if (co) {
+    document.getElementById('scout-info-rate').textContent = (co.back_rate * 100) + '%';
+    document.getElementById('scout-info-fee').textContent  = '¥' + Number(co.advisory_fee).toLocaleString() + '/日';
+    info.style.display = '';
+  } else {
+    info.style.display = 'none';
+  }
+}
+
+async function saveTherapistScout() {
+  const sel = document.getElementById('scout-company-sel');
+  let companyId = sel.value;
+
+  if (!companyId) {
+    alert('紹介元会社を選択してください');
+    return;
+  }
+
+  // 新規会社の場合は先に登録
+  if (companyId === '__new__') {
+    const name = document.getElementById('scout-new-name').value.trim();
+    const rate = parseFloat(document.getElementById('scout-new-rate').value) / 100;
+    const fee  = parseInt(document.getElementById('scout-new-fee').value) || 0;
+    if (!name) { alert('会社名を入力してください'); return; }
+    try {
+      const newCo = await apiGet('saveScoutCompany', { name, back_rate: rate, advisory_fee: fee });
+      companyId = newCo.id;
+      _scoutCompanies.push(newCo);
+    } catch(e) { alert('会社登録エラー: ' + e.message); return; }
+  }
+
+  try {
+    await apiGet('saveTherapistScout', { therapist_id: _scoutTargetId, company_id: companyId });
+    _hideModal('scout-modal');
+    clearCache('getTherapistMaster');
+    loadTherapistMaster();
+  } catch(e) { alert('保存エラー: ' + e.message); }
+}
+
+async function removeTherapistScout() {
+  if (!await _confirm('スカウト紐付けを解除しますか？')) return;
+  try {
+    await apiGet('deleteTherapistScout', { therapist_id: _scoutTargetId });
+    _hideModal('scout-modal');
+    clearCache('getTherapistMaster');
+    loadTherapistMaster();
+  } catch(e) { alert('解除エラー: ' + e.message); }
+}
+
+// ===== スカウト集計 =====
+async function loadScoutSummary() {
+  const listEl = document.getElementById('scout-summary-list');
+  if (!listEl) return;
+
+  // 月セレクタの初期値（当月）
+  const monthSel = document.getElementById('scout-month-sel');
+  if (!monthSel.value) {
+    const now = new Date();
+    monthSel.value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  }
+  const month = monthSel.value;
+
+  listEl.innerHTML = '<p style="color:var(--muted)">集計中...</p>';
+  try {
+    const rows = await apiGet('getScoutSummary', { month });
+    if (!rows.length) {
+      listEl.innerHTML = '<p style="color:var(--muted)">スカウト対象のセラピストがいません</p>';
+      return;
+    }
+
+    // 会社ごとにグループ化
+    const byCompany = {};
+    rows.forEach(r => {
+      if (!byCompany[r.companyId]) byCompany[r.companyId] = {
+        name: r.companyName, backRate: r.backRate, advisoryFee: r.advisoryFee,
+        rows: [], totalSb: 0, totalAdv: 0
+      };
+      byCompany[r.companyId].rows.push(r);
+      byCompany[r.companyId].totalSb  += r.totalSb;
+      byCompany[r.companyId].totalAdv += r.advisory;
+    });
+
+    listEl.innerHTML = Object.entries(byCompany).map(([cid, co]) => {
+      const grand = co.totalSb + co.totalAdv;
+
+      const therapistRows = co.rows.map(t => {
+        const dayRows = t.days.map(d =>
+          `<tr style="background:var(--bg)">
+            <td style="padding-left:28px;font-size:12px;color:var(--muted)">${d.date}</td>
+            <td colspan="3" style="font-size:12px;color:var(--accent);text-align:right">¥${d.sb.toLocaleString()}</td>
+          </tr>`
+        ).join('');
+        const expanded = document.getElementById(`scout-row-${t.therapistId}`)?.dataset.expanded === '1';
+        return `
+          <tr id="scout-row-${t.therapistId}" data-expanded="0" onclick="toggleScoutRow('${t.therapistId}')" style="cursor:pointer">
+            <td style="font-weight:600">
+              <span id="scout-chevron-${t.therapistId}" style="font-size:11px;margin-right:4px;color:var(--muted)">▶</span>${t.therapistName}
+            </td>
+            <td style="text-align:right">${t.workDays}日</td>
+            <td style="text-align:right;color:var(--accent);font-weight:600">¥${t.totalSb.toLocaleString()}</td>
+            <td style="text-align:right;color:var(--muted)">¥${t.advisory.toLocaleString()}</td>
+          </tr>
+          <tbody id="scout-days-${t.therapistId}" style="display:none">${dayRows}</tbody>`;
+      }).join('');
+
+      return `
+        <div class="card" style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--bg);border-bottom:1px solid var(--border)">
+            <div>
+              <span style="font-weight:700;font-size:15px">${co.name}</span>
+              <span style="font-size:11px;color:var(--muted);margin-left:10px">バック率 ${Math.round(co.backRate*100)}% / 顧問料 ¥${Number(co.advisoryFee).toLocaleString()}/日</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <div style="text-align:right">
+                <div style="font-size:11px;color:var(--muted)">${co.name}合計</div>
+                <div style="font-size:18px;font-weight:700;color:var(--success)">¥${grand.toLocaleString()}</div>
+              </div>
+              <button class="btn btn-sm" onclick="copyScoutDetail('${cid}')" id="scout-copy-btn-${cid}">📋 明細コピー</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table style="width:100%">
+              <thead><tr>
+                <th style="text-align:left">セラピスト</th>
+                <th style="text-align:right">出勤日数</th>
+                <th style="text-align:right">SB合計</th>
+                <th style="text-align:right">顧問料</th>
+              </tr></thead>
+              ${therapistRows}
+              <tfoot><tr style="background:var(--bg);font-weight:700;border-top:2px solid var(--border)">
+                <td colspan="2" style="font-size:12px;color:var(--muted)">${co.name}合計</td>
+                <td style="text-align:right;color:var(--accent)">¥${co.totalSb.toLocaleString()}</td>
+                <td style="text-align:right;color:var(--muted)">¥${co.totalAdv.toLocaleString()}</td>
+              </tfoot>
+            </table>
+          </div>
+        </div>`;
+    }).join('');
+
+    // 集計データをグローバルに保持（コピー用）
+    window._scoutByCompany = byCompany;
+
+  } catch(e) {
+    listEl.innerHTML = '<p style="color:red">エラー: ' + e.message + '</p>';
+  }
+}
+
+function toggleScoutRow(therapistId) {
+  const row     = document.getElementById(`scout-row-${therapistId}`);
+  const days    = document.getElementById(`scout-days-${therapistId}`);
+  const chevron = document.getElementById(`scout-chevron-${therapistId}`);
+  if (!row || !days) return;
+  const isExp = row.dataset.expanded === '1';
+  row.dataset.expanded    = isExp ? '0' : '1';
+  days.style.display      = isExp ? 'none' : '';
+  chevron.textContent     = isExp ? '▶' : '▼';
+}
+
+async function copyScoutDetail(companyId) {
+  const co = window._scoutByCompany?.[companyId];
+  if (!co) return;
+  const grand = co.totalSb + co.totalAdv;
+  const month = document.getElementById('scout-month-sel').value;
+  const [y, m] = month.split('-');
+  const monthLabel = `${y}年${parseInt(m)}月`;
+
+  const lines = [
+    `【${co.name}　${monthLabel}】`,
+    `${co.name}\tSB合計 ¥${co.totalSb.toLocaleString()}\t顧問料合計 ¥${co.totalAdv.toLocaleString()}\t合計 ¥${grand.toLocaleString()}`,
+    ''
+  ];
+  co.rows.forEach(t => {
+    t.days.forEach(d => {
+      lines.push(`明細\t${t.therapistName}\t${d.date}\tSB ¥${d.sb.toLocaleString()}`);
+    });
+  });
+
+  try {
+    await _copyToClipboard(lines.join('\n'));
+    const btn = document.getElementById(`scout-copy-btn-${companyId}`);
+    if (btn) { btn.textContent = '✅ コピー済み'; setTimeout(() => { btn.textContent = '📋 明細コピー'; }, 2000); }
+  } catch(e) { alert('コピー失敗: ' + e.message); }
+}
 // ============================================================
 let _calendarWeekOffset = 0; // 0=今週, 1=来週, -1=先週
 
