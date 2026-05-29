@@ -618,7 +618,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         </div>
         <div class="form-group">
           <label>セラピスト</label>
-          <select id="resv-therapist" onchange="checkInterval();populateNominationSelects(this.value);checkAutoHonshimei(document.getElementById('resv-customer-no').value,null)"></select>
+          <select id="resv-therapist" onchange="checkInterval();populateNominationSelects(this.value)"></select>
         </div>
       </div>
       <div class="grid2">
@@ -6960,7 +6960,9 @@ async function checkAutoHonshimei(customerNo, infoEl) {
     const therapistName = document.getElementById('resv-therapist').value;
     const tel = document.getElementById('resv-customer-tel-full').value.trim()
              || document.getElementById('resv-customer-tel').value.trim();
-    if (!therapistName || !tel) {
+    // お客様名または電話番号が未入力の場合は自動昇格しない
+    const customerName = document.getElementById('resv-customer-name')?.value?.trim() || '';
+    if (!therapistName || !tel || !customerName) {
       if (infoEl) { infoEl.textContent = '✓ 顧客情報を取得しました'; infoEl.style.color = 'var(--success)'; }
       return;
     }
