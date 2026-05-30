@@ -819,8 +819,6 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       </div>
       <div id="cal-unsubmitted-list">読み込み中...</div>
     </div>
-    <!-- 来週シフト締め切りバナー（管理者・締め切り中のみ表示） -->
-    <div id="shift-deadline-banner" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13px;font-weight:700;color:#b91c1c;text-align:center"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:8px">
         <button onclick="changeCalendarWeek(-1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">◀</button>
@@ -829,9 +827,13 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-secondary btn-sm" onclick="loadShiftCalendar()">更新</button>
-        <button class="btn btn-sm" id="btn-shift-deadline" style="display:none;background:#dc2626;color:#fff;border-color:#dc2626" onclick="toggleShiftDeadline()">🔒 来週シフト締め切り</button>
         <button class="btn btn-sm" id="btn-notify-all-shifts" style="display:none;background:#06c755;color:#fff;border-color:#06c755" onclick="notifyAllApprovedShifts()">📨 まとめて通知</button>
       </div>
+    </div>
+    <!-- 来週シフト締め切りボタン・バナー（管理者のみ） -->
+    <div id="shift-deadline-banner" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:13px;font-weight:700;color:#b91c1c;text-align:center"></div>
+    <div id="shift-deadline-btn-wrap" style="display:none;margin-bottom:10px">
+      <button class="btn btn-sm" id="btn-shift-deadline" style="width:100%;background:#dc2626;color:#fff;border-color:#dc2626" onclick="toggleShiftDeadline()">🔒 来週シフト締め切り</button>
     </div>
     <!-- 表示切替 -->
     <div style="display:flex;gap:6px;margin-bottom:10px">
@@ -8605,8 +8607,9 @@ async function loadShiftCalendar() {
         const settings = await apiGet('getStoreSettings');
         const deadline = settings.shift_deadline || '';
         const deadlineBtn = document.getElementById('btn-shift-deadline');
+        const deadlineBtnWrap = document.getElementById('shift-deadline-btn-wrap');
         const deadlineBanner = document.getElementById('shift-deadline-banner');
-        if (deadlineBtn) deadlineBtn.style.display = '';
+        if (deadlineBtnWrap) deadlineBtnWrap.style.display = '';
         if (deadline) {
           // 来週の月〜日を計算して表示
           const monDate = new Date(deadline + 'T12:00:00');
