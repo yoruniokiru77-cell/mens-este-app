@@ -3524,20 +3524,24 @@ case 'verifyTokenAction': {
       // customer_tel を収集（telベースで統一）
       const custTels = [...new Set(rows.map(r => r.customer_tel).filter(Boolean))];
 
+      // 来店回数: reservationsテーブルのキャンセル以外（顧客詳細の来店履歴と同じ基準）
       const visitMap = {}; // customer_tel → 自分への来店回数
-      const countedResvIds = new Set(); // reservation_id単位で重複カウント防止
 
-      // customer_tel で sales 検索（reservation_idで重複排除）
       if (custTels.length) {
-        const { data: salesData } = await _sb.from('sales')
-          .select('customer_tel, therapist_name, reservation_id')
+        const { data: resvHist } = await _sb.from('reservations')
+          .select('customer_tel, therapist_name, date')
           .eq('store_id', STORE_ID)
-          .in('customer_tel', custTels);
-        (salesData || []).forEach(s => {
-          if (!s.customer_tel || s.therapist_name !== params.therapist) return;
-          if (s.reservation_id && countedResvIds.has(s.reservation_id)) return;
-          visitMap[s.customer_tel] = (visitMap[s.customer_tel] || 0) + 1;
-          if (s.reservation_id) countedResvIds.add(s.reservation_id);
+          .in('customer_tel', custTels)
+          .eq('therapist_name', params.therapist)
+          .neq('status', 'cancelled');
+        // 日付単位で重複排除（同日同セラピストへの予約を1回としてカウント）
+        const countedKeys = new Set();
+        (resvHist || []).forEach(r => {
+          if (!r.customer_tel) return;
+          const dayKey = r.customer_tel + '_' + (r.date || '').slice(0, 10);
+          if (countedKeys.has(dayKey)) return;
+          countedKeys.add(dayKey);
+          visitMap[r.customer_tel] = (visitMap[r.customer_tel] || 0) + 1;
         });
       }
 
