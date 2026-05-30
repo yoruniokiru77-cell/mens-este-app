@@ -18,25 +18,14 @@
 
 ---
 
-## デプロイURL
+## デプロイURL・店舗ID
 
-| 店舗 | URL |
-|---|---|
-| いわき（デフォルト） | https://mens-este-app.vercel.app |
-| 水戸 | https://mens-este-app.vercel.app/?store=22222222-0000-0000-0000-000000000002 |
-| 神栖 | https://mens-este-app.vercel.app/?store=33333333-0000-0000-0000-000000000003 |
-| NEVERLAND | https://mens-este-app.vercel.app/?store=44444444-0000-0000-0000-000000000004 |
-
----
-
-## 店舗ID
-
-| 店舗 | store_id |
-|---|---|
-| いわき（HerRoom） | 11111111-0000-0000-0000-000000000001 |
-| 水戸（Reメンズエステ） | 22222222-0000-0000-0000-000000000002 |
-| 神栖（Premium） | 33333333-0000-0000-0000-000000000003 |
-| NEVERLAND | 44444444-0000-0000-0000-000000000004 |
+| 店舗 | URL | store_id |
+|---|---|---|
+| いわき（デフォルト） | https://mens-este-app.vercel.app | 11111111-0000-0000-0000-000000000001 |
+| 水戸 | https://mens-este-app.vercel.app/?store=22222222... | 22222222-0000-0000-0000-000000000002 |
+| 神栖 | https://mens-este-app.vercel.app/?store=33333333... | 33333333-0000-0000-0000-000000000003 |
+| NEVERLAND | https://mens-este-app.vercel.app/?store=44444444... | 44444444-0000-0000-0000-000000000004 |
 
 ---
 
@@ -59,7 +48,7 @@
 # 影響範囲の確認
 grep -n "対象の関数名や変数名" index.html
 
-# 構文チェック
+# 構文チェック（必須）
 sed -n '/<script>$/,/<\/script>/p' index.html | sed '1d;$d' > /tmp/check.js
 node --check /tmp/check.js
 ```
@@ -85,8 +74,9 @@ node --check /tmp/check.js
 ### 顧客識別
 - **電話番号（tel）を主キーとして使用**
 - `customer_no` は廃止（カラムは残存しているが使用しない）
-- 来店回数は `reservations` テーブル（キャンセル除く）で集計（`sales` テーブルは使わない）
-- 管理者・セラピスト両画面で同じ基準を使うこと
+- **来店回数は `reservations` テーブル（キャンセル除く）のみで集計**（salesテーブルは使わない）
+- 管理者・セラピスト・顧客詳細の3画面で同じ基準を使うこと
+- 日付単位で重複排除（同日複数予約を1回とカウント）
 
 ### 27時ルール
 - 深夜0〜2時台の予約・売上は**前日扱い**（T03:00〜翌T02:59）
@@ -109,19 +99,22 @@ node --check /tmp/check.js
 - `therapists` キャッシュ未ロード時は `getTherapistInterval` APIでDB直接取得
 - DB取得失敗時はデフォルト30分にフォールバック
 - **修正対象は3関数**：`updateResvRow` / `submitReservation` / `saveAndSendLine`
+- `getReservations` の返り値に `rawDate`（元のISO文字列）を含む。重複チェック・案内テキスト生成では `r.rawDate` を使うこと
 
 ### 本指名自動昇格
 - `checkAutoHonshimei()` はお客様名・電話番号・セラピスト名の**3つが全部揃っている時だけ**実行する
 - セラピスト選択（onchange）では呼び出さない
 
-### 来店回数
-- `reservations` テーブル（キャンセル除く）のみで集計
-- 日付単位で重複排除（同日複数予約を1回とカウント）
-- `sales` テーブルとの二重カウントNG
-- 管理者・セラピスト・顧客詳細の3画面で同じ基準
+### 日時フォーマット
+- `showResvCompleteModal`・`updateResvRow`・`submitReservation` では `_fmtLocalDatetimeJp(dateVal)` を使う
+- `_fmtDatetimeJp` はISO文字列（サーバーから返ってくる値）用、`_fmtLocalDatetimeJp` はローカル日時文字列（フォームのvalue）用
 
 ### シフトカレンダーの並び順
-- 承認済みシフトあり → 提出済み（pending/rejected）シフトあり → シフトなし の順
+- 承認済みシフトあり → 提出済み（pending/rejected）あり → シフトなし の順
+
+### 予約一覧セラピストヘッダー
+- `flex-wrap:wrap` を使わない（改行する）
+- `white-space:nowrap` + `overflow:hidden` で1行に固定
 
 ### 顧客メモ絞り込み
 - `customer_id` で絞り込む（`customer_no` での結合フィルタは機能しない）
@@ -153,7 +146,6 @@ sale_options, registration_states, scout_companies, therapist_scouts
 - `cancel_reason` text — キャンセル理由
 - `is_hime` / `is_hime_approved` — 姫予約フラグ
 - `status` — active / cancelled
-- `rawDate` — getReservations返り値に含まれる元のISO文字列
 
 #### sales（売上データ）
 - `customer_tel` — 来店回数・新規客判定に使用
@@ -261,3 +253,18 @@ Supabaseのスキーマ変更後は「API → Reload schema」でキャッシュ
 | シフト | 今週・来週の承認済みシフトを返信 |
 | 金庫 | 金庫管理画面URLを発行（いわき店のみ） |
 | 確認 | 給料確認（confirmed_atを更新） |
+
+---
+
+## セッション15（2026/5/28〜5/30）で実施した主な修正
+
+| # | 内容 |
+|---|---|
+| 1 | 予約重複チェックでtherapistsキャッシュ未ロード時にinterval=0になるバグ修正（3箇所） |
+| 2 | スカウトモード実装（神栖店のみ）— DBテーブル・API・UI・集計・コピー機能 |
+| 3 | 予約変更時の案内テキストで時刻が「undefined」になるバグ修正（`_fmtLocalDatetimeJp`新規追加） |
+| 4 | 来店回数をreservationsテーブルのみに統一（管理者・セラピスト・顧客詳細の3画面） |
+| 5 | 本指名自動昇格がお客様名未入力でも発動するバグ修正 |
+| 6 | シフトカレンダーの並び順を「承認済み→提出済み→なし」に変更 |
+| 7 | 予約一覧セラピストヘッダーの改行を修正（flex-wrap削除） |
+| 8 | getReservationsの返り値にrawDate追加（日時パース問題の根本対策） |
