@@ -8617,9 +8617,12 @@ async function loadShiftCalendar() {
             deadlineBanner.style.display = '';
           }
           if (deadlineBtn) {
-            deadlineBtn.textContent = '🔓 来週シフト締め切り解除';
+            deadlineBtn.textContent = fmt(monDate) + '〜' + fmt(sunDate) + ' 締切済';
             deadlineBtn.style.background = '#6b7280';
             deadlineBtn.style.borderColor = '#6b7280';
+            deadlineBtn.disabled = true;
+            deadlineBtn.style.opacity = '0.7';
+            deadlineBtn.style.cursor = 'not-allowed';
           }
         } else {
           if (deadlineBanner) deadlineBanner.style.display = 'none';
@@ -8627,6 +8630,9 @@ async function loadShiftCalendar() {
             deadlineBtn.textContent = '🔒 来週シフト締め切り';
             deadlineBtn.style.background = '#dc2626';
             deadlineBtn.style.borderColor = '#dc2626';
+            deadlineBtn.disabled = false;
+            deadlineBtn.style.opacity = '';
+            deadlineBtn.style.cursor = '';
           }
         }
       } catch(e2) { console.warn('締め切り状態取得エラー:', e2); }
@@ -12294,27 +12300,18 @@ async function notifyShiftToTherapist(therapistName) {
 async function toggleShiftDeadline() {
   try {
     showOverlay();
-    const settings = await apiGet('getStoreSettings');
-    const current = settings.shift_deadline || '';
-    if (current) {
-      // 解除
-      if (!confirm('来週のシフト締め切りを解除しますか？')) { hideOverlay(); return; }
-      await apiGet('saveStoreSettings', { shift_deadline: '' });
-      showToast('✅ シフト締め切りを解除しました');
-    } else {
-      // 設定：来週の月曜日を計算
-      const today = new Date();
-      const day = today.getDay(); // 0=日, 1=月...
-      const daysToNextMon = (8 - day) % 7 || 7; // 次の月曜まで何日
-      const nextMon = new Date(today);
-      nextMon.setDate(today.getDate() + daysToNextMon);
-      const nextMonStr = nextMon.getFullYear() + '-' + String(nextMon.getMonth()+1).padStart(2,'0') + '-' + String(nextMon.getDate()).padStart(2,'0');
-      const nextSun = new Date(nextMon); nextSun.setDate(nextMon.getDate() + 6);
-      const fmt = d => (d.getMonth()+1) + '/' + d.getDate();
-      if (!confirm('来週（' + fmt(nextMon) + '〜' + fmt(nextSun) + '）のシフトを締め切りますか？')) { hideOverlay(); return; }
-      await apiGet('saveStoreSettings', { shift_deadline: nextMonStr });
-      showToast('🔒 来週のシフトを締め切りました');
-    }
+    // 設定：来週の月曜日を計算
+    const today = new Date();
+    const day = today.getDay(); // 0=日, 1=月...
+    const daysToNextMon = (8 - day) % 7 || 7;
+    const nextMon = new Date(today);
+    nextMon.setDate(today.getDate() + daysToNextMon);
+    const nextMonStr = nextMon.getFullYear() + '-' + String(nextMon.getMonth()+1).padStart(2,'0') + '-' + String(nextMon.getDate()).padStart(2,'0');
+    const nextSun = new Date(nextMon); nextSun.setDate(nextMon.getDate() + 6);
+    const fmt = d => (d.getMonth()+1) + '/' + d.getDate();
+    if (!confirm('来週（' + fmt(nextMon) + '〜' + fmt(nextSun) + '）のシフトを締め切りますか？')) { hideOverlay(); return; }
+    await apiGet('saveStoreSettings', { shift_deadline: nextMonStr });
+    showToast('🔒 来週のシフトを締め切りました');
     loadShiftCalendar();
   } catch(e) {
     alert('エラー: ' + e.message);
