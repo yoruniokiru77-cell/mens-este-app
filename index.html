@@ -7,66 +7,49 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* ============================================================
-   E-Studio Design System v2
-   管理者: Silver × Gold Luxury
-   セラピスト: Pastel × Feminine
+   shadcn/ui inspired design system
+   管理者: ニュートラルグレー × シャープ
+   セラピスト: ローズパステル × やわらか
    ============================================================ */
 :root {
-  /* ── ゴールド ── */
-  --gold:        #C9A84C;
-  --gold-light:  #F0DFA0;
-  --gold-dark:   #8B6914;
-  /* ── チャコール（ナビ・サイドバー） ── */
-  --charcoal:    #1C1C2E;
-  --charcoal2:   #252540;
-  --charcoal3:   #2E2E50;
-  /* ── シルバー ── */
-  --silver:      #9CA3AF;
-  /* ── ベース ── */
-  --bg:          #F8F8FB;
-  --surface:     #FFFFFF;
-  --border:      #E5E7EB;
-  --text:        #1C1C2E;
-  --muted:       #6B7280;
-  /* ── 旧変数の互換エイリアス ── */
-  --primary:     #1C1C2E;
-  --accent:      #C9A84C;
-  --accent2:     #F0DFA0;
-  --text-muted:  #6B7280;
-  --input-bg:    #FAFAFA;
-  /* ── ステータス ── */
-  --success:     #10B981;
-  --warning:     #F59E0B;
-  --danger:      #EF4444;
-  /* ── シャドウ ── */
-  --shadow:      0 2px 12px rgba(0,0,0,.07);
-  --shadow-md:   0 4px 20px rgba(201,168,76,.15);
-  --shadow-gold: 0 4px 20px rgba(201,168,76,.25);
-  /* ── 形状 ── */
-  --radius:      8px;
-  --radius-lg:   12px;
-  --nav-h:       52px;
-  --bottom-h:    64px;
-  --ring:        0 0 0 2px #fff, 0 0 0 4px var(--gold);
+  /* ── 管理者ベース（shadcn/ui準拠） ── */
+  --bg:       #f8fafc;
+  --surface:  #ffffff;
+  --primary:  #0f172a;
+  --accent:   #e94560;
+  --accent2:  #3b82f6;
+  --text:     #0f172a;
+  --muted:    #64748b;
+  --border:   #e2e8f0;
+  --input-bg: #ffffff;
+  --success:  #10b981;
+  --warning:  #f59e0b;
+  --radius:   8px;
+  --radius-lg:12px;
+  --shadow:   0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -1px rgba(0,0,0,0.04);
+  --nav-h:    52px;
+  --bottom-h: 64px;
+  --ring:     0 0 0 2px #fff, 0 0 0 4px var(--accent);
 }
 
 /* ── セラピストモード専用変数（bodyにtherapist-mode付与時） ── */
 body.therapist-mode {
-  --bg:       #FFF0F5;
-  --surface:  #FFFFFF;
-  --primary:  #3D1B5E;
-  --accent:   #E56FA8;
-  --accent2:  #C3A8FF;
-  --text:     #3D1B5E;
-  --muted:    #9B6BA8;
-  --border:   #FFD6E8;
-  --input-bg: #FFF9FB;
-  --success:  #10B981;
-  --warning:  #F59E0B;
+  --bg:       #fff5f7;
+  --surface:  #ffffff;
+  --primary:  #be185d;
+  --accent:   #e94560;
+  --accent2:  #f472b6;
+  --text:     #4a1942;
+  --muted:    #9d6b8a;
+  --border:   #fce7f3;
+  --input-bg: #fff9fb;
+  --success:  #10b981;
+  --warning:  #f59e0b;
   --radius:   14px;
   --radius-lg:18px;
-  --shadow:   0 2px 12px rgba(255,138,180,.08);
-  --shadow-md:0 4px 20px rgba(255,138,180,.15);
+  --shadow:   0 2px 12px rgba(233,69,96,0.06);
+  --shadow-md:0 4px 20px rgba(233,69,96,0.1);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -79,17 +62,17 @@ body {
   transition: background .3s, color .3s;
 }
 
-/* ========== 管理者ナビ（Gold Luxury） ========== */
+/* ========== 管理者ナビ（shadcn準拠） ========== */
 #nav {
-  background: linear-gradient(180deg, var(--charcoal), var(--charcoal2));
+  background: var(--primary);
   display: flex; overflow-x: auto;
   -webkit-overflow-scrolling: touch; scrollbar-width: none;
   position: sticky; top: 0; z-index: 100; height: var(--nav-h);
-  border-bottom: 1px solid rgba(201,168,76,.3);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 #nav::-webkit-scrollbar { display: none; }
 #nav button {
-  color: rgba(255,255,255,.45);
+  color: rgba(255,255,255,.5);
   background: none; border: none;
   padding: 0 16px; cursor: pointer; white-space: nowrap;
   font-size: 13px; font-weight: 500; letter-spacing: 0.01em;
@@ -97,8 +80,8 @@ body {
   transition: color .15s, border-color .15s;
   height: var(--nav-h); flex-shrink: 0;
 }
-#nav button:hover { color: var(--gold-light); }
-#nav button.active { color: var(--gold-light); border-bottom-color: var(--gold); }
+#nav button:hover { color: rgba(255,255,255,.8); }
+#nav button.active { color: #fff; border-bottom-color: var(--accent); }
 
 /* ========== セラピスト ボトムナビ ========== */
 #bottom-nav {
@@ -123,9 +106,8 @@ body.therapist-mode #bottom-nav button.active {
   border-top-color: var(--accent);
 }
 body.therapist-mode #bottom-nav {
-  background: linear-gradient(to top, #FFF0F5, #FFFFFF);
-  box-shadow: 0 -4px 20px rgba(255,138,180,.12);
-  border-top-color: rgba(255,183,209,.4);
+  background: linear-gradient(to top, #fff5f7, #ffffff);
+  box-shadow: 0 -4px 20px rgba(233,69,96,0.08);
 }
 #bottom-nav button.active { color: var(--accent); border-top-color: var(--accent); }
 #bottom-nav button .icon { font-size: 22px; line-height: 1; }
@@ -150,36 +132,18 @@ body.therapist-mode .page {
   border-radius: var(--radius-lg);
   padding: 16px;
   margin-bottom: 12px;
-  border: 1px solid rgba(201,168,76,.2);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow);
   transition: border-color .15s, box-shadow .15s;
 }
-.card:not(body.therapist-mode .card):hover {
-  border-color: rgba(201,168,76,.38);
-  box-shadow: 0 4px 16px rgba(201,168,76,.12);
-}
-/* ゴールドKPIカード（ダーク） */
-.card-gold {
-  background: linear-gradient(135deg, var(--charcoal2), var(--charcoal3));
-  border: 1px solid rgba(201,168,76,.4);
-  box-shadow: 0 4px 20px rgba(201,168,76,.2);
-}
-.card-gold .card-title { color: var(--gold); letter-spacing:.08em; }
-.card-gold .card-value { color: var(--gold-light); }
 body.therapist-mode .card {
-  border-color: rgba(255,182,193,.3);
-  box-shadow: 0 4px 20px rgba(180,130,200,.1);
+  border-color: var(--border);
+  box-shadow: var(--shadow-md);
 }
-body.therapist-mode .card:hover {
-  box-shadow: 0 6px 24px rgba(255,138,180,.15);
-  border-color: rgba(255,182,193,.5);
-  transform: translateY(-1px);
-  transition: all .2s;
-}
-.card-title { font-size: 11px; color: var(--muted); margin-bottom: 3px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.card-title { font-size: 11px; color: var(--muted); margin-bottom: 3px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 .card-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 
-/* ========== フォーム ========== */
+/* ========== フォーム（shadcn Input） ========== */
 .form-group { margin-bottom: 14px; }
 label {
   display: block; font-size: 12px; color: var(--muted);
@@ -196,14 +160,13 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus {
   outline: none;
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px rgba(201,168,76,.15);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(233,69,96,0.12);
 }
 body.therapist-mode input:focus,
 body.therapist-mode select:focus,
 body.therapist-mode textarea:focus {
-  border-color: #FF8AB4;
-  box-shadow: 0 0 0 3px rgba(255,138,180,.2);
+  box-shadow: 0 0 0 3px rgba(244,114,182,0.2);
 }
 input[type=number] { -moz-appearance: textfield; }
 input[type=range] {
@@ -215,7 +178,7 @@ input[type=range]::-webkit-slider-runnable-track {
   height: 4px;
   background: repeating-linear-gradient(
     to right,
-    var(--gold) 0px, var(--gold) 6px,
+    var(--accent2) 0px, var(--accent2) 6px,
     transparent 6px, transparent 10px
   );
   border-radius: 2px;
@@ -224,7 +187,7 @@ input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
   width: 18px; height: 18px;
   border-radius: 50%;
-  background: var(--gold);
+  background: var(--accent2);
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0,0,0,0.2);
   margin-top: -7px;
@@ -234,7 +197,7 @@ input[type=range]::-moz-range-track {
   height: 4px;
   background: repeating-linear-gradient(
     to right,
-    var(--gold) 0px, var(--gold) 6px,
+    var(--accent2) 0px, var(--accent2) 6px,
     transparent 6px, transparent 10px
   );
   border-radius: 2px;
@@ -242,17 +205,17 @@ input[type=range]::-moz-range-track {
 input[type=range]::-moz-range-thumb {
   width: 18px; height: 18px;
   border-radius: 50%;
-  background: var(--gold);
+  background: var(--accent2);
   border: 2px solid #fff;
   box-shadow: 0 1px 4px rgba(0,0,0,0.2);
   cursor: pointer;
 }
 select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%236B7280' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 13px center; padding-right: 36px;
 }
 
-/* ========== ボタン ========== */
+/* ========== ボタン（shadcn Button） ========== */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 10px 18px; border-radius: var(--radius); border: 1px solid transparent;
@@ -263,18 +226,15 @@ select {
 }
 /* iOS タップ遅延解消 */
 a, button, [role="button"], select, label { touch-action: manipulation; }
-
-/* 管理者プライマリ: ゴールドグラデーション */
 .btn-primary {
-  background: linear-gradient(135deg, var(--gold-light), var(--gold));
-  color: var(--charcoal);
-  border-color: transparent;
-  box-shadow: 0 2px 10px rgba(201,168,76,.3);
+  background: var(--accent); color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 1px 2px rgba(233,69,96,0.2);
 }
-.btn-primary:hover { box-shadow: 0 4px 16px rgba(201,168,76,.5); filter: brightness(1.04); }
+.btn-primary:hover { filter: brightness(1.06); }
 .btn-primary:active { opacity: .88; transform: scale(.98); }
 
-/* secondary */
+/* secondary: shadcn secondary（ニュートラル） */
 .btn-secondary {
   background: var(--surface); color: var(--text);
   border-color: var(--border);
@@ -297,7 +257,7 @@ body.therapist-mode .btn-secondary {
 }
 .btn-danger:hover { background: #ffe4e6; }
 
-/* outline */
+/* outline（shadcn outline variant） */
 .btn-outline {
   background: transparent; color: var(--text);
   border-color: var(--border);
@@ -314,29 +274,25 @@ body.therapist-mode .btn-secondary {
 .btn-sm { padding: 5px 11px; font-size: 12px; border-radius: 6px; min-height: 30px; }
 .btn:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
 
-/* セラピストモードの主要ボタン: ピンクグラデーション */
+/* セラピストモードの主要ボタン：グラデーション */
 body.therapist-mode .btn-primary {
-  background: linear-gradient(135deg, #FFB7D1, #FF8AB4);
-  color: #fff;
+  background: linear-gradient(135deg, #e94560 0%, #f472b6 100%);
   border: none;
-  border-radius: 30px;
-  box-shadow: 0 4px 14px rgba(255,138,180,.35);
+  box-shadow: 0 4px 14px rgba(233,69,96,0.3);
 }
-body.therapist-mode .btn-primary:hover { box-shadow: 0 6px 20px rgba(255,138,180,.5); transform: translateY(-1px); }
 body.therapist-mode .btn-primary:active { transform: scale(.97); }
 
-/* ========== テーブル ========== */
-.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius); border: 1px solid rgba(201,168,76,.2); }
+/* ========== テーブル（shadcn Table） ========== */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius); border: 1px solid var(--border); }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th {
-  background: linear-gradient(135deg, var(--charcoal), var(--charcoal2));
-  color: var(--gold-light); padding: 9px 8px;
+  background: var(--bg); padding: 9px 8px;
   text-align: left; font-weight: 600; font-size: 11px;
-  border-bottom: 1px solid rgba(201,168,76,.3);
-  white-space: nowrap; letter-spacing: 0.05em;
+  color: var(--muted); border-bottom: 1px solid var(--border);
+  white-space: nowrap; letter-spacing: 0.03em;
 }
 td {
-  padding: 9px 8px; border-bottom: 1px solid rgba(201,168,76,.1);
+  padding: 9px 8px; border-bottom: 1px solid var(--border);
   vertical-align: middle; font-size: 12px;
 }
 tbody tr:last-child td { border-bottom: none; }
@@ -385,8 +341,8 @@ tbody tr:hover { background: var(--bg); }
   margin-bottom: 8px; display: flex; align-items: flex-start; gap: 10px;
   background: var(--surface);
 }
-.select-card:hover { border-color: var(--gold); background: rgba(201,168,76,.04); }
-.select-card.selected { border-color: var(--gold); background: rgba(201,168,76,.06); box-shadow: 0 0 0 3px rgba(201,168,76,.12); }
+.select-card:hover { border-color: var(--accent); background: #fff5f7; }
+.select-card.selected { border-color: var(--accent); background: #fff5f7; box-shadow: 0 0 0 3px rgba(233,69,96,0.08); }
 .select-card input[type="radio"] { margin-top: 2px; flex-shrink: 0; accent-color: var(--accent); width: 16px; height: 16px; }
 
 /* ========== オプション行 ========== */
@@ -402,20 +358,7 @@ tbody tr:hover { background: var(--bg); }
 
 /* ========== セクション ========== */
 .sec-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-.sec-title {
-  font-size: 16px; font-weight: 700; letter-spacing: -0.01em;
-  color: var(--charcoal);
-  position: relative;
-  padding-left: 10px;
-}
-.sec-title::before {
-  content: '';
-  position: absolute; left: 0; top: 50%;
-  transform: translateY(-50%);
-  width: 3px; height: 70%;
-  background: linear-gradient(180deg, var(--gold-light), var(--gold));
-  border-radius: 2px;
-}
+.sec-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
 
 /* ========== 日付ナビ ========== */
 .date-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -437,38 +380,32 @@ tbody tr:hover { background: var(--bg); }
 .filter-bar .form-group { margin-bottom: 0; flex: 1; min-width: 130px; }
 
 /* ========== その他 ========== */
-#course-price-display { font-size: 20px; font-weight: 700; color: var(--gold); margin-top: 4px; }
-.therapist-card { border-left: 3px solid var(--gold); }
+#course-price-display { font-size: 20px; font-weight: 700; color: var(--accent); margin-top: 4px; }
+.therapist-card { border-left: 3px solid var(--accent); }
 .therapist-card .card-value.pay { color: var(--success); }
-.therapist-card .card-value.store { color: var(--gold-dark); }
-.tab-active { background: rgba(201,168,76,.08); }
+.therapist-card .card-value.store { color: var(--accent2); }
+.tab-active { background: rgba(233,69,96,0.07); }
 
 /* ========== セラピストモード：特別なカードと演出 ========== */
 body.therapist-mode .sec-title {
-  background: linear-gradient(135deg, #FFB7D1, #C3A8FF);
+  background: linear-gradient(135deg, #e94560, #f472b6);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 body.therapist-mode .card:hover {
-  box-shadow: 0 6px 24px rgba(255,138,180,.15);
-  border-color: rgba(255,182,193,.4);
+  box-shadow: 0 6px 24px rgba(233,69,96,0.12);
+  border-color: #fce7f3;
   transform: translateY(-1px);
   transition: all .2s;
 }
-body.therapist-mode label { color: #9B6BA8; }
-body.therapist-mode .table-wrap { border-color: rgba(255,183,209,.3); }
-body.therapist-mode th { background: linear-gradient(135deg,#FFB7D1,#C3A8FF); color: #fff; border-color: rgba(255,183,209,.4); letter-spacing:.04em; }
-body.therapist-mode td { border-color: rgba(255,183,209,.2); }
-body.therapist-mode tbody tr:hover { background: #FFF5F7; }
-body.therapist-mode .badge-green { background: #E0FFF4; color: #065F46; }
-body.therapist-mode .toggle-switch input:checked + .toggle-slider { background: #FF8AB4; }
-body.therapist-mode .date-nav button { border-color: #FFD6E8; background: #FFF0F5; }
-body.therapist-mode .date-nav button:hover { background: #FFE4EF; }
-
-/* セラピスト予約カードの色分け */
-body.therapist-mode .resv-card-sales    { background: linear-gradient(135deg,#FFE4EF,#FFF0F5); border-color: rgba(255,182,193,.4); }
-body.therapist-mode .resv-card-shift    { background: linear-gradient(135deg,#E0FFF4,#F0FFF8); border-color: rgba(134,239,172,.4); }
-body.therapist-mode .resv-card-customer { background: linear-gradient(135deg,#FFF3E4,#FFF8F0); border-color: rgba(253,186,116,.4); }
+body.therapist-mode label { color: #9d6b8a; }
+body.therapist-mode th { background: #fff9fb; color: #9d6b8a; border-color: #fce7f3; }
+body.therapist-mode td { border-color: #fce7f3; }
+body.therapist-mode tbody tr:hover { background: #fff5f7; }
+body.therapist-mode .badge-green { background: #dcfce7; color: #15803d; }
+body.therapist-mode .toggle-switch input:checked + .toggle-slider { background: #f472b6; }
+body.therapist-mode .date-nav button { border-color: #fbcfe8; background: #fff0f5; }
+body.therapist-mode .date-nav button:hover { background: #fce7f3; }
 
 /* ========== iPhoneセーフエリア ========== */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
@@ -496,8 +433,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(10,10,20,.65);
-  backdrop-filter: blur(2px);
+  background: rgba(0,0,0,0.55);
   z-index: 9400;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -513,24 +449,18 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
   min-height: 100%;
 }
 
-/* ========== Toastアニメーション ========== */
+/* ========== Toastアニメーション（既存互換） ========== */
 @keyframes slideUp {
   from { transform: translateX(-50%) translateY(20px); opacity: 0; }
   to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
 }
-
-/* スクロールバー */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(201,168,76,.3); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(201,168,76,.5); }
 </style>
 </head>
 <body>
 
 <!-- 初期ローディング（JS読み込み前に表示） -->
 <div id="init-loading" style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px;color:#6b7280;font-size:14px;padding:20px">
-  <div style="width:32px;height:32px;border:3px solid rgba(201,168,76,.2);border-top-color:#C9A84C;border-radius:50%;animation:spin .7s linear infinite"></div>
+  <div style="width:32px;height:32px;border:3px solid #e5e7eb;border-top-color:#e94560;border-radius:50%;animation:spin .7s linear infinite"></div>
   読み込み中...
   <div id="debug-url" style="font-size:11px;color:#aaa;word-break:break-all;text-align:center;max-width:320px"></div>
 </div>
@@ -588,11 +518,11 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     <div id="store-name-badge" style="
       display:flex;
       align-items:center;
-      padding:0 14px;
+      padding:0 12px;
       font-size:11px;
       font-weight:700;
-      color:var(--charcoal);
-      background:linear-gradient(135deg,var(--gold-light),var(--gold));
+      color:#fff;
+      background:var(--accent);
       white-space:nowrap;
       flex-shrink:0;
       height:var(--nav-h);
@@ -788,14 +718,14 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
   <!-- ===== シフト提出ページ ===== -->
   <div id="page-shift-submit" class="page">
     <!-- タブ切り替え -->
-    <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:14px;overflow-x:auto">
+    <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:14px">
       <button id="shift-tab-submit" onclick="switchShiftTab('submit')"
-        style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--accent);margin-bottom:-2px;color:var(--accent);cursor:pointer;white-space:nowrap">
+        style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--accent);margin-bottom:-2px;color:var(--accent);cursor:pointer">
         📆 シフト提出
       </button>
       <button id="shift-tab-availability" onclick="switchShiftTab('availability')"
-        style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer;white-space:nowrap">
-        🚪 ルーム空き
+        style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer">
+        🚪 ルーム空き状況
       </button>
     </div>
 
@@ -9451,9 +9381,9 @@ function renderResvByTherapist(data, el) {
 
       return `
         <div style="margin-bottom:16px">
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:${headerBg};color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;gap:6px;overflow:hidden;min-width:0">
-            <span style="display:flex;align-items:center;gap:4px;flex-wrap:nowrap;white-space:nowrap;overflow:hidden;min-width:0">👤 ${th}${(window._resvRoomMap && window._resvRoomMap[th]) ? ` <span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;white-space:nowrap;flex-shrink:0">🚪 ${window._resvRoomMap[th]}</span>` : ''}${attendanceBadge}${availLabel}</span>
-            <span style="font-size:12px;opacity:.85;white-space:nowrap;flex-shrink:0">${shiftLabel || (valid.length + '件 ¥' + sales.toLocaleString())}</span>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:${headerBg};color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;flex-wrap:wrap;gap:6px">
+            <span>👤 ${th}${(window._resvRoomMap && window._resvRoomMap[th]) ? ` <span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:4px">🚪 ${window._resvRoomMap[th]}</span>` : ''}${attendanceBadge}${availLabel}</span>
+            <span style="font-size:12px;opacity:.85">${shiftLabel || (valid.length + '件 ¥' + sales.toLocaleString())}</span>
           </div>
           <div style="border-radius:0 0 8px 8px;border:1px solid var(--border);border-top:none;padding:8px">
                 ${rows.map((r, _i) => {
@@ -11847,7 +11777,9 @@ async function confirmHimeApprove() {
       const _dt4dow   = WDAYS4[new Date((_dt4date.replace(/\//g,'-')) + 'T12:00:00').getDay()];
       const dateDisp4 = _dt4date + '（' + _dt4dow + '） ' + _dt4time;
       const therapistDisp4 = nomination === 'free' ? 'フリー' : therapistName;
-      const mins4 = resvFull.course_min || '';
+      const mins4        = resvFull.course_min || '';
+      const coursePrice4 = resvFull.course_price || 0;
+      const nomFee4      = resvFull.nomination_fee || 0;
 
       // ルームの案内文を取得
       let guideText4 = '';
