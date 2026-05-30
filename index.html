@@ -11777,7 +11777,9 @@ async function confirmHimeApprove() {
       const _dt4dow   = WDAYS4[new Date((_dt4date.replace(/\//g,'-')) + 'T12:00:00').getDay()];
       const dateDisp4 = _dt4date + '（' + _dt4dow + '） ' + _dt4time;
       const therapistDisp4 = nomination === 'free' ? 'フリー' : therapistName;
-      const mins4 = resvFull.course_min || '';
+      const mins4        = resvFull.course_min || '';
+      const coursePrice4 = resvFull.course_price || 0;
+      const nomFee4      = resvFull.nomination_fee || 0;
 
       // ルームの案内文を取得
       let guideText4 = '';
