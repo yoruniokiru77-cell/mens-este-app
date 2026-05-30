@@ -2093,7 +2093,7 @@ async function apiGet(action, params = {}) {
         (custs || []).forEach(c => { if (c.tel) telMap[c.customer_no] = c.tel; });
       }
 
-      // 来店回数を取得（セラピスト別・全期間＆今月）電話番号ベース
+      // 来店回数を取得（reservationsテーブルベース・顧客詳細と同じ基準）
       const allTels = [...new Set(rows.map(r => r.customer_tel || telMap[r.customer_no]).filter(Boolean))];
       const visitByTherapist = {};
       const visitByTherapistMonth = {};
@@ -2101,36 +2101,19 @@ async function apiGet(action, params = {}) {
         const nowMonth = dateStr.slice(0, 7);
         const countedKeys = new Set();
 
-        // salesから集計（telベース）
-        const { data: salesHist } = await _sb.from('sales')
+        // reservationsから集計（キャンセル除く・日付単位で重複排除）
+        const { data: resvHist } = await _sb.from('reservations')
           .select('customer_tel, therapist_name, date')
           .eq('store_id', STORE_ID)
-          .in('customer_tel', allTels)
-          .neq('is_guarantee', true);
-        (salesHist || []).forEach(s => {
-          if (!s.customer_tel || !s.therapist_name) return;
-          const dedup = (s.date||'').slice(0,16) + '_' + s.therapist_name + '_' + s.customer_tel;
-          if (countedKeys.has(dedup)) return;
-          countedKeys.add(dedup);
-          const key = s.customer_tel + '_' + s.therapist_name;
-          visitByTherapist[key] = (visitByTherapist[key] || 0) + 1;
-          if (s.date && s.date.slice(0, 7) === nowMonth) {
-            visitByTherapistMonth[key] = (visitByTherapistMonth[key] || 0) + 1;
-          }
-        });
-
-        // reservations(active)からも集計（salesにまだない予約をカウント）
-        const { data: resvHist } = await _sb.from('reservations')
-          .select('customer_tel, customer_no, therapist_name, date')
-          .eq('store_id', STORE_ID)
-          .eq('status', 'active')
+          .neq('status', 'cancelled')
           .in('customer_tel', allTels);
         (resvHist || []).forEach(r => {
-          const tel = r.customer_tel || telMap[r.customer_no] || '';
+          const tel = r.customer_tel || '';
           if (!tel || !r.therapist_name) return;
-          const dedup = (r.date||'').slice(0,16) + '_' + r.therapist_name + '_' + tel;
-          if (countedKeys.has(dedup)) return;
-          countedKeys.add(dedup);
+          // 日付単位で重複排除（同日複数予約を1回としてカウント）
+          const dayKey = (r.date||'').slice(0, 10) + '_' + r.therapist_name + '_' + tel;
+          if (countedKeys.has(dayKey)) return;
+          countedKeys.add(dayKey);
           const key = tel + '_' + r.therapist_name;
           visitByTherapist[key] = (visitByTherapist[key] || 0) + 1;
           if (r.date && r.date.slice(0, 7) === nowMonth) {
