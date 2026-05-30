@@ -3521,85 +3521,42 @@ case 'verifyTokenAction': {
       const extraHime = (pendingHime || []).filter(r => !existingIds.has(r.id));
       const rows = [...extraHime, ...(data || [])].sort((a,b) => new Date(a.date) - new Date(b.date));
 
-      // customer_no と customer_tel を収集
-      const custNos  = [...new Set(rows.map(r => r.customer_no).filter(Boolean))];
+      // customer_tel を収集（telベースで統一）
       const custTels = [...new Set(rows.map(r => r.customer_tel).filter(Boolean))];
 
-      const hasHistoryByNo  = new Set(); // customer_no → 来店あり
-      const hasHistoryByTel = new Set(); // customer_tel → 来店あり
-      const visitMap = {}; // customer_no → 自分への来店回数
+      const visitMap = {}; // customer_tel → 自分への来店回数
       const countedResvIds = new Set(); // reservation_id単位で重複カウント防止
 
-      // customer_no で sales 検索（reservation_idで重複排除）
-      if (custNos.length) {
+      // customer_tel で sales 検索（reservation_idで重複排除）
+      if (custTels.length) {
         const { data: salesData } = await _sb.from('sales')
-          .select('customer_no, therapist_name, reservation_id').eq('store_id', STORE_ID)
-          .in('customer_no', custNos);
+          .select('customer_tel, therapist_name, reservation_id')
+          .eq('store_id', STORE_ID)
+          .in('customer_tel', custTels);
         (salesData || []).forEach(s => {
-          if (s.customer_no) {
-            hasHistoryByNo.add(s.customer_no);
-            if (s.therapist_name === params.therapist) {
-              // reservation_idがある場合は同一予約の重複登録を除外
-              const key = s.reservation_id || ('no_resv_' + s.customer_no + '_' + Math.random());
-              if (!s.reservation_id || !countedResvIds.has(s.reservation_id)) {
-                visitMap[s.customer_no] = (visitMap[s.customer_no] || 0) + 1;
-                if (s.reservation_id) countedResvIds.add(s.reservation_id);
-              }
-            }
-          }
+          if (!s.customer_tel || s.therapist_name !== params.therapist) return;
+          if (s.reservation_id && countedResvIds.has(s.reservation_id)) return;
+          visitMap[s.customer_tel] = (visitMap[s.customer_tel] || 0) + 1;
+          if (s.reservation_id) countedResvIds.add(s.reservation_id);
         });
       }
 
-      // customer_no がない行は customer_tel → customers → customer_no 経由で判定
-      const telToNo = {}; // tel → customer_no
+      // 姫予約の正式顧客名をcustomersテーブルから取得
+      const custNameMap = {}; // tel → 正式名
       if (custTels.length) {
         const { data: custData } = await _sb.from('customers')
-          .select('customer_no, tel').eq('store_id', STORE_ID);
-        (custData || []).forEach(c => {
-          if (c.tel && c.customer_no) telToNo[c.tel] = c.customer_no;
-        });
-        // tel経由で取得したcustomer_noでもsales確認（reservation_idで重複排除）
-        // customer_noで既に検索済みのものは除外（2重カウント防止）
-        const telNos = [...new Set(custTels.map(t => telToNo[t]).filter(Boolean))]
-          .filter(no => !custNos.includes(String(no)));
-        if (telNos.length) {
-          const { data: telSales } = await _sb.from('sales')
-            .select('customer_no, therapist_name, reservation_id').eq('store_id', STORE_ID)
-            .in('customer_no', telNos);
-          (telSales || []).forEach(s => {
-            if (s.customer_no) {
-              hasHistoryByNo.add(s.customer_no);
-              if (s.therapist_name === params.therapist) {
-                if (!s.reservation_id || !countedResvIds.has(s.reservation_id)) {
-                  visitMap[s.customer_no] = (visitMap[s.customer_no] || 0) + 1;
-                  if (s.reservation_id) countedResvIds.add(s.reservation_id);
-                }
-              }
-            }
-          });
-        }
-      }
-
-      // 姫予約の正式顧客名をtelToNoとcustNameMapで解決
-      // telToNo はすでに作成済み。custNameMapを作る
-      const custNameMap = {}; // customer_no → 正式名
-      if (Object.keys(telToNo).length) {
-        const nos = [...new Set(Object.values(telToNo))];
-        if (nos.length) {
-          const { data: custNames } = await _sb.from('customers')
-            .select('customer_no, name').eq('store_id', STORE_ID).in('customer_no', nos);
-          (custNames || []).forEach(c => { if (c.customer_no) custNameMap[c.customer_no] = c.name; });
-        }
+          .select('tel, name').eq('store_id', STORE_ID)
+          .in('tel', custTels);
+        (custData || []).forEach(c => { if (c.tel) custNameMap[c.tel] = c.name; });
       }
 
       return rows.map(r => {
         // customer_no がなければ tel → customer_no に変換
-        const resolvedNo = r.customer_no || (r.customer_tel ? telToNo[r.customer_tel] : '');
-        const isStoreNew = resolvedNo ? !hasHistoryByNo.has(resolvedNo) : true; // 不明なら新規扱い
-        const myVisitCount = visitMap[resolvedNo] || 0;
+        const tel = r.customer_tel || '';
+        const myVisitCount = tel ? (visitMap[tel] || 0) : 0;
         // 姫予約の場合、顧客マスタの正式名を優先表示
-        const resolvedName = (r.is_hime && resolvedNo && custNameMap[resolvedNo])
-          ? custNameMap[resolvedNo]
+        const resolvedName = (r.is_hime && tel && custNameMap[tel])
+          ? custNameMap[tel]
           : r.customer_name || '';
         return {
           row:          r.id,
@@ -3610,12 +3567,12 @@ case 'verifyTokenAction': {
           price:        r.price || 0,
           discount:     r.discount || 0,
           nomination:   r.nomination || 'free',
-          customerNo:   resolvedNo || '',
-          tel:          r.customer_tel || '',
+          customerNo:   r.customer_no || '',
+          tel:          tel,
           coursePrice:  r.course_price || 0,
           optionPrice:  r.option_price || 0,
           nominationFee:r.nomination_fee || 0,
-          isStoreNew,
+          isStoreNew:   tel ? !custNameMap[tel] : true,
           myVisitCount,
           isHime:        r.is_hime || false,
           isHimeApproved: r.is_hime_approved || false,
