@@ -4874,21 +4874,18 @@ async function submitAllShifts() {
         return d >= deadlineMon && d <= deadlineSun;
       });
       if (hasNextWeek) {
-        // 管理者のLINEに通知
+        // 管理者のLINEに通知（申請はブロックしない）
         const storeLineName = settings.store_line_name || '';
         if (storeLineName) {
           try {
             const therapistsAll = await apiGet('getTherapists');
             const storeT = therapistsAll.find(t => t.name === storeLineName);
             if (storeT && storeT.userId) {
-              const msg = '【🔒 シフト締め切り通知】\n' + therapist + ' さんが来週のシフトを申請しようとしましたが、締め切り済みのため通知しました。';
+              const msg = '【🔒 シフト締め切り後の申請】\n' + therapist + ' さんが締め切り後に来週のシフトを申請しました。';
               await apiGet('sendLineMessage', { userId: storeT.userId, message: msg });
             }
           } catch(le) { console.warn('LINE通知エラー:', le); }
         }
-        hideOverlay();
-        alert('来週のシフトは締め切られています。\n管理者にお問い合わせください。');
-        return;
       }
     }
 
