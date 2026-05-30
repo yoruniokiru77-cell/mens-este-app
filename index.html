@@ -827,13 +827,15 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-secondary btn-sm" onclick="loadShiftCalendar()">更新</button>
-        <button class="btn btn-sm" id="btn-notify-all-shifts" style="display:none;background:#06c755;color:#fff;border-color:#06c755" onclick="notifyAllApprovedShifts()">📨 まとめて通知</button>
       </div>
     </div>
-    <!-- 来週シフト締め切りボタン・バナー（管理者のみ） -->
+    <!-- 来週シフト締め切りボタン・まとめて通知・バナー（管理者のみ） -->
     <div id="shift-deadline-banner" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:13px;font-weight:700;color:#b91c1c;text-align:center"></div>
-    <div id="shift-deadline-btn-wrap" style="display:none;margin-bottom:10px">
-      <button class="btn btn-sm" id="btn-shift-deadline" style="width:100%;background:#dc2626;color:#fff;border-color:#dc2626" onclick="toggleShiftDeadline()">🔒 来週シフト締め切り</button>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="btn btn-sm" id="btn-notify-all-shifts" style="display:none;flex:1;background:#06c755;color:#fff;border-color:#06c755" onclick="notifyAllApprovedShifts()">📨 まとめて通知</button>
+      <div id="shift-deadline-btn-wrap" style="display:none;flex:1">
+        <button class="btn btn-sm" id="btn-shift-deadline" style="width:100%;background:#dc2626;color:#fff;border-color:#dc2626" onclick="toggleShiftDeadline()">🔒 来週シフト締め切り</button>
+      </div>
     </div>
     <!-- 表示切替 -->
     <div style="display:flex;gap:6px;margin-bottom:10px">
