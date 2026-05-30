@@ -49,29 +49,31 @@
 
 ---
 
-## 開発ルール（必須）
+## 修正時の必須手順（毎回必ず守ること）
 
-### コード修正後は必ず構文チェック
+1. **同じ処理が他の関数にも存在しないかgrep確認**してから修正する
+2. **影響範囲をコメントで報告**してから修正する
+3. 修正後は必ず **`node --check` で構文チェック**を実行する
+
 ```bash
-# index.htmlのJSを抽出して構文チェック
+# 影響範囲の確認
+grep -n "対象の関数名や変数名" index.html
+
+# 構文チェック
 sed -n '/<script>$/,/<\/script>/p' index.html | sed '1d;$d' > /tmp/check.js
 node --check /tmp/check.js
 ```
-**ローカルで「読み込み中のまま」= 必ずJS構文エラーを疑うこと。**
 
-### str_replace時の注意
-- 変更は最小限の行だけを対象にする
-- 置き換え後に変数の定義漏れがないかgrep確認する
-- 修正後は必ず構文チェックを実行する
+**ローカルで「読み込み中のまま」= JS構文エラーを必ず疑うこと。**
 
-### 既存機能を削除しない
-- 変更が必要な場合は必ず理由を説明する
-- 常に全体構造を把握したうえで修正する
+---
 
-### 大規模な機能追加
-- 事前に細部まで仕様を確認してからコード作成
-- フェーズを分けて細分化して開発
-- 各フェーズ完了時に進捗を報告
+## 開発ルール
+
+- **既存機能を削除しない**。変更が必要な場合は必ず理由を説明する
+- **str_replace時**は変更を最小限の行だけに絞る。置き換え後に変数の定義漏れがないかgrepで確認する
+- **大規模な機能追加**は事前に細部まで仕様を確認してからコード作成。フェーズを分けて開発し、各フェーズ完了時に進捗を報告する
+- **Supabase JOIN**（リレーション結合）はREST APIで失敗することがある → 分割クエリで対応する
 
 ---
 
@@ -84,11 +86,13 @@ node --check /tmp/check.js
 - **電話番号（tel）を主キーとして使用**
 - `customer_no` は廃止（カラムは残存しているが使用しない）
 - 来店回数は `reservations` テーブル（キャンセル除く）で集計（`sales` テーブルは使わない）
+- 管理者・セラピスト両画面で同じ基準を使うこと
 
 ### 27時ルール
 - 深夜0〜2時台の予約・売上は**前日扱い**（T03:00〜翌T02:59）
 - `_fmtDatetimeJp(isoStr)` — ISO文字列を27時ルール対応でフォーマット
-- `_fmtLocalDatetimeJp(localStr)` — `"YYYY-MM-DDTHH:MM"` 形式を手動パース（new Date()のTZずれ回避）
+- `_fmtLocalDatetimeJp(localStr)` — `"YYYY-MM-DDTHH:MM"` 形式を手動パース（`new Date()` のTZずれ回避のため必須）
+- **`new Date("2026-05-30T00:15")` はTZなしだとUTCとして解釈されてずれる**。ローカル日時文字列は必ず `_fmtLocalDatetimeJp` を使う
 
 ### UUID
 - メニュー・ルームのIDはUUID（文字列）なので `Number()` で変換しない
@@ -100,24 +104,34 @@ node --check /tmp/check.js
 - `_showModal(id)` / `_hideModal(id)` を使う（iOS対応）
 - 予約完了モーダル（resv-complete-modal）は `display:flex` を直接指定
 
-### インターバル計算
+### インターバル計算（予約重複チェック）
 - 重複チェックは新規側・既存側の両方にintervalを加算
 - `therapists` キャッシュ未ロード時は `getTherapistInterval` APIでDB直接取得
 - DB取得失敗時はデフォルト30分にフォールバック
+- **修正対象は3関数**：`updateResvRow` / `submitReservation` / `saveAndSendLine`
+
+### 本指名自動昇格
+- `checkAutoHonshimei()` はお客様名・電話番号・セラピスト名の**3つが全部揃っている時だけ**実行する
+- セラピスト選択（onchange）では呼び出さない
+
+### 来店回数
+- `reservations` テーブル（キャンセル除く）のみで集計
+- 日付単位で重複排除（同日複数予約を1回とカウント）
+- `sales` テーブルとの二重カウントNG
+- 管理者・セラピスト・顧客詳細の3画面で同じ基準
+
+### シフトカレンダーの並び順
+- 承認済みシフトあり → 提出済み（pending/rejected）シフトあり → シフトなし の順
 
 ### 顧客メモ絞り込み
 - `customer_id` で絞り込む（`customer_no` での結合フィルタは機能しない）
-
-### Supabase注意
-- FOREIGN KEY JOIN（リレーション結合）はREST APIで失敗することがある → **分割クエリで対応**
-- `therapist_scouts` の削除は `active=false` で論理削除（物理削除しない）
 
 ### LINE WebView対応
 - `confirm()` が常にfalseを返す問題 → `_confirm()` カスタムモーダルに置換
 
 ### 神栖店固有機能
 - `send_payroll_line=false` / `send_store_line=true`（店落ちのみ送信）
-- スカウトモード（🔍スカウトタブ）は神栖店のみ表示
+- スカウトモード（🔍スカウトタブ）は神栖店のみ表示（`startAdminMode` でSTORE_IDが33333333の場合のみ）
 
 ---
 
@@ -139,6 +153,7 @@ sale_options, registration_states, scout_companies, therapist_scouts
 - `cancel_reason` text — キャンセル理由
 - `is_hime` / `is_hime_approved` — 姫予約フラグ
 - `status` — active / cancelled
+- `rawDate` — getReservations返り値に含まれる元のISO文字列
 
 #### sales（売上データ）
 - `customer_tel` — 来店回数・新規客判定に使用
@@ -147,7 +162,7 @@ sale_options, registration_states, scout_companies, therapist_scouts
 #### shifts（出勤シフト）
 - `status` — pending / approved / rejected
 - `attendance_type` — normal / late / early_leave / absent / noshow
-- 欠勤・無断欠勤（absent/noshow）はスカウト出勤日数から除外
+- 欠勤・無断欠勤（absent/noshow）はスカウト出勤日数・来店回数から除外
 
 #### therapists（セラピストマスタ）
 - `interval_min` integer DEFAULT 30 — インターバル（分）
@@ -227,7 +242,6 @@ sale_options, registration_states, scout_companies, therapist_scouts
 ## デプロイ方法
 
 ```bash
-# ローカルで修正後、GitHubにプッシュするだけでVercelが自動デプロイ
 git add .
 git commit -m "fix: 修正内容の説明"
 git push origin main
