@@ -12343,7 +12343,7 @@ async function loadLineUsers() {
                   <select id="dm-th-${u.userId}"
                     style="padding:5px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
                     <option value="" ${!u.discountMode ? 'selected' : ''}>店舗設定</option>
-                    <option value="deduct_then_back" ${u.discountMode==='deduct_then_back' ? 'selected' : ''}>按分（客負担）</option>
+                    <option value="deduct_then_back" ${u.discountMode==='deduct_then_back' ? 'selected' : ''}>按分（折半）</option>
                     <option value="store_bears" ${u.discountMode==='store_bears' ? 'selected' : ''}>店舗負担</option>
                   </select>
                 </td>` : ''}
