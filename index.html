@@ -11784,24 +11784,35 @@ async function confirmHimeApprove() {
         const shiftsAll4 = month4 !== prevMonth4
           ? [...shifts4b, ...(await apiGet('getShifts', { month: prevMonth4, status: 'approved' }))]
           : shifts4b;
+        // 当日の承認済みシフト（予約開始時刻を含むもの）を検索
         const myShift4b = shiftsAll4.find(s =>
           s.therapist === resvFull.therapist_name &&
           s.date === targetDate4 &&
           _timeToMin27(s.startTime) <= reqMin4 &&
           _timeToMin27(s.endTime)   >  reqMin4
         );
-        if (myShift4b) {
-          const endMin4b  = reqMin4 + mins4b;
-          const shiftEnd4 = _timeToMin27(myShift4b.endTime);
-          if (endMin4b > shiftEnd4) {
-            const eH4 = Math.floor(endMin4b/60), eM4 = endMin4b%60;
-            const sH4 = Math.floor(shiftEnd4/60), sM4 = shiftEnd4%60;
-            hideOverlay();
-            if (!confirm('⚠ コース終了時間（' + np4(eH4) + ':' + np4(eM4) + '）がシフト終了時間（' + np4(sH4) + ':' + np4(sM4) + '）を超えています。\nこのまま承認しますか？')) return;
-            showOverlay();
-          }
+        if (!myShift4b) {
+          // 承認済みシフトがない → 承認不可
+          hideOverlay();
+          alert('❌ ' + resvFull.therapist_name + ' さんのこの日時に承認済みシフトがありません。\nシフトを先に承認してから姫予約を承認してください。');
+          return;
         }
-      } catch(e4b) { console.warn('シフト超過チェックエラー:', e4b); }
+        // シフト超過チェック
+        const endMin4b  = reqMin4 + mins4b;
+        const shiftEnd4 = _timeToMin27(myShift4b.endTime);
+        if (endMin4b > shiftEnd4) {
+          const eH4 = Math.floor(endMin4b/60), eM4 = endMin4b%60;
+          const sH4 = Math.floor(shiftEnd4/60), sM4 = shiftEnd4%60;
+          hideOverlay();
+          if (!confirm('⚠ コース終了時間（' + np4(eH4) + ':' + np4(eM4) + '）がシフト終了時間（' + np4(sH4) + ':' + np4(sM4) + '）を超えています。\nこのまま承認しますか？')) return;
+          showOverlay();
+        }
+      } catch(e4b) {
+        console.warn('シフト超過チェックエラー:', e4b);
+        hideOverlay();
+        alert('⚠ シフト超過チェック中にエラーが発生しました。\n管理者に確認してください。\n(' + e4b.message + ')');
+        return;
+      }
     }
 
     // 本指名判定：このセラピストへの来店履歴があれば本指名に変更
