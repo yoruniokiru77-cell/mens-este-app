@@ -10502,10 +10502,9 @@ async function saveAndSendLine() {
     try {
       const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
       const storeName = storeData ? storeData.name : '';
-      const dtObj  = new Date(dateVal);
       const WDAYS2 = ['日','月','火','水','木','金','土'];
-      // 27時ルール対応：_fmtDatetimeJpを使って前日の24+h形式で表示
-      const _fmtDt2  = _fmtDatetimeJp(dateVal);
+      // dateValはフォームのローカル日時文字列（"YYYY-MM-DDTHH:MM"）なので_fmtLocalDatetimeJpを使用
+      const _fmtDt2  = _fmtLocalDatetimeJp(dateVal);
       const _dt2parts = _fmtDt2.split(' ');
       const _dt2date  = _dt2parts[0] || '';
       const _dt2time  = _dt2parts[1] || '';
@@ -10516,15 +10515,19 @@ async function saveAndSendLine() {
       const therapistDisp = params.nomination === 'free' ? 'フリー' : therapistName;
 
       // ルームのお客様案内文を取得（submitReservationと同じ方式）
+      // dateValを手動パースしてTZずれを回避
       let guideText = '';
       try {
         const _p2 = n => String(n).padStart(2,'0');
-        const dtH_g   = dtObj.getHours();
-        const timeStr_g = _p2(dtObj.getHours()) + ':' + _p2(dtObj.getMinutes());
+        const [_dvDate, _dvTime] = dateVal.split('T');
+        const [_dvY, _dvMo, _dvDd] = _dvDate.split('-').map(Number);
+        const [_dvH, _dvMi] = (_dvTime || '00:00').split(':').map(Number);
+        const dtH_g   = _dvH;
+        const timeStr_g = _p2(_dvH) + ':' + _p2(_dvMi);
         const reqMin_g  = _timeToMin27(timeStr_g);
-        const shiftDateStr_g = dtObj.getFullYear() + '-' + _p2(dtObj.getMonth()+1) + '-' + _p2(dtObj.getDate());
-        const prevDt_g = new Date(dtObj); prevDt_g.setDate(prevDt_g.getDate() - 1);
-        const prevDateStr_g = prevDt_g.getFullYear() + '-' + _p2(prevDt_g.getMonth()+1) + '-' + _p2(prevDt_g.getDate());
+        const shiftDateStr_g = _dvY + '-' + _p2(_dvMo) + '-' + _p2(_dvDd);
+        const prevD = new Date(_dvY, _dvMo - 1, _dvDd - 1);
+        const prevDateStr_g = prevD.getFullYear() + '-' + _p2(prevD.getMonth()+1) + '-' + _p2(prevD.getDate());
         const targetDate_g  = (dtH_g < 3 ? prevDateStr_g : shiftDateStr_g).replace(/-/g, '/');
         const month_g  = (dtH_g < 3 ? prevDateStr_g : shiftDateStr_g).slice(0, 7);
         const month_g2 = prevDateStr_g.slice(0, 7);
@@ -11845,9 +11848,8 @@ async function confirmHimeApprove() {
       // ルームの案内文を取得
       let guideText4 = '';
       try {
-        const dateStr4 = dtObj.getHours() < 3
-          ? new Date(dtObj.getTime() - 86400000).toISOString().slice(0,10)
-          : dtObj.toISOString().slice(0,10);
+        // _fmtDatetimeJpで変換済みの_dt4dateを使う（dtObj.toISOString()はUTC日付になるため不可）
+        const dateStr4 = _dt4date.replace(/\//g, '-');
         const shifts4 = await apiGet('getShifts', { therapist: therapistName, month: dateStr4.slice(0,7) });
         const myShift4 = shifts4.find(s =>
           s.date.replace(/\//g,'-') === dateStr4 && s.status === 'approved' && s.roomName
