@@ -126,6 +126,26 @@ node --check /tmp/check.js
 - `send_payroll_line=false` / `send_store_line=true`（店落ちのみ送信）
 - スカウトモード（🔍スカウトタブ）は神栖店のみ表示（`startAdminMode` でSTORE_IDが33333333の場合のみ）
 
+### NEVERLAND固有機能
+- LINE管理ページのセラピスト一覧に「割引モード」列を表示（store_id=44444444）
+- セラピストごとに `店舗設定 / 按分（折半）/ 店舗負担` を選択可能
+- 判定: `const isNeverland = STORE_ID === '44444444-0000-0000-0000-000000000004'`
+
+### シフトカレンダー勤怠表示（両ビュー共通）
+- `absent` / `noshow`: グレー背景・取り消し線・❌ラベル（`_calShiftBadge` / `_calDateCard`）
+- `late` / `early_leave`: 通常カラー・⚠ラベル
+- `pending`（未承認）: グレー背景・⏳ラベル
+
+### 予約行のLINE再通知
+- 各予約行に「📨 LINE通知」ボタンあり（キャンセル以外）
+- `sendResvLineNotify(idx)` — 任意のタイミングでセラピストにLINE送信可能
+- LINE ID未登録の場合はアラート表示
+
+### 日時パース（`_fmtDatetimeJp` の注意点）
+- Supabase の `timestamptz` がTZなし文字列（`"2026-05-31T01:00:00"` 形式）で返ることがある
+- タイムゾーン情報がない場合は末尾に `Z` を付加してUTC強制する処理を実装済み
+- **この関数を修正する際は必ずこの補正ロジックを維持すること**
+
 ---
 
 ## データベース構造
@@ -160,6 +180,7 @@ sale_options, registration_states, scout_companies, therapist_scouts
 - `interval_min` integer DEFAULT 30 — インターバル（分）
 - `course_back` numeric — コースバック率（例: 0.6 = 60%）
 - `nomination_fee` integer — セラピスト個別指名料
+- `discount_mode` text DEFAULT NULL — セラピスト個別割引モード（NULLなら店舗設定に従う）**NEVERLAND限定で使用**
 
 #### customers（顧客マスタ）
 - `status` の有効値: `normal`, `注意`, `NG`, `出禁`（「通常」は不可）
@@ -190,6 +211,18 @@ sale_options, registration_states, scout_companies, therapist_scouts
 ### 給料バック
 1. `therapist_menu_backs` テーブルに固定バック金額があれば優先
 2. 未設定の場合は `therapists.course_back` のバック率で計算
+
+### 割引モードの優先順位（`_calcPayroll`）
+`row.therapist_discount_mode` → `storeSettings.discount_mode` → グローバルデフォルト
+
+### 固定バック時の割引計算
+| 割引モード | 計算式 |
+|---|---|
+| `deduct_then_back`（按分・折半） | therapistCoursePay = fixedBack − discount/2 |
+| `store_bears`（店舗負担）/ デフォルト | therapistCoursePay = fixedBack（割引は店舗が全額負担）|
+
+- 固定バックが設定されている場合、`course_back`（バック率）は**給料計算に使われない**
+- LINE管理ページでの保存バリデーション: 固定バックが1件以上設定済みなら `course_back` 入力は任意
 
 ### スカウトバック（神栖店）
 - SB = コース売上 × コースバック率 × スカウトバック率
@@ -228,6 +261,9 @@ sale_options, registration_states, scout_companies, therapist_scouts
 - `saveTherapistScout` — 紐付け保存（UPSERT）
 - `deleteTherapistScout` — 紐付け解除（active=false）
 - `getScoutSummary` — 月次集計（5段階分割クエリ）
+
+### セラピスト関連（セッション17で追加）
+- `updateLineUser` に `discountMode` パラメータ追加（therapists.discount_mode を保存）
 
 ---
 
@@ -268,3 +304,54 @@ Supabaseのスキーマ変更後は「API → Reload schema」でキャッシュ
 | 6 | シフトカレンダーの並び順を「承認済み→提出済み→なし」に変更 |
 | 7 | 予約一覧セラピストヘッダーの改行を修正（flex-wrap削除） |
 | 8 | getReservationsの返り値にrawDate追加（日時パース問題の根本対策） |
+
+---
+
+## セッション16（2026/5/31）で実施した主な修正
+
+| # | 内容 |
+|---|---|
+| 1 | 姫予約承認時に顧客案内文モーダルが表示されないバグ修正 |
+| 2 | 来週シフト締め切りボタン復活（store_settings.shift_deadline） |
+| 3 | 予約変更モーダルの時刻25時表示バグ修正（rawDate + `_fmtDatetimeJp` 使用） |
+| 4 | 予約変更後フォームがリセットされないバグ修正 |
+| 5 | 時刻系バグ全面調査・修正（saveAndSendLine / 姫予約承認後ルーム取得） |
+| 6 | 重複チェック全面修正（B1〜B4: interval不足・欠勤除外漏れ等） |
+| 7 | 姫予約承認時のシフトチェック強化 |
+| 8 | store_integrations フェーズ1実装（shift-sync-tool）— 連携認証情報DB管理化 |
+
+---
+
+## セッション17（2026/6/1）で実施した主な修正
+
+| # | 内容 |
+|---|---|
+| 1 | shift-sync-tool Phase2: server.js にCORS・API Key認証追加、setup.sh・ecosystem.config.js 作成 |
+| 2 | shift-sync-tool Phase3: シフトカレンダーに🌐サイト連携ボタン・モーダル追加（VPS設定後に有効） |
+| 3 | シフトカレンダー日付順ビュー: 欠勤・遅刻をわかりやすく表示（`_calDateCard`新規追加） |
+| 4 | シフトカレンダーセラピスト縦軸ビュー: 欠勤・遅刻表示を日付順ビューと統一（`_calShiftBadge`修正） |
+| 5 | `_fmtDatetimeJp` にTZなしUTC文字列の自動補正（末尾Zを付加）を追加→予約変更25時バグ根本修正 |
+| 6 | 予約行に📨 LINE再通知ボタン追加（`sendResvLineNotify`）— 通知しないを選んだ後から送信可能 |
+| 7 | NEVERLAND限定: セラピスト個別割引モード設定（therapists.discount_modeカラム追加・要SQL実行） |
+| 8 | 固定バック設定時のコースバック率を任意化（固定バックあり＝要設定バッジ非表示） |
+| 9 | 固定バック＋按分モード時の割引計算を折半に修正（therapistCoursePay = fixedBack − discount/2） |
+| 10 | 割引モードのラベル「按分（客負担）」→「按分（折半）」に修正 |
+
+### セッション17 未完了タスク（次回継続）
+- shift-sync-tool VPSデプロイ（ConoHa VPS契約待ち）
+- VPS契約後: `index.html` の `VPS_BASE_URL` / `VPS_API_KEY` を設定してpush
+- Supabase SQL実行が必要: `ALTER TABLE therapists ADD COLUMN IF NOT EXISTS discount_mode text DEFAULT NULL;`
+
+---
+
+## 過去の作業ログ（参照先）
+
+詳細な作業履歴はdocsフォルダを参照してください。
+
+| ファイル | 内容 |
+|---|---|
+| docs/work_log_session14.md | セッション14（5/15〜5/25）の作業内容 |
+| docs/work_log_session15.md | セッション15（5/28〜5/30）の作業内容 |
+| docs/work_log_session16.md | セッション16〜17（5/31〜6/1）の作業内容 |
+
+**不明な仕様・消えた機能はまず作業ログを確認すること。**
