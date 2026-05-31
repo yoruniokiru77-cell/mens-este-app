@@ -1935,7 +1935,14 @@ function _timeLabel(timeStr, dateStr) {
 
 function _fmtDatetimeJp(isoStr) {
   if (!isoStr) return '';
-  const d = new Date(isoStr);
+  // Supabase(timestamptz)はタイムゾーン情報なしの文字列を返すことがある
+  // ("2026-05-31T01:00:00" 形式)。タイムゾーンなしの場合ブラウザがローカル時刻と
+  // 解釈しgetHours()がUTC時刻を返してしまうため、末尾にZを付けてUTC強制する。
+  let normalized = isoStr;
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(isoStr)) {
+    normalized = isoStr.replace(' ', 'T') + 'Z';
+  }
+  const d = new Date(normalized);
   if (isNaN(d)) return isoStr;
   const pad = n => String(n).padStart(2,'0');
   const h = d.getHours();
