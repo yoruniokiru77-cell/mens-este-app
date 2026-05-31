@@ -9660,7 +9660,8 @@ function renderResvByTherapist(data, el) {
                         : `<button class="btn btn-secondary btn-sm" onclick="openEditResv(${globalIdx})">変更</button>
                            <button class="btn btn-danger btn-sm" onclick="cancelResvLine(${globalIdx})">キャンセル</button>
                            <button class="btn btn-secondary btn-sm" onclick="copyResvGuideByIdx(${globalIdx})">📋 案内</button>
-                           <button class="btn btn-secondary btn-sm" onclick="openAdminSalesFromResv(${globalIdx})">💴 売上入力</button>`}
+                           <button class="btn btn-secondary btn-sm" onclick="openAdminSalesFromResv(${globalIdx})">💴 売上入力</button>
+                           <button class="btn btn-sm" style="background:#06c755;color:#fff;border-color:#06c755" onclick="sendResvLineNotify(${globalIdx})">📨 LINE通知</button>`}
                       ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" data-therapist="${r.therapist||''}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name,this.dataset.therapist)">👤 顧客詳細</button>` : ''}
                     </div>
                   </div>`;
@@ -9710,7 +9711,8 @@ function renderResvTable(data) {
               : `<button class="btn btn-secondary btn-sm" onclick="openEditResv(${i})">変更</button>
                  <button class="btn btn-danger btn-sm" onclick="cancelResvLine(${i})">キャンセル</button>
                  <button class="btn btn-secondary btn-sm" onclick="copyResvGuideByIdx(${i})">📋 案内</button>
-                 <button class="btn btn-secondary btn-sm" onclick="openAdminSalesFromResv(${i})">💴 売上入力</button>`}
+                 <button class="btn btn-secondary btn-sm" onclick="openAdminSalesFromResv(${i})">💴 売上入力</button>
+                 <button class="btn btn-sm" style="background:#06c755;color:#fff;border-color:#06c755" onclick="sendResvLineNotify(${i})">📨 LINE通知</button>`}
             ${(r.customerNo || r.tel || r.customer) ? `<button class="btn btn-secondary btn-sm" data-no="${r.customerNo||''}" data-tel="${r.tel||''}" data-name="${(r.customer||'').replace(/'/g,'&#39;')}" data-therapist="${r.therapist||''}" onclick="event.stopPropagation();openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name,this.dataset.therapist)">👤 顧客詳細</button>` : ''}
           </div>
         </div>`;
@@ -10017,6 +10019,46 @@ async function updateResvRow() {
     showToast('予約を更新しました');
   } catch(e) { alert('エラー: ' + e.message); }
   finally { hideOverlay(); }
+}
+
+// 予約LINE再通知（通知しないを選んだ後から単独送信）
+async function sendResvLineNotify(idx) {
+  const r = (window._resvTableData || [])[idx];
+  if (!r) return;
+  const t = therapists.find(th => th.name === r.therapist);
+  if (!t || !t.userId) {
+    alert(r.therapist + ' さんのLINEユーザーIDが登録されていません。\nセラピストマスタでLINE IDを確認してください。');
+    return;
+  }
+  if (!confirm('📨 ' + r.therapist + ' さんにLINEで予約情報を通知しますか？')) return;
+
+  try {
+    showOverlay();
+    const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
+    const storeName = storeData ? storeData.name : '';
+    const isoSrc  = r.rawDate || r.date.replace(/\//g,'-').replace(' ','T');
+    const dateStr = _fmtDatetimeJp(isoSrc);
+    const nomLabel = { free:'フリー', nomination:'指名', honshimei:'本指名' };
+    const subtotal   = Number(r.coursePrice || 0) + Number(r.nominationFee || 0);
+    const finalPrice = subtotal - Number(r.discount || 0);
+    let msg = '【予約確認】' + (storeName ? '（' + storeName + '）' : '') +
+      '\n日時: ' + dateStr +
+      '\nコース: ' + r.course + '分' +
+      '\nお客様: ' + formatCustomer(r.customerNo, r.customer) +
+      '\n指名: ' + (nomLabel[r.nomination] || r.nomination) +
+      '\n金額: ¥' + subtotal.toLocaleString();
+    if (Number(r.discount) > 0) {
+      msg += '\n割引: -¥' + Number(r.discount).toLocaleString() +
+             '\n適用後金額: ¥' + finalPrice.toLocaleString();
+    }
+    if (r.memo) msg += '\nメモ: ' + r.memo;
+    await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+    showToast('📨 ' + r.therapist + ' さんにLINE送信しました');
+  } catch(e) {
+    alert('LINE送信エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
 }
 
 // キャンセル通知＆ステータス更新
