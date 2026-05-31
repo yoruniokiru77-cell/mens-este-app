@@ -827,6 +827,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-secondary btn-sm" onclick="loadShiftCalendar()">更新</button>
+        <button id="btn-site-sync" class="btn btn-sm" style="display:none;background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="openSiteSyncModal()">🌐 サイト連携</button>
       </div>
     </div>
     <!-- 来週シフト締め切りボタン・まとめて通知・バナー（管理者のみ） -->
@@ -1735,6 +1736,29 @@ const STORE_CODE_MAP = {
   'herroom': '11111111-0000-0000-0000-000000000001',
   'remens':  '22222222-0000-0000-0000-000000000002',
   'premium': '33333333-0000-0000-0000-000000000003'
+};
+
+// ============================================================
+// シフト自動連携 VPS 設定
+// VPS契約後にIPアドレスとAPIキーを設定する
+// ============================================================
+const VPS_BASE_URL = ''; // 例: 'http://123.456.789.0'  ← VPS IPを入力
+const VPS_API_KEY  = ''; // VPS の .env の API_KEY と同じ値を入力
+
+// store_id → shift-sync-tool の store_key 対応表
+const STORE_KEY_MAP = {
+  '11111111-0000-0000-0000-000000000001': 'herroom',
+  '22222222-0000-0000-0000-000000000002': 're_mens',
+  '33333333-0000-0000-0000-000000000003': 'premium',
+  '44444444-0000-0000-0000-000000000004': 'neverland',
+};
+
+// 店舗ごとの対応サイト
+const STORE_SITES = {
+  'herroom':   { tamashii: true,  ranking: false, homepage: true },
+  're_mens':   { tamashii: true,  ranking: true,  homepage: true },
+  'premium':   { tamashii: true,  ranking: true,  homepage: false },
+  'neverland': { tamashii: true,  ranking: true,  homepage: false },
 };
 
 // Supabaseクライアント初期化
@@ -8464,6 +8488,122 @@ function initShiftCalendar() {
   updateCalendarWeekLabel();
   loadCalUnsubmitted();
   loadShiftCalendar();
+  // VPS設定済みかつ管理者の場合のみサイト連携ボタンを表示
+  const syncBtn = document.getElementById('btn-site-sync');
+  if (syncBtn) syncBtn.style.display = (VPS_BASE_URL && isAdminMode) ? '' : 'none';
+}
+
+// ─────────────────────────────────────────────
+// サイト自動連携（VPS API呼び出し）
+// ─────────────────────────────────────────────
+
+let _syncEventSource = null;
+
+function openSiteSyncModal() {
+  if (!VPS_BASE_URL) {
+    alert('VPS_BASE_URL が未設定です。index.html の定数を設定してください。');
+    return;
+  }
+  // 今週の月曜〜日曜をデフォルト設定
+  const days = getWeekDates(_calendarWeekOffset);
+  const fmt  = d => d.toISOString().slice(0, 10);
+  document.getElementById('sync-date-from').value = fmt(days[0]);
+  document.getElementById('sync-date-to').value   = fmt(days[6]);
+
+  // 対応サイトのみ表示
+  const storeKey = STORE_KEY_MAP[STORE_ID] || '';
+  const sites    = STORE_SITES[storeKey] || {};
+  document.getElementById('sync-site-tamashii-wrap').style.display = sites.tamashii ? '' : 'none';
+  document.getElementById('sync-site-ranking-wrap').style.display  = sites.ranking  ? '' : 'none';
+  document.getElementById('sync-site-homepage-wrap').style.display = sites.homepage ? '' : 'none';
+  document.getElementById('sync-site-tamashii').checked = !!sites.tamashii;
+  document.getElementById('sync-site-ranking').checked  = !!sites.ranking;
+  document.getElementById('sync-site-homepage').checked = !!sites.homepage;
+
+  // ログエリアリセット
+  document.getElementById('sync-log-area').style.display  = 'none';
+  document.getElementById('sync-log-content').textContent = '';
+  document.getElementById('btn-sync-execute').disabled    = false;
+
+  _showModal('site-sync-modal');
+}
+
+async function executeSiteSync() {
+  const storeKey = STORE_KEY_MAP[STORE_ID];
+  if (!storeKey) { alert('この店舗はサイト連携に対応していません。'); return; }
+
+  const dateFrom = document.getElementById('sync-date-from').value;
+  const dateTo   = document.getElementById('sync-date-to').value;
+  if (!dateFrom || !dateTo) { alert('対象期間を入力してください。'); return; }
+
+  const useTamashii = document.getElementById('sync-site-tamashii').checked;
+  const useRanking  = document.getElementById('sync-site-ranking').checked;
+  const useHomepage = document.getElementById('sync-site-homepage').checked;
+  if (!useTamashii && !useRanking && !useHomepage) { alert('連携サイトを1つ以上選択してください。'); return; }
+
+  // ログエリア表示
+  const logArea    = document.getElementById('sync-log-area');
+  const logContent = document.getElementById('sync-log-content');
+  logArea.style.display = '';
+  logContent.textContent = '';
+  document.getElementById('btn-sync-execute').disabled = true;
+
+  const appendLog = msg => {
+    logContent.textContent += msg + '\n';
+    logContent.scrollTop = logContent.scrollHeight;
+  };
+
+  appendLog('▶ 連携開始...');
+
+  // SSEで実行ログを受信
+  if (_syncEventSource) _syncEventSource.close();
+  _syncEventSource = new EventSource(`${VPS_BASE_URL}/api/events`);
+  _syncEventSource.onmessage = e => {
+    try {
+      const d = JSON.parse(e.data);
+      appendLog(d.message);
+    } catch {}
+  };
+  _syncEventSource.onerror = () => {
+    _syncEventSource.close();
+    _syncEventSource = null;
+  };
+
+  // 連携API呼び出し（全サイト or 個別）
+  const endpoint = (useTamashii && useRanking && useHomepage)
+    ? '/api/sync/all-sites'
+    : useTamashii ? '/api/sync/esute-tamashii'
+    : useRanking  ? '/api/sync/esute-ranking'
+    : '/api/sync/homepage';
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (VPS_API_KEY) headers['X-Api-Key'] = VPS_API_KEY;
+
+  try {
+    const res  = await fetch(`${VPS_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ store_key: storeKey, date_from: dateFrom, date_to: dateTo }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      appendLog(`❌ エラー: ${json.error || res.statusText}`);
+    } else {
+      appendLog(`✅ リクエスト送信完了（${json.count ?? 0} 件）。実行ログをお待ちください...`);
+    }
+  } catch (err) {
+    appendLog(`❌ 通信エラー: ${err.message}`);
+  }
+
+  // 30秒後に自動でSSE切断
+  setTimeout(() => {
+    if (_syncEventSource) {
+      _syncEventSource.close();
+      _syncEventSource = null;
+      appendLog('（ログ受信終了）');
+    }
+    document.getElementById('btn-sync-execute').disabled = false;
+  }, 30000);
 }
 
 function changeCalendarWeek(delta) {
@@ -13521,6 +13661,52 @@ window.addEventListener('DOMContentLoaded', init);
       <button class="btn btn-secondary" onclick="closeSalesEditModal()">キャンセル</button>
     </div>
     <input type="hidden" id="sales-edit-therapist">
+  </div>
+</div>
+
+<!-- サイト自動連携モーダル -->
+<div id="site-sync-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9400;align-items:flex-end;justify-content:center">
+  <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;max-width:480px;max-height:92vh;display:flex;flex-direction:column">
+    <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-weight:700;font-size:16px">🌐 サイト自動連携</div>
+      <button onclick="_hideModal('site-sync-modal')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">×</button>
+    </div>
+    <div style="padding:16px;overflow-y:auto;flex:1">
+      <!-- 対象期間 -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted)">対象期間</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" id="sync-date-from" class="ts" style="flex:1">
+          <span style="color:var(--muted)">〜</span>
+          <input type="date" id="sync-date-to" class="ts" style="flex:1">
+        </div>
+      </div>
+      <!-- 連携サイト選択 -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--muted)">連携サイト</div>
+        <div style="display:flex;flex-direction:column;gap:8px" id="sync-site-checkboxes">
+          <label id="sync-site-tamashii-wrap" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:10px;cursor:pointer">
+            <input type="checkbox" id="sync-site-tamashii" checked style="width:18px;height:18px;cursor:pointer">
+            <span style="font-size:14px">エステ魂</span>
+          </label>
+          <label id="sync-site-ranking-wrap" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:10px;cursor:pointer">
+            <input type="checkbox" id="sync-site-ranking" checked style="width:18px;height:18px;cursor:pointer">
+            <span style="font-size:14px">エステランキング</span>
+          </label>
+          <label id="sync-site-homepage-wrap" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:10px;cursor:pointer">
+            <input type="checkbox" id="sync-site-homepage" checked style="width:18px;height:18px;cursor:pointer">
+            <span style="font-size:14px">HP管理画面</span>
+          </label>
+        </div>
+      </div>
+      <!-- 実行ボタン -->
+      <button id="btn-sync-execute" class="btn" style="width:100%;background:#7c3aed;color:#fff;border-color:#7c3aed;margin-bottom:14px" onclick="executeSiteSync()">🚀 連携実行</button>
+      <!-- ログ -->
+      <div id="sync-log-area" style="display:none">
+        <div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted)">実行ログ</div>
+        <div id="sync-log-content" style="background:#1a1a2e;color:#a5f3fc;border-radius:10px;padding:12px;font-size:12px;font-family:monospace;max-height:200px;overflow-y:auto;white-space:pre-wrap;line-height:1.6"></div>
+      </div>
+    </div>
   </div>
 </div>
 

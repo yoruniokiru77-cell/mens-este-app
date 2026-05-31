@@ -113,6 +113,62 @@ DBに設定がない間は `.env`（既存動作）が引き続き使われる�
 
 ---
 
+---
+
+## store_integrations フェーズ2〜3実装（セッション17継続）
+
+### Phase 2: VPSデプロイ準備（shift-sync-tool側）
+
+#### server.js 変更点
+- **CORS追加**: Vercel本番（`https://mens-este-app.vercel.app`）とlocalhost開発を許可
+- **API Key認証追加**: `requireApiKey` ミドルウェアを全 `/api/sync/*` ルートに適用
+  - `.env` の `API_KEY` が未設定の場合はスキップ（ローカル開発は従来通り）
+  - リクエストヘッダー `X-Api-Key` で認証
+
+#### 新規作成ファイル（shift-sync-tool/）
+- **`setup.sh`**: Ubuntu 22.04用自動セットアップスクリプト（Node.js 20 / PM2 / Playwright依存 / nginx / ufw）
+- **`ecosystem.config.js`**: PM2プロセス設定（`/opt/shift-sync-tool` に配置）
+
+#### .env.example 追加項目
+```
+API_KEY=（32バイトランダム16進数）
+ENCRYPTION_KEY=（32バイトランダム16進数）
+BROWSER_HEADLESS=true（本番用）
+```
+
+### Phase 3: シフトカレンダーUI（index.html）
+
+#### 追加定数（index.html 冒頭近く）
+```js
+const VPS_BASE_URL = ''; // VPS IPを入力: 例 'http://123.456.789.0'
+const VPS_API_KEY  = ''; // .envのAPI_KEYと同じ値
+const STORE_KEY_MAP = { '11111111...': 'herroom', ... };
+const STORE_SITES   = { herroom: { tamashii, homepage }, ... };
+```
+
+#### 追加HTML
+- **`#site-sync-modal`**: サイト連携モーダル（対象期間・サイト選択・ログ表示）
+
+#### 追加ボタン
+- **`#btn-site-sync`（🌐 サイト連携）**: シフトカレンダーの週ナビ行「更新」ボタン横
+  - `VPS_BASE_URL` 設定済み＆管理者モードのみ表示（`initShiftCalendar` で制御）
+
+#### 追加JS関数
+- **`openSiteSyncModal()`**: モーダルを開く（今週の日付・店舗対応サイトを自動設定）
+- **`executeSiteSync()`**: VPS APIを呼び出し、SSEでログをリアルタイム受信（30秒後に自動切断）
+
+#### VPSデプロイ手順（VPS契約後）
+1. ConoHa VPS（Ubuntu 22.04 / 2GB）を契約
+2. SSHログイン後 `sudo bash setup.sh` を実行
+3. アプリファイルをSCPでアップロード: `scp -r <シフト自動連係/shift-sync-tool/>* root@<IP>:/opt/shift-sync-tool/`
+4. `cd /opt/shift-sync-tool && npm install --omit=dev`
+5. `npx playwright install chromium`
+6. `.env` を設定（`API_KEY` と `ENCRYPTION_KEY` を生成して記入）
+7. PM2起動: `pm2 start ecosystem.config.js && pm2 save && pm2 startup`
+8. index.htmlの `VPS_BASE_URL` と `VPS_API_KEY` を更新してVercelにデプロイ
+
+---
+
 ## 重要な仕様メモ
 
 ### 時刻処理の原則（徹底すること）
