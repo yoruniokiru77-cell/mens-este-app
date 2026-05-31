@@ -9137,6 +9137,27 @@ function _calDateHeader(d, i, today) {
   </th>`;
 }
 
+// 日付順ビュー用シフトカード
+function _calDateCard(s) {
+  const isAbsent    = s.attendanceType === 'absent' || s.attendanceType === 'noshow';
+  const isAbnormal  = s.attendanceType && s.attendanceType !== 'normal';
+  const isPending   = s.status === 'pending';
+  const bg = isAbsent  ? 'rgba(107,114,128,0.55)'
+           : isPending ? 'rgba(107,114,128,0.6)'
+           : getRoomColor(s.roomName).bg;
+  const attLabel = isAbnormal
+    ? `<div style="font-size:9px;font-weight:800;margin-top:2px">${isAbsent ? '❌' : '⚠'} ${ATTENDANCE_LABEL[s.attendanceType]?.label || s.attendanceType}</div>`
+    : '';
+  const nameStyle = isAbsent ? 'font-weight:700;text-decoration:line-through;opacity:.75' : 'font-weight:700';
+  return `<div style="background:${bg};color:#fff;border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.4;${isAbsent ? 'opacity:.8' : ''}">
+    ${isPending ? '<div style="font-size:9px;opacity:.85">⏳ 未承認</div>' : ''}
+    <div style="${nameStyle}">${s.therapist}</div>
+    <div>${s.startTime}〜${s.endTime}</div>
+    ${s.roomName ? '<div style="opacity:.85">🚪' + s.roomName + '</div>' : ''}
+    ${attLabel}
+  </div>`;
+}
+
 // シフトセル（時間帯バッジ＋アクション）
 function _calShiftBadge(s) {
   const isPending    = s.status === 'pending';
@@ -9270,12 +9291,7 @@ function renderShiftCalendar(el, days, shifts) {
                 const dayShifts = byDate[dateStr] || [];
                 const isToday = dateStr === today;
                 return `<td style="vertical-align:top;padding:4px 2px;border-right:1px solid var(--border);min-width:68px;${isToday ? 'background:rgba(233,69,96,0.04)' : ''}">
-                  ${dayShifts.length ? dayShifts.map(s => `
-                    <div style="background:${getRoomColor(s.roomName).bg};color:#fff;border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.4">
-                      <div style="font-weight:700">${s.therapist}</div>
-                      <div>${s.startTime}〜${s.endTime}</div>
-                      ${s.roomName ? '<div style="opacity:.85">🚪' + s.roomName + '</div>' : ''}
-                    </div>`).join('')
+                  ${dayShifts.length ? dayShifts.map(s => _calDateCard(s)).join('')
                   : '<div style="color:var(--border);text-align:center;padding:8px 0;font-size:18px">—</div>'}
                 </td>`;
               }).join('')}
