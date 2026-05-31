@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -1991,7 +1991,8 @@ function _timeToMin27(t) {
 
 // -------- 給料計算ロジック --------
 function _calcPayroll(row, storeSettings, opts = {}) {
-  const mode = (storeSettings && storeSettings.discount_mode) || DISCOUNT_MODE;
+  // セラピスト個別設定 → 店舗設定 → グローバルデフォルト の優先順
+  const mode = row.therapist_discount_mode || (storeSettings && storeSettings.discount_mode) || DISCOUNT_MODE;
 
   // コースバック率
   const courseBack = (row.therapist_course_back !== undefined && row.therapist_course_back !== null)
@@ -2061,6 +2062,7 @@ async function apiGet(action, params = {}) {
         dailyGuarantee: t.daily_guarantee !== null && t.daily_guarantee !== undefined ? Number(t.daily_guarantee) : null,
         sendPayrollLine: t.send_payroll_line !== false,
         sendStoreLine:   t.send_store_line   !== false,
+        discountMode:    t.discount_mode || null,
         id:            t.id
       }));
     }
@@ -2374,7 +2376,7 @@ async function apiGet(action, params = {}) {
             .lte('date', endDt.toISOString())
             .order('date');
         })(),
-        _sb.from('therapists').select('name,course_back,option_back,has_guarantee,hourly_rate,daily_guarantee').eq('store_id', STORE_ID).eq('active', true),
+        _sb.from('therapists').select('id,name,course_back,option_back,has_guarantee,hourly_rate,daily_guarantee,discount_mode').eq('store_id', STORE_ID).eq('active', true),
         _sb.from('store_settings').select('*').eq('store_id', STORE_ID).single()
       ]);
       const tMap = {};
@@ -2449,9 +2451,10 @@ async function apiGet(action, params = {}) {
           ? menuBackMap[tInfo.id + '_' + menuId] : null;
         const rowWithBack = {
           ...r,
-          therapist_course_back: tInfo.course_back,
-          therapist_option_back: tInfo.option_back,
-          fixed_back_amount:     fixedBackAmount
+          therapist_course_back:   tInfo.course_back,
+          therapist_option_back:   tInfo.option_back,
+          fixed_back_amount:       fixedBackAmount,
+          therapist_discount_mode: tInfo.discount_mode || null,
         };
         const { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack }
           = _calcPayroll(rowWithBack, ss);
@@ -3136,6 +3139,7 @@ case 'sendReminderToOne': {
       if (params.dailyGuarantee !== undefined) upd.daily_guarantee = params.dailyGuarantee === '' || params.dailyGuarantee === null ? null : Number(params.dailyGuarantee);
       if (params.sendPayrollLine !== undefined) upd.send_payroll_line = params.sendPayrollLine;
       if (params.sendStoreLine   !== undefined) upd.send_store_line   = params.sendStoreLine;
+      if (params.discountMode    !== undefined) upd.discount_mode     = params.discountMode || null;
       const { error } = await _sb.from('therapists').update(upd).eq('store_id', STORE_ID).eq('line_user_id', params.userId);
       if (error) throw new Error(error.message);
       return { ok: true };
@@ -12218,7 +12222,18 @@ async function loadLineUsers() {
       el.innerHTML = '<p style="color:var(--muted)">まだ登録されていません。セラピストにLINE Botを友達追加してもらい、源氏名を送ってもらってください。</p>';
       return;
     }
-    const isKamisu = STORE_ID === '33333333-0000-0000-0000-000000000003';
+    const isKamisu   = STORE_ID === '33333333-0000-0000-0000-000000000003';
+    const isNeverland = STORE_ID === '44444444-0000-0000-0000-000000000004';
+
+    // 固定バックの有無を判定（therapist_menu_backsに1件以上あるセラピストIDをSet化）
+    const therapistIdList = data.filter(u => u.id).map(u => u.id);
+    const fixedBackSet = new Set();
+    if (therapistIdList.length) {
+      const { data: backs } = await _sb.from('therapist_menu_backs')
+        .select('therapist_id').eq('store_id', STORE_ID).in('therapist_id', therapistIdList)
+        .not('back_amount', 'is', null).gt('back_amount', 0);
+      (backs || []).forEach(b => fixedBackSet.add(b.therapist_id));
+    }
     // 神栖店の場合はスカウト紐付けを取得
     let scoutMap = {};
     if (isKamisu) {
@@ -12243,6 +12258,7 @@ async function loadLineUsers() {
               <th>時給</th>
               <th>1日保証</th>
               <th>固定バック</th>
+              ${isNeverland ? '<th>割引モード</th>' : ''}
               ${isKamisu ? '<th>スカウト</th>' : ''}
               <th>保存</th>
               <th>削除</th>
@@ -12259,8 +12275,9 @@ async function loadLineUsers() {
               const scoutLabel = isKamisu && scoutMap[u.id]
                 ? `<span style="font-size:12px;background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:10px;margin-right:6px">${scoutMap[u.id]}</span>`
                 : '';
+              const hasFixedBack = fixedBackSet.has(u.id);
               return `
-              <tr id="line-row-${u.userId}">
+              <tr id="line-row-${u.userId}" data-has-fixed-back="${hasFixedBack}">
                 <td><strong>${u.name || '<span style="color:var(--warning)">未設定</span>'}</strong></td>
                 <td style="font-size:12px">${u.registeredAt ? new Date(u.registeredAt).toLocaleDateString('ja-JP') : '-'}</td>
                 <td>
@@ -12271,11 +12288,13 @@ async function loadLineUsers() {
                 </td>
                 <td>
                   <div style="display:flex;align-items:center;gap:4px">
-                    <input type="number" value="${cbPct}" min="0" max="100" step="1" placeholder="未設定"
-                      style="width:64px;padding:6px 8px;border:1.5px solid ${registered ? 'var(--border)' : 'var(--warning)'};border-radius:6px;font-size:13px"
+                    <input type="number" value="${cbPct}" min="0" max="100" step="1"
+                      placeholder="${hasFixedBack ? '固定バックあり' : '未設定'}"
+                      style="width:64px;padding:6px 8px;border:1.5px solid ${registered ? 'var(--border)' : hasFixedBack ? 'var(--border)' : 'var(--warning)'};border-radius:6px;font-size:13px;${hasFixedBack && !registered ? 'background:var(--bg);color:var(--muted)' : ''}"
                       id="cb-${u.userId}">
                     <span style="font-size:12px;color:var(--muted)">%</span>
-                    ${!registered ? '<span class="badge badge-red">要設定</span>' : ''}
+                    ${!registered && !hasFixedBack ? '<span class="badge badge-red">要設定</span>' : ''}
+                    ${!registered && hasFixedBack ? '<span style="font-size:11px;color:var(--muted)">任意</span>' : ''}
                   </div>
                 </td>
                 <td>
@@ -12313,6 +12332,14 @@ async function loadLineUsers() {
                 <td>
                   <button class="btn btn-secondary btn-sm" onclick="openMenuBackModal('${u.userId}','${u.name}','${u.id||''}')">固定バック</button>
                 </td>
+                ${isNeverland ? `<td>
+                  <select id="dm-th-${u.userId}"
+                    style="padding:5px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:12px">
+                    <option value="" ${!u.discountMode ? 'selected' : ''}>店舗設定</option>
+                    <option value="deduct_then_back" ${u.discountMode==='deduct_then_back' ? 'selected' : ''}>按分（客負担）</option>
+                    <option value="store_bears" ${u.discountMode==='store_bears' ? 'selected' : ''}>店舗負担</option>
+                  </select>
+                </td>` : ''}
                 ${isKamisu ? `<td>${scoutLabel}<button class="btn btn-sm" style="font-size:12px;padding:3px 10px" onclick="openScoutModal('${u.id}','${u.name}')">🔍 スカウト</button></td>` : ''}
                 <td>
                   <button class="btn btn-primary btn-sm" onclick="saveLineUser('${u.userId}', '${u.name}')">保存</button>
@@ -12337,6 +12364,9 @@ async function saveLineUser(userId, name) {
   const nomFeeInput = document.getElementById('nomfee-' + userId);
   const hourlyInput = document.getElementById('hourly-' + userId);
   const dailyInput  = document.getElementById('daily-'  + userId);
+  const dmInput  = document.getElementById('dm-th-' + userId); // NEVERLAND割引モード（存在しない店舗はnull）
+  const trEl     = document.getElementById('line-row-' + userId);
+  const hasFixedBack = trEl && trEl.dataset.hasFixedBack === 'true';
   const cbVal    = cbInput.value !== '' ? Number(cbInput.value) / 100 : '';
   const obVal    = obInput.value !== '' ? Number(obInput.value) / 100 : 1.0;
   const intVal   = Number(intInput.value) || 30;
@@ -12344,13 +12374,15 @@ async function saveLineUser(userId, name) {
   const hourlyVal = hourlyInput && hourlyInput.value !== '' ? Number(hourlyInput.value) : null;
   const dailyVal  = dailyInput  && dailyInput.value  !== '' ? Number(dailyInput.value)  : null;
   const guarVal   = hourlyVal !== null || dailyVal !== null;
+  const discountModeVal = dmInput ? (dmInput.value || null) : undefined;
 
-  if (cbInput.value === '') {
-    alert('コースバック率を入力してください（例: 50）');
+  // 固定バックが設定済みの場合はコースバック率は任意
+  if (cbInput.value === '' && !hasFixedBack) {
+    alert('コースバック率を入力してください（例: 50）\n※固定バックを設定している場合は入力不要です。');
     cbInput.focus();
     return;
   }
-  if (cbVal < 0 || cbVal > 1) {
+  if (cbVal !== '' && (cbVal < 0 || cbVal > 1)) {
     alert('コースバック率は0〜100の間で入力してください');
     return;
   }
@@ -12365,7 +12397,8 @@ async function saveLineUser(userId, name) {
       email:        emailVal,
       nominationFee: nomFeeVal,
       hourlyRate:    hourlyVal,
-      dailyGuarantee: dailyVal
+      dailyGuarantee: dailyVal,
+      ...(discountModeVal !== undefined ? { discountMode: discountModeVal } : {})
     });
     therapists = await apiGet('getTherapists');
     loadLineUsers();
