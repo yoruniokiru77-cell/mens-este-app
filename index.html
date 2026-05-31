@@ -5204,6 +5204,7 @@ async function _scaCheckConflict(date, startTime, endTime, excludeRow, roomNameO
       if (s.status !== 'approved') return false;
       if (s.row === excludeRow) return false;
       if (s.roomName !== roomName) return false;
+      if (s.attendanceType === 'absent' || s.attendanceType === 'noshow') return false;
       const d1 = (s.date||'').replace(/\//g,'-');
       const d2 = (date||'').replace(/\//g,'-');
       if (d1 !== d2) return false;
@@ -5335,9 +5336,18 @@ async function approveShiftChangeRequest(row, newStart, newEnd, therapistName) {
     const newStartMin = _toMin27(newStart);
     const newEndMin   = _toMin27(newEnd);
 
+    // ルームインターバルを取得
+    let roomIntervalMin = 0;
+    try {
+      const rooms5 = await apiGetCached('getRoomMaster', {});
+      const room5  = rooms5.find(r => r.id === currentShift.room_id);
+      roomIntervalMin = room5 ? (room5.intervalMin || 0) : 0;
+    } catch(e5) { roomIntervalMin = 0; }
+
     const conflict = (roomShifts || []).find(s => {
+      if (s.attendance_type === 'absent' || s.attendance_type === 'noshow') return false;
       const sStart = _toMin27(s.start_time);
-      const sEnd   = _toMin27(s.end_time);
+      const sEnd   = _toMin27(s.end_time) + roomIntervalMin;
       return newStartMin < sEnd && newEndMin > sStart;
     });
 
@@ -10451,7 +10461,7 @@ async function saveAndSendLine() {
       const rIso = r.rawDate || r.date.replace(/\//g,'-').replace(' ','T');
       const rDt  = new Date(rIso);
       const rEnd = new Date(rDt.getTime() + (Number(r.course) + interval) * 60000);
-      const newEnd = new Date(dt.getTime() + mins * 60000);
+      const newEnd = new Date(dt.getTime() + (mins + interval) * 60000);
       return dt < rEnd && newEnd > rDt;
     });
     if (conflict) {
@@ -11724,7 +11734,11 @@ async function confirmHimeApprove() {
       const mins3   = resvFull.course_min || 60;
       const dtMs3   = dt3.getTime();
       const newEndMs3 = dtMs3 + mins3 * 60000;
-      const interval3 = (therapists.find(t => t.name === resvFull.therapist_name) || {}).interval || 0;
+      let interval3 = (therapists.find(t => t.name === resvFull.therapist_name) || {}).interval;
+      if (interval3 === undefined || interval3 === null) {
+        try { const iv3 = await apiGet('getTherapistInterval', { therapist: resvFull.therapist_name }); interval3 = iv3 ?? 30; }
+        catch(e3iv) { interval3 = 30; }
+      }
       // 姫予約の占有終了（コース＋インターバル）
       const newEndMs3adj = dtMs3 + (mins3 + interval3) * 60000;
       const conflict3 = [...resvToday3, ...resvNext3].find(r => {
