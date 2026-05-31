@@ -9547,20 +9547,19 @@ async function openEditResv(idx) {
   if (!r) return;
   window._editResvRow = r.row;
 
-  // rawDateがあれば元のISO文字列を使う（24:xx形式を避けるため）
+  // rawDateはUTCのISO文字列のため、_fmtDatetimeJpでJST+27時ルール変換してから時刻を取得
   const isoSrc  = r.rawDate || r.date.replace(/\//g, '-').replace(' ', 'T');
-  const dateISO = isoSrc.substring(0, 16);
-  // 日付と時刻を分割してセット（rawDateはUTC/JST混在に注意: Dateオブジェクト経由で取得）
-  const _dtObj  = new Date(isoSrc);
-  const _dpEl   = document.getElementById('resv-date-part');
-  const _dtParts = dateISO ? dateISO.split('T') : ['',''];
-  if (_dpEl) _dpEl.value = _dtParts[0] || '';
-  const _timeParts = (_dtParts[1] || '').split(':');
-  // 時刻をセレクトにセット（27時ルール: 0〜2時台は前日表示なので24+hで表示）
-  const _rawH = parseInt(_timeParts[0] || '10');
-  const _rawM = parseInt(_timeParts[1] || '0');
+  const _fmtResult = _fmtDatetimeJp(isoSrc); // 例: "2026/05/31 10:00"
+  const _fmtParts  = _fmtResult.split(' ');
+  const _datePart  = (_fmtParts[0] || '').replace(/\//g, '-'); // YYYY-MM-DD
+  const _timePart  = _fmtParts[1] || '10:00';                   // HH:MM（27時ルール適用済み）
+  const _dpEl = document.getElementById('resv-date-part');
+  if (_dpEl) _dpEl.value = _datePart;
+  const _timeParts = _timePart.split(':');
+  const _rawH   = parseInt(_timeParts[0] || '10');
+  const _rawM   = parseInt(_timeParts[1] || '0');
   const _roundM = Math.round(_rawM / 5) * 5 % 60;
-  const _dispH  = _rawH < 3 ? _rawH + 24 : _rawH; // 深夜0〜2時は26〜27時として表示
+  const _dispH  = _rawH; // _fmtDatetimeJpが既にJST+27時ルール適用済み
   const _timeVal = String(_dispH).padStart(2,'0') + ':' + String(_roundM).padStart(2,'0');
   const _tSel = document.getElementById('resv-time-sel');
   if (_tSel) {
@@ -9832,25 +9831,12 @@ async function updateResvRow() {
       await apiGet('sendLineMessage', { userId: t.userId, message: msg });
     }
 
-    window._editResvRow = null;
-    const saveBtn = document.querySelector('[onclick="updateResvRow()"]');
-    if (saveBtn) {
-      saveBtn.textContent = '保存';
-      saveBtn.setAttribute('onclick', 'submitReservation()');
-    }
-    // LINE送信ボタンを再表示
-    const lineBtn = document.querySelector('[onclick="saveAndSendLine()"]');
-    if (lineBtn) lineBtn.style.display = '';
-    // お客様名・電話番号のロック解除
-    const nameEl = document.getElementById('resv-customer-name');
-    const telEl  = document.getElementById('resv-customer-tel-full');
-    if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; nameEl.style.color = ''; }
-    if (telEl)  { telEl.readOnly  = false; telEl.style.background  = ''; telEl.style.color  = ''; }
-    // セラピスト選択のロック解除・変更ボタン非表示
+    // セラピスト選択のロック解除・変更ボタン非表示（resetResvForm前に行う）
     const selEl = document.getElementById('resv-therapist');
     if (selEl) { selEl.disabled = false; selEl.style.background = ''; selEl.style.color = ''; }
     const chgBtn = document.getElementById('resv-therapist-change-btn');
     if (chgBtn) chgBtn.style.display = 'none';
+    resetResvForm();
     loadReservations();
     showToast('予約を更新しました');
   } catch(e) { alert('エラー: ' + e.message); }
