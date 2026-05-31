@@ -2018,9 +2018,16 @@ function _calcPayroll(row, storeSettings, opts = {}) {
 
   let storeDrop, therapistCoursePay;
   if (fixedBack !== null) {
-    // 固定バック金額を使用（割引・バック率は無視）
-    therapistCoursePay = fixedBack;
-    storeDrop = coursePrice - fixedBack - discount;
+    if (mode === 'deduct_then_back') {
+      // 固定バック＋按分: 割引をセラピストと店舗で半分ずつ負担
+      const discountHalf = Math.round(discount / 2);
+      therapistCoursePay = fixedBack - discountHalf;
+      storeDrop          = coursePrice - fixedBack - (discount - discountHalf);
+    } else {
+      // 固定バック＋店舗負担（またはデフォルト）: 割引は店舗が全額負担
+      therapistCoursePay = fixedBack;
+      storeDrop          = coursePrice - fixedBack - discount;
+    }
   } else if (mode === 'store_bears') {
     storeDrop        = Math.round(coursePrice * (1 - courseBack)) - discount;
     therapistCoursePay = Math.round(coursePrice * courseBack);
