@@ -352,6 +352,7 @@ Supabaseのスキーマ変更後は「API → Reload schema」でキャッシュ
 |---|---|
 | docs/work_log_session14.md | セッション14（5/15〜5/25）の作業内容 |
 | docs/work_log_session15.md | セッション15（5/28〜5/30）の作業内容 |
-| docs/work_log_session16.md | セッション16〜17（5/31〜6/1）の作業内容 |
+| docs/work_log_session16.md | セッション16（5/31）の作業内容 |
+| docs/work_log_session17.md | セッション17（6/1）の作業内容 |
 
 **不明な仕様・消えた機能はまず作業ログを確認すること。**
