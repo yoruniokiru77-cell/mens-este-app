@@ -2769,6 +2769,26 @@ async function apiGet(action, params = {}) {
       return { ok: true };
     }
 
+    case 'saveSaleOptions': {
+      // reservation_idに紐づくオプションをDELETE→INSERT（options: [{menuId, name, amount}]）
+      const { reservationId, options } = params;
+      if (!reservationId) return { ok: true };
+      await _sb.from('sale_options').delete()
+        .eq('store_id', STORE_ID).eq('reservation_id', reservationId);
+      if (options && options.length > 0) {
+        const inserts = options.map(o => ({
+          store_id:       STORE_ID,
+          reservation_id: reservationId,
+          menu_id:        o.menuId || null,
+          menu_name:      o.name  || '',
+          amount:         Number(o.amount) || 0
+        }));
+        const { error } = await _sb.from('sale_options').insert(inserts);
+        if (error) throw new Error(error.message);
+      }
+      return { ok: true };
+    }
+
     case 'getUnsubmittedTherapists': {
       const now   = new Date();
       const day   = now.getDay();
@@ -3015,10 +3035,29 @@ case 'sendReminderToOne': {
         status:       custData.status||'normal',
         ngTherapists: custData.ng_therapists||[]
       } : { found: false };
+      // sale_optionsをreservation_id単位で取得
+      const resvIds = (histRes.data || []).map(r => r.id).filter(Boolean);
+      let optionsMap = {};
+      if (resvIds.length) {
+        const { data: saleOpts } = await _sb.from('sale_options')
+          .select('reservation_id, menu_name, amount')
+          .eq('store_id', STORE_ID).in('reservation_id', resvIds);
+        (saleOpts || []).forEach(o => {
+          if (!optionsMap[o.reservation_id]) optionsMap[o.reservation_id] = [];
+          optionsMap[o.reservation_id].push({ name: o.menu_name, amount: Number(o.amount) });
+        });
+      }
+
       const history = (histRes.data || []).map(r => ({
         date: _fmtDatetimeJp(r.date), therapist: r.therapist_name||'',
         course: r.course_min, customer: r.customer_name||'',
-        price: r.price, discount: r.discount, nomination: r.nomination
+        price: r.price, discount: r.discount, nomination: r.nomination,
+        coursePrice:   r.course_price || 0,
+        optionPrice:   r.option_price || 0,
+        nominationFee: r.nomination_fee || 0,
+        memo:          r.memo || '',
+        resvId:        r.id,
+        options:       optionsMap[r.id] || null, // nullはsale_optionsなし→フォールバック
       }));
       const memos = (memoRes.data || []).map(r => ({
         therapist: r.therapist_name||'', memo: r.memo||'',
@@ -6449,6 +6488,7 @@ function toggleSalesDetail(id) {
 
 let _editSalesRow = null;
 let _adminSalesResvId = null; // 管理者側から新規売上入力する際の予約ID
+let _editSalesResvId  = null; // 売上編集時の reservation_id（sale_options保存用）
 
 // 管理者予約一覧から売上入力を開く
 async function openAdminSalesFromResv(idx) {
@@ -6539,6 +6579,7 @@ async function openSalesEditModal(rowId, customer, datetime, course, price, disc
   const { data: salesRow } = await _sb.from('sales').select('*').eq('id', rowId).maybeSingle();
   if (salesRow) {
     document.getElementById('sales-edit-therapist').value = salesRow.therapist_name || '';
+    _editSalesResvId = salesRow.reservation_id || null;
   }
 
   // コースマスタを読み込んでselectに設定
@@ -6808,10 +6849,41 @@ function calcSalesEditTotal() {
   return { coursePrice, nomFee, optTotal, discount, total, optParts };
 }
 
+// 管理者売上編集側の選択オプションを [{menuId, name, amount}] で返す（延長除く）
+function getEditSelectedOptionsData() {
+  const items = [];
+  _editDynamicOptions.forEach((opt, i) => {
+    const id = 'se-dyn-opt-' + i;
+    if (opt.optionType === 'fixed') {
+      const chk = document.getElementById(id);
+      if (chk && chk.checked) items.push({ menuId: opt.id || null, name: opt.name, amount: Number(opt.optionPrice) || 0 });
+    } else if (opt.optionType === 'time_unit') {
+      const chk = document.getElementById(id);
+      const rng = document.getElementById(id + '-min');
+      if (chk && chk.checked && rng) {
+        const mins = Number(rng.value) || opt.unitMin;
+        const units = Math.round(mins / (opt.unitMin || 1));
+        items.push({ menuId: opt.id || null, name: opt.name + mins + '分', amount: units * (Number(opt.unitPrice) || 0) });
+      }
+    } else {
+      const chk = document.getElementById(id);
+      const amt = document.getElementById(id + '-amount');
+      if (chk && chk.checked && amt && Number(amt.value) > 0)
+        items.push({ menuId: opt.id || null, name: opt.name, amount: Number(amt.value) });
+    }
+  });
+  const otherEl  = document.getElementById('se-opt-other');
+  const otherAmt = Number(document.getElementById('se-opt-other-amount')?.value) || 0;
+  if (otherEl && otherEl.checked && otherAmt > 0)
+    items.push({ menuId: null, name: 'その他', amount: otherAmt });
+  return items; // 延長はcourse_priceに含まれるため除外
+}
+
 function closeSalesEditModal() {
   _hideModal('sales-edit-modal');
   _editSalesRow     = null;
   _adminSalesResvId = null;
+  _editSalesResvId  = null;
 }
 
 async function saveSalesEdit() {
@@ -6863,6 +6935,11 @@ async function saveSalesEdit() {
         memo:           fullMemo || null
       }).eq('id', _editSalesRow);
       if (error) throw new Error(error.message);
+      // sale_optionsを保存
+      if (_editSalesResvId) {
+        try { await apiGet('saveSaleOptions', { reservationId: _editSalesResvId, options: getEditSelectedOptionsData() }); }
+        catch(e2) { console.warn('sale_options保存エラー:', e2); }
+      }
       showToast('売上を更新しました');
     } else {
       // 新規売上を登録
@@ -6884,6 +6961,11 @@ async function saveSalesEdit() {
         date:           new Date().toISOString()
       });
       if (error) throw new Error(error.message);
+      // sale_optionsを保存（新規はadminSalesResvId）
+      if (_adminSalesResvId) {
+        try { await apiGet('saveSaleOptions', { reservationId: _adminSalesResvId, options: getEditSelectedOptionsData() }); }
+        catch(e2) { console.warn('sale_options保存エラー:', e2); }
+      }
       _adminSalesResvId = null;
       showToast('売上を登録しました');
     }
@@ -7154,22 +7236,41 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
         </div>`).join('');
     }
 
-    // 来店履歴
+    // 来店履歴（アコーディオン）
     const histEl = document.getElementById('customer-modal-history');
     if (!res.history.length) {
       histEl.innerHTML = '<p style="color:var(--muted);font-size:13px">来店履歴なし</p>';
     } else {
-      histEl.innerHTML = `<div class="table-wrap"><table>
-        <thead><tr><th>日時</th><th>コース</th><th>指名</th>${isAdminMode ? '<th>担当</th>' : ''}<th>金額</th></tr></thead>
-        <tbody>${res.history.map(h => `
-          <tr>
-            <td style="font-size:12px;white-space:nowrap">${h.date}</td>
-            <td>${h.course}分</td>
-            <td style="font-size:12px">${NOMINATION_LABEL[h.nomination] || h.nomination || '-'}</td>
-            ${isAdminMode ? `<td style="font-size:12px;white-space:nowrap">${h.therapist || '-'}</td>` : ''}
-            <td>¥${Number(h.price).toLocaleString()}</td>
-          </tr>`).join('')}
-        </tbody></table></div>`;
+      // グローバルキャッシュに保存（toggleHistDetail で参照）
+      window._histDetailData = res.history;
+      histEl.innerHTML = res.history.map((h, i) => {
+        const nomLabel = NOMINATION_LABEL[h.nomination] || h.nomination || '-';
+        return `
+        <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden">
+          <div onclick="toggleHistDetail(${i})" style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--surface);cursor:pointer;gap:8px">
+            <div style="font-size:12px;color:var(--muted);white-space:nowrap">${h.date.split(' ')[1] || h.date}</div>
+            <div style="font-size:13px;font-weight:700;flex:1;white-space:nowrap">${h.course}分 ${nomLabel}</div>
+            ${isAdminMode ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap">${h.therapist||''}</div>` : ''}
+            <div style="font-size:13px;font-weight:700;white-space:nowrap">¥${Number(h.price).toLocaleString()}</div>
+            <div id="hist-arrow-${i}" style="font-size:12px;color:var(--muted);transition:transform .2s">▼</div>
+          </div>
+          <div id="hist-detail-${i}" style="display:none;background:var(--bg);padding:10px 14px;font-size:12px;border-top:1px solid var(--border)">
+            <div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--muted)">コース</span><span>¥${Number(h.coursePrice||0).toLocaleString()}</span></div>
+            ${(() => {
+              if (h.options && h.options.length > 0) {
+                return h.options.map(o => `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--muted)">${o.name}</span><span>¥${Number(o.amount).toLocaleString()}</span></div>`).join('');
+              } else if (h.optionPrice > 0) {
+                return `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--muted)">オプション計</span><span>¥${Number(h.optionPrice).toLocaleString()}</span></div>`;
+              }
+              return '';
+            })()}
+            ${h.nominationFee > 0 ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--muted)">指名料</span><span>¥${Number(h.nominationFee).toLocaleString()}</span></div>` : ''}
+            ${h.discount > 0 ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--accent)"><span>割引</span><span>-¥${Number(h.discount).toLocaleString()}</span></div>` : ''}
+            <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--border);font-weight:700;margin-top:4px"><span>合計</span><span>¥${Number(h.price).toLocaleString()}</span></div>
+            ${h.memo ? `<div style="margin-top:6px;padding:6px 8px;background:var(--surface);border-radius:6px;color:var(--muted)">📝 ${h.memo}</div>` : ''}
+          </div>
+        </div>`;
+      }).join('');
     }
     // NG管理セクション（管理者のみ）
     if (isAdminMode && c && c.found) {
@@ -7213,6 +7314,16 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
   }
 }
 
+
+// 顧客詳細 来店履歴アコーディオン
+function toggleHistDetail(idx) {
+  const detail = document.getElementById('hist-detail-' + idx);
+  const arrow  = document.getElementById('hist-arrow-'  + idx);
+  if (!detail) return;
+  const isOpen = detail.style.display !== 'none';
+  detail.style.display = isOpen ? 'none' : '';
+  if (arrow) arrow.style.transform = isOpen ? '' : 'rotate(180deg)';
+}
 
 // ============================================================
 // 給料ページ サブタブ切り替え
@@ -11360,6 +11471,36 @@ function getOptionsTotal() {
   return calcOptionsTotal();
 }
 
+// 選択中オプションを [{menuId, name, amount}] で返す（延長はcourse_priceに含まれるため除外）
+function getSelectedOptionsData() {
+  const items = [];
+  _dynamicOptions.forEach((opt, i) => {
+    const id = 'dyn-opt-' + i;
+    if (opt.optionType === 'fixed') {
+      const chk = document.getElementById(id);
+      if (chk && chk.checked) items.push({ menuId: opt.id || null, name: opt.name, amount: Number(opt.optionPrice) || 0 });
+    } else if (opt.optionType === 'time_unit') {
+      const chk = document.getElementById(id + '-check');
+      const rng = document.getElementById(id + '-range');
+      if (chk && chk.checked && rng) {
+        const mins = Number(rng.value) || opt.unitMin;
+        const units = Math.round(mins / opt.unitMin);
+        items.push({ menuId: opt.id || null, name: opt.name + mins + '分', amount: units * (Number(opt.unitPrice) || 0) });
+      }
+    } else {
+      const chk = document.getElementById(id + '-check');
+      const amt = document.getElementById(id + '-amount');
+      if (chk && chk.checked && amt && Number(amt.value) > 0)
+        items.push({ menuId: opt.id || null, name: opt.name, amount: Number(amt.value) });
+    }
+  });
+  const otherChk = document.getElementById('opt-other-check');
+  const otherAmt = Number(document.getElementById('opt-other-amount')?.value) || 0;
+  if (otherChk && otherChk.checked && otherAmt > 0)
+    items.push({ menuId: null, name: 'その他', amount: otherAmt });
+  return items; // 延長はcourse_priceに含まれるため除外
+}
+
 function getOptionsLabel() {
   const parts = [];
   // 動的オプション
@@ -11562,6 +11703,12 @@ async function submitSalesEntry() {
     //   }
     // } catch(e) { console.warn('店舗LINE通知エラー:', e); }
 
+    // sale_optionsを保存（reservation_idがある場合のみ）
+    const _resvIdForOpts = window._currentReservationId || null;
+    if (_resvIdForOpts) {
+      try { await apiGet('saveSaleOptions', { reservationId: _resvIdForOpts, options: getSelectedOptionsData() }); }
+      catch(e2) { console.warn('sale_options保存エラー:', e2); }
+    }
     showToast(wasUpdated ? '売上を更新しました' : '売上を登録しました');
     window._salesOriginal = null;
     const nameEl = document.getElementById('sales-customer-name');
