@@ -1915,10 +1915,10 @@ function updateCurrentExtensionPrice(prefix) {
 // ============================================================
 
 // -------- 内部ユーティリティ --------
-// 10:00〜26:00（翌2:00）の選択肢を生成
+// 09:00〜26:00（翌2:00）の選択肢を生成
 function _buildTimeOptions(selectedVal) {
   const times = [];
-  for (let h = 10; h <= 26; h++) {
+  for (let h = 9; h <= 26; h++) {
     ['00', '30'].forEach(m => {
       if (h === 26 && m === '30') return;
       const label = h + ':' + m;
@@ -4834,7 +4834,7 @@ async function renderRoomAvailGrid(dateStr) {
     }
 
     const hours = [];
-    for (let h = 10; h <= 26; h++) hours.push(h);
+    for (let h = 9; h <= 26; h++) hours.push(h);
 
     const rows = hours.map(h => {
       const label     = h > 24 ? `${h}:00` : `${String(h).padStart(2,'0')}:00`;
@@ -4876,7 +4876,7 @@ async function initShiftSubmit() {
   document.getElementById('shift-date').value = todayStr;
 
   // 時刻selectに選択肢を設定（10:00〜26:00）
-  document.getElementById('shift-start').innerHTML = _buildTimeOptions('10:00');
+  document.getElementById('shift-start').innerHTML = _buildTimeOptions('09:00');
   document.getElementById('shift-end').innerHTML   = _buildTimeOptions('20:00');
 
   // 追加待ちリストをリセット
@@ -9200,7 +9200,7 @@ async function openCalAddShift(therapistName, dateStr) {
   document.getElementById('cal-add-status').value = 'approved';
 
   // 時刻selectに選択肢を設定
-  document.getElementById('cal-add-start').innerHTML = _buildTimeOptions('10:00');
+  document.getElementById('cal-add-start').innerHTML = _buildTimeOptions('09:00');
   document.getElementById('cal-add-end').innerHTML   = _buildTimeOptions('20:00');
 
   modal.style.display = 'flex';
@@ -9672,9 +9672,9 @@ function showBanner(msg, type = 'success') {
 function _initHourSelect() {
   const sel = document.getElementById('resv-time-sel');
   if (!sel) return;
-  // 10:00〜27:55 を5分刻みで生成（24以降は翌日02:00等に変換して保存）
+  // 09:00〜27:55 を5分刻みで生成（24以降は翌日02:00等に変換して保存）
   const opts = [];
-  for (let h = 10; h <= 27; h++) {
+  for (let h = 9; h <= 27; h++) {
     for (let m = 0; m < 60; m += 5) {
       const dispH = String(h).padStart(2,'0');
       const dispM = String(m).padStart(2,'0');
@@ -9687,7 +9687,7 @@ function _initHourSelect() {
 // 日付パーツ → resv-dateのhidden inputに同期（26時以降は翌日に変換）
 function _syncResvDatetime() {
   const datePart = document.getElementById('resv-date-part')?.value || '';
-  const timeVal  = document.getElementById('resv-time-sel')?.value || '10:00';
+  const timeVal  = document.getElementById('resv-time-sel')?.value || '09:00';
   if (!datePart) return;
   const [hStr, mStr] = timeVal.split(':');
   const h = parseInt(hStr);
@@ -11991,7 +11991,7 @@ async function openHimeModal() {
   const timeSel = document.getElementById('hime-time-sel');
   if (timeSel && timeSel.options.length === 0) {
     const opts = [];
-    for (let h = 10; h <= 27; h++) {
+    for (let h = 9; h <= 27; h++) {
       for (let m = 0; m < 60; m += 5) {
         opts.push(`<option value="${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}">${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}</option>`);
       }
