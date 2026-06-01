@@ -2422,7 +2422,10 @@ async function apiGet(action, params = {}) {
         const { data: menuBacks } = await _sb.from('therapist_menu_backs')
           .select('*').eq('store_id', STORE_ID).in('therapist_id', therapistIds);
         (menuBacks || []).forEach(b => {
-          menuBackMap[b.therapist_id + '_' + b.menu_id] = b.back_amount;
+          menuBackMap[b.therapist_id + '_' + b.menu_id] = {
+            other:    b.back_amount,
+            honshimei: b.back_amount_honshimei
+          };
         });
       }
 
@@ -2479,8 +2482,17 @@ async function apiGet(action, params = {}) {
         const tInfo = tMap[r.therapist_name] || {};
         // 固定バック金額の取得（menu_idをcourse_minで逆引き）
         const menuId = menuByMin[r.course_min];
-        const fixedBackAmount = (tInfo.id && menuId && menuBackMap[tInfo.id + '_' + menuId] !== undefined)
-          ? menuBackMap[tInfo.id + '_' + menuId] : null;
+        const _mb = (tInfo.id && menuId) ? menuBackMap[tInfo.id + '_' + menuId] : undefined;
+        // 本指名は honshimei 額、それ以外（フリー・指名）は other 額。
+        // 該当区分が未設定(null)なら、もう片方の額にフォールバック。
+        let fixedBackAmount = null;
+        if (_mb) {
+          const isHon = r.nomination === 'honshimei';
+          const primary  = isHon ? _mb.honshimei : _mb.other;
+          const fallback = isHon ? _mb.other     : _mb.honshimei;
+          fixedBackAmount = (primary !== null && primary !== undefined) ? primary
+            : ((fallback !== null && fallback !== undefined) ? fallback : null);
+        }
         const rowWithBack = {
           ...r,
           therapist_course_back:   tInfo.course_back,
@@ -2780,12 +2792,14 @@ async function apiGet(action, params = {}) {
       await _sb.from('therapist_menu_backs')
         .delete().eq('store_id', STORE_ID).eq('therapist_id', therapistId);
       const inserts = backs
-        .filter(b => b.back_amount !== '' && b.back_amount !== null)
+        .filter(b => (b.back_amount !== '' && b.back_amount !== null) ||
+                     (b.back_amount_honshimei !== '' && b.back_amount_honshimei !== null && b.back_amount_honshimei !== undefined))
         .map(b => ({
           store_id:     STORE_ID,
           therapist_id: therapistId,
           menu_id:      b.menu_id,
-          back_amount:  Number(b.back_amount)
+          back_amount:  (b.back_amount !== '' && b.back_amount !== null) ? Number(b.back_amount) : null,
+          back_amount_honshimei: (b.back_amount_honshimei !== '' && b.back_amount_honshimei !== null && b.back_amount_honshimei !== undefined) ? Number(b.back_amount_honshimei) : null
         }));
       if (inserts.length) {
         const { error } = await _sb.from('therapist_menu_backs').insert(inserts);
@@ -12818,26 +12832,44 @@ async function openMenuBackModal(userId, name, therapistId) {
       apiGet('getMenuMaster'),
       therapistId ? apiGet('getMenuBacks', { therapistId }) : Promise.resolve([])
     ]);
-    const backMap = {};
-    (backs || []).forEach(b => { backMap[b.menu_id] = b.back_amount; });
+    const backMap = {};      // それ以外（フリー・指名）
+    const backMapHon = {};   // 本指名
+    (backs || []).forEach(b => {
+      backMap[b.menu_id] = b.back_amount;
+      if (b.back_amount_honshimei !== undefined && b.back_amount_honshimei !== null) {
+        backMapHon[b.menu_id] = b.back_amount_honshimei;
+      }
+    });
 
     const courses = (menus || []).filter(m => m.type === 'course' && m.active !== false);
     const options = (menus || []).filter(m => m.type === 'option' && m.active !== false);
 
     const buildRow = m => `
-      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
-        <div style="flex:1;font-size:14px">${m.name}<span style="font-size:12px;color:var(--muted);margin-left:6px">${m.col3 ? m.col3 + '分' : ''}</span></div>
-        <div style="display:flex;align-items:center;gap:4px">
-          <input type="number" min="0" step="100" placeholder="バック率で計算"
-            value="${backMap[m.id] !== undefined ? backMap[m.id] : ''}"
-            id="menuback-${m.id}" data-menu-id="${m.id}"
-            oninput="_menuBackDirty=true"
-            style="width:110px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
-          <span style="font-size:12px;color:var(--muted)">円</span>
+      <div style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:14px;margin-bottom:6px">${m.name}<span style="font-size:12px;color:var(--muted);margin-left:6px">${m.col3 ? m.col3 + '分' : ''}</span></div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:4px">
+            <span style="font-size:11px;color:var(--muted);width:48px">本指名</span>
+            <input type="number" min="0" step="100" placeholder="バック率で計算"
+              value="${backMapHon[m.id] !== undefined ? backMapHon[m.id] : ''}"
+              id="menuback-hon-${m.id}" data-menu-id="${m.id}" data-kind="hon"
+              oninput="_menuBackDirty=true"
+              style="width:104px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+            <span style="font-size:12px;color:var(--muted)">円</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <span style="font-size:11px;color:var(--muted);width:48px">それ以外</span>
+            <input type="number" min="0" step="100" placeholder="バック率で計算"
+              value="${backMap[m.id] !== undefined ? backMap[m.id] : ''}"
+              id="menuback-${m.id}" data-menu-id="${m.id}" data-kind="other"
+              oninput="_menuBackDirty=true"
+              style="width:104px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+            <span style="font-size:12px;color:var(--muted)">円</span>
+          </div>
         </div>
       </div>`;
 
-    let html = '';
+    let html = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">※「本指名」と「それ以外（フリー・指名）」で固定バック額を分けて設定できます。片方だけ入力した場合はもう片方も入力してください。</div>';
     if (courses.length) {
       html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin:8px 0 4px">■ コース</div>';
       html += courses.map(buildRow).join('');
@@ -12868,11 +12900,27 @@ async function saveMenuBacks() {
     alert('セラピストIDが取得できません。一度LINE管理画面を再読み込みしてください。');
     return;
   }
-  const inputs = document.querySelectorAll('#menu-back-list input[data-menu-id]');
-  const backs = Array.from(inputs).map(el => ({
-    menu_id:     el.dataset.menuId,
-    back_amount: el.value !== '' ? el.value : null
-  }));
+  // menu_idごとに本指名・それ以外をまとめる
+  const byMenu = {};
+  document.querySelectorAll('#menu-back-list input[data-menu-id]').forEach(el => {
+    const mid = el.dataset.menuId;
+    if (!byMenu[mid]) byMenu[mid] = { menu_id: mid, back_amount: null, back_amount_honshimei: null };
+    const val = el.value !== '' ? el.value : null;
+    if (el.dataset.kind === 'hon') byMenu[mid].back_amount_honshimei = val;
+    else                          byMenu[mid].back_amount            = val;
+  });
+  // バリデーション: 片方だけ入力はNG（両方 or 両方空のみ許可）
+  for (const mid in byMenu) {
+    const b = byMenu[mid];
+    const hasHon   = b.back_amount_honshimei !== null;
+    const hasOther = b.back_amount !== null;
+    if (hasHon !== hasOther) {
+      alert('「本指名」と「それ以外」は両方入力するか、両方空にしてください。\n（片方だけの設定はできません）');
+      return;
+    }
+  }
+  // 両方空のメニューは送らない（保存処理側でnullは除外されるが念のため）
+  const backs = Object.values(byMenu);
   try {
     showOverlay();
     await apiGet('saveMenuBacks', { therapistId: _menuBackTherapistId, backs });
