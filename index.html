@@ -2092,6 +2092,7 @@ async function apiGet(action, params = {}) {
         sendPayrollLine: t.send_payroll_line !== false,
         sendStoreLine:   t.send_store_line   !== false,
         discountMode:    t.discount_mode || null,
+        parkingFee:      t.parking_fee !== null && t.parking_fee !== undefined ? Number(t.parking_fee) : null,
         id:            t.id
       }));
     }
@@ -2408,7 +2409,7 @@ async function apiGet(action, params = {}) {
             .lte('date', endDt.toISOString())
             .order('date');
         })(),
-        _sb.from('therapists').select('id,name,course_back,option_back,has_guarantee,hourly_rate,daily_guarantee,discount_mode').eq('store_id', STORE_ID).eq('active', true),
+        _sb.from('therapists').select('id,name,course_back,option_back,has_guarantee,hourly_rate,daily_guarantee,discount_mode,parking_fee').eq('store_id', STORE_ID).eq('active', true),
         _sb.from('store_settings').select('*').eq('store_id', STORE_ID).single()
       ]);
       const tMap = {};
@@ -2504,13 +2505,15 @@ async function apiGet(action, params = {}) {
           = _calcPayroll(rowWithBack, ss);
         const key = dateLabel + '_' + r.therapist_name;
         if (!result[key]) {
+          const pf = tInfo.parking_fee ? Number(tInfo.parking_fee) : 0;
           result[key] = {
             dateLabel, name: r.therapist_name,
-            pay: 0, storeDrop: 0, count: 0,
+            pay: pf, storeDrop: -pf, count: 0,
             resvCount: resvCountMap[key] || 0,
             hasGuarantee: tInfo.has_guarantee || false,
             hourlyRate: tInfo.hourly_rate || null,
             dailyGuarantee: tInfo.daily_guarantee || null,
+            parkingFee: pf,
             details: []
           };
         }
@@ -3121,6 +3124,15 @@ case 'sendReminderToOne': {
         const { data: c } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
         if (c) custId = c.id;
       }
+      // 顧客マスタ未登録（tel有り）→ 自動登録してIDを取得
+      if (!custId && tel) {
+        const { data: newC, error: insErr } = await _sb.from('customers').insert({
+          store_id: STORE_ID, tel: tel,
+          name: params.customerName || tel, status: 'normal'
+        }).select('id').single();
+        if (!insErr && newC) custId = newC.id;
+      }
+      if (!custId) throw new Error('顧客情報が特定できません（電話番号を登録してください）');
       const { error } = await _sb.from('customer_memos').insert({
         customer_id:    custId,
         therapist_id:   therapistId,
@@ -3242,6 +3254,7 @@ case 'sendReminderToOne': {
       if (params.sendPayrollLine !== undefined) upd.send_payroll_line = params.sendPayrollLine;
       if (params.sendStoreLine   !== undefined) upd.send_store_line   = params.sendStoreLine;
       if (params.discountMode    !== undefined) upd.discount_mode     = params.discountMode || null;
+      if (params.parkingFee      !== undefined) upd.parking_fee       = params.parkingFee === '' || params.parkingFee === null ? null : Number(params.parkingFee);
       const { error } = await _sb.from('therapists').update(upd).eq('store_id', STORE_ID).eq('line_user_id', params.userId);
       if (error) throw new Error(error.message);
       return { ok: true };
@@ -4221,10 +4234,12 @@ function renderPayrollCards(data) {
               <div>
                 <div class="card-title">給料</div>
                 <div class="card-value pay" id="pay-${uid}">¥${t.pay.toLocaleString()}</div>
+                ${t.parkingFee > 0 ? `<div style="font-size:10px;color:#0369a1;font-weight:600;margin-top:2px">🚗 パーキング代含む</div>` : ''}
               </div>
               <div>
                 <div class="card-title">店落ち</div>
                 <div class="card-value store" id="store-${uid}">¥${t.storeDrop.toLocaleString()}</div>
+                ${t.parkingFee > 0 ? `<div style="font-size:10px;color:#0369a1;font-weight:600;margin-top:2px">🚗 パーキング代含む</div>` : ''}
               </div>
               <div>
                 <div class="card-title">件数</div>
@@ -4562,7 +4577,9 @@ async function sendPayrollLine(uid, name, dateLabel) {
   if (sendStore) {
     const storeNum = parseInt(store.replace(/[^0-9-]/g,'')) || 0;
     const bal      = _storeDropBalances[name] || 0;
+    const tInfoLine = therapists.find(th => th.name === name);
     message += '\n店落ち：' + store;
+    if (tInfoLine && tInfoLine.parkingFee > 0) message += '（パーキング代含む）';
     if (bal !== 0) {
       if (bal < 0) {
         message += '\n前回' + Math.abs(bal).toLocaleString() + '円不足';
@@ -7225,7 +7242,11 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
   document.getElementById('customer-modal-history').innerHTML = '';
   document.getElementById('customer-modal-ng') && (document.getElementById('customer-modal-ng').innerHTML = '');
   document.getElementById('customer-modal').dataset.therapistName = therapistName || '';
-  document.getElementById('customer-memo-input').value = '';
+  const _memoInput = document.getElementById('customer-memo-input');
+  _memoInput.value = '';
+  _memoInput.dataset.customerId = '';
+  _memoInput.dataset.customerNo = '';
+  _memoInput.dataset.customerTel = '';
   const histTitleEl = document.querySelector('#customer-modal .hist-title');
   if (histTitleEl) histTitleEl.textContent = isAdminMode ? '📅 来店履歴（全セラピスト）' : '📅 来店履歴（自分への来店）';
   const memoTitleEl2 = document.querySelector('#customer-modal .memo-title');
@@ -7427,7 +7448,7 @@ function cancelEditMemo(memoId, text) {
 }
 
 async function deleteMemoById(memoId) {
-  if (!confirm('このメモを削除しますか？')) return;
+  if (!await _confirm('このメモを削除しますか？')) return;
   try {
     showOverlay();
     await apiGet('deleteCustomerMemo', { memoId });
@@ -7751,14 +7772,15 @@ async function removeCustomerModalNG(therapistName, tel, customerNo, custName, c
 }
 
 async function saveCustomerMemo() {
-  const input      = document.getElementById('customer-memo-input');
-  const customerId = input.dataset.customerId || '';
-  const customerNo = input.dataset.customerNo || '';
-  const customerTel= input.dataset.customerTel || '';
-  const memo       = input.value.trim();
+  const input        = document.getElementById('customer-memo-input');
+  const customerId   = input.dataset.customerId || '';
+  const customerNo   = input.dataset.customerNo || '';
+  const customerTel  = input.dataset.customerTel || '';
+  const customerName = document.getElementById('customer-modal-title-name')?.textContent?.replace('様','').trim() || '';
+  const memo         = input.value.trim();
   if (!memo) { alert('メモを入力してください'); return; }
   try {
-    await apiGet('saveCustomerMemo', { customerId, customerNo, tel: customerTel, therapist: loggedInTherapist, memo });
+    await apiGet('saveCustomerMemo', { customerId, customerNo, tel: customerTel, customerName, therapist: loggedInTherapist, memo });
     input.value = '';
     showToast('メモを保存しました');
     // 再読み込み
@@ -9853,6 +9875,12 @@ function renderResvByTherapist(data, el) {
     if (!groups[th]) groups[th] = [];
     groups[th].push(r);
   });
+  // シフトあり・予約なしのセラピストも表示
+  if (window._resvShiftMap) {
+    Object.keys(window._resvShiftMap).forEach(name => {
+      if (!groups[name]) groups[name] = [];
+    });
+  }
   const therapistNames = Object.keys(groups).sort();
 
   const totalSales = data.filter(r => r.status !== 'cancelled').reduce((s, r) => s + Number(r.price || 0), 0);
@@ -10004,8 +10032,11 @@ function renderResvByTherapist(data, el) {
 
 function renderResvTable(data) {
   const el = document.getElementById('resv-table-wrap');
-  if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">予約なし</p>'; return; }
   window._resvTableData = data;
+  // 予約0件かつシフトもない場合のみ「予約なし」
+  if (!data.length && (!window._resvShiftMap || !Object.keys(window._resvShiftMap).length)) {
+    el.innerHTML = '<p style="color:var(--muted)">予約なし</p>'; return;
+  }
 
   // セラピスト別ビュー
   if (_resvViewMode === 'therapist') {
@@ -12818,10 +12849,12 @@ async function saveLineUser(userId, name) {
 // 固定バックモーダル
 // ============================================================
 let _menuBackTherapistId = '';
+let _menuBackUserId = '';
 let _menuBackDirty = false;
 
 async function openMenuBackModal(userId, name, therapistId) {
   _menuBackTherapistId = therapistId;
+  _menuBackUserId = userId;
   _menuBackDirty = false;
   document.getElementById('menu-back-name').textContent = name + ' さん';
   document.getElementById('menu-back-list').innerHTML = '読み込み中...';
@@ -12869,7 +12902,19 @@ async function openMenuBackModal(userId, name, therapistId) {
         </div>
       </div>`;
 
-    let html = '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">※「本指名」と「それ以外（フリー・指名）」で固定バック額を分けて設定できます。片方だけ入力した場合はもう片方も入力してください。</div>';
+    const parkingVal = therapists.find(t => t.id === therapistId)?.parkingFee ?? '';
+    let html = `<div style="padding:10px 0 14px;border-bottom:2px solid var(--border);margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px">🚗 パーキング代</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" id="menuback-parking-fee" min="0" step="100"
+          value="${parkingVal}"
+          placeholder="未設定（加算なし）"
+          oninput="_menuBackDirty=true"
+          style="width:140px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+        <span style="font-size:12px;color:var(--muted)">円 / 日（給料に加算・店落ちから減算）</span>
+      </div>
+    </div>`;
+    html += '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">※「本指名」と「それ以外（フリー・指名）」で固定バック額を分けて設定できます。片方だけ入力した場合はもう片方も入力してください。</div>';
     if (courses.length) {
       html += '<div style="font-size:12px;font-weight:700;color:var(--muted);margin:8px 0 4px">■ コース</div>';
       html += courses.map(buildRow).join('');
@@ -12921,9 +12966,18 @@ async function saveMenuBacks() {
   }
   // 両方空のメニューは送らない（保存処理側でnullは除外されるが念のため）
   const backs = Object.values(byMenu);
+  // パーキング代
+  const parkingEl = document.getElementById('menuback-parking-fee');
+  const parkingFee = parkingEl && parkingEl.value !== '' ? Number(parkingEl.value) : null;
   try {
     showOverlay();
-    await apiGet('saveMenuBacks', { therapistId: _menuBackTherapistId, backs });
+    await Promise.all([
+      apiGet('saveMenuBacks', { therapistId: _menuBackTherapistId, backs }),
+      _menuBackUserId ? apiGet('updateLineUser', { userId: _menuBackUserId, parkingFee }) : Promise.resolve()
+    ]);
+    // therapistsキャッシュのparkingFeeを更新
+    const cached = therapists.find(t => t.id === _menuBackTherapistId);
+    if (cached) cached.parkingFee = parkingFee;
     hideOverlay();
     _menuBackDirty = false;
     showToast('固定バックを保存しました');

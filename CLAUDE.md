@@ -181,6 +181,7 @@ sale_options, registration_states, scout_companies, therapist_scouts
 - `course_back` numeric — コースバック率（例: 0.6 = 60%）
 - `nomination_fee` integer — セラピスト個別指名料
 - `discount_mode` text DEFAULT NULL — セラピスト個別割引モード（NULLなら店舗設定に従う）**NEVERLAND限定で使用**
+- `parking_fee` integer DEFAULT NULL — パーキング代（円/日）。設定時に給料へ加算・店落ちから減算
 
 #### customers（顧客マスタ）
 - `status` の有効値: `normal`, `注意`, `NG`, `出禁`（「通常」は不可）
@@ -344,6 +345,23 @@ Supabaseのスキーマ変更後は「API → Reload schema」でキャッシュ
 
 ---
 
+## セッション18（2026/6/2）で実施した主な修正
+
+| # | 内容 |
+|---|---|
+| 1 | 予約一覧（セラピスト別ビュー）でシフトあり・予約なしのセラピストも表示するよう修正（`renderResvByTherapist`で`_resvShiftMap`をマージ） |
+| 2 | 予約が1件もない日でもシフトあり時はセラピスト別ビューを表示（`renderResvTable`の早期リターン条件を修正） |
+| 3 | パーキング代機能追加: 固定バック設定モーダルに入力欄追加・給料に加算・店落ちから減算・「🚗 パーキング代含む」バッジ表示・LINE送信メッセージに「（パーキング代含む）」追記（`therapists.parking_fee`カラム追加） |
+
+### パーキング代の仕様
+- 固定バック設定モーダル最上部の「🚗 パーキング代」欄で設定
+- `therapists.parking_fee` に保存（INTEGER, NULL = 未設定）
+- 給料計算: 1セラピスト1日につき1回加算（売上件数によらず固定）
+- 給料画面: 給料・店落ちの両方に「🚗 パーキング代含む」バッジ（設定時のみ）
+- LINE送信: 店落ち行に「（パーキング代含む）」を追記（設定時のみ）
+
+---
+
 ## 過去の作業ログ（参照先）
 
 詳細な作業履歴はdocsフォルダを参照してください。
@@ -354,5 +372,6 @@ Supabaseのスキーマ変更後は「API → Reload schema」でキャッシュ
 | docs/work_log_session15.md | セッション15（5/28〜5/30）の作業内容 |
 | docs/work_log_session16.md | セッション16（5/31）の作業内容 |
 | docs/work_log_session17.md | セッション17（6/1）の作業内容 |
+| docs/work_log_session18.md | セッション18（6/2）の作業内容 |
 
 **不明な仕様・消えた機能はまず作業ログを確認すること。**
