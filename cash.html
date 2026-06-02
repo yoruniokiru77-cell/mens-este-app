@@ -168,7 +168,7 @@ tr:last-child td { border-bottom: none; }
 
       <div class="form-group">
         <label>金庫の現在残高（円）</label>
-        <input type="number" id="opening-balance" placeholder="例: 50000" min="0" step="1000"
+        <input type="text" inputmode="numeric" id="opening-balance" placeholder="例: 50000"
           oninput="checkBalanceDiff()">
       </div>
 
@@ -197,7 +197,7 @@ tr:last-child td { border-bottom: none; }
         <div id="edit-opening-wrap" style="display:none;margin-top:10px;background:#fff5f5;border-left:4px solid var(--warning);border-radius:8px;padding:12px">
           <div class="form-group" style="margin-bottom:8px">
             <label>修正後の出勤残高（円）</label>
-            <input type="number" id="edit-opening-balance" placeholder="修正後の金額" min="0" step="1000">
+            <input type="text" inputmode="numeric" id="edit-opening-balance" placeholder="修正後の金額">
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-warning btn-sm" onclick="saveEditOpening()">残高を更新</button>
@@ -237,7 +237,7 @@ tr:last-child td { border-bottom: none; }
 
       <div class="form-group">
         <label>退勤時の金庫残高（円）</label>
-        <input type="number" id="closing-balance" placeholder="例: 43000" min="0" step="1000"
+        <input type="text" inputmode="numeric" id="closing-balance" placeholder="例: 43000"
           oninput="checkClosingDiff()">
       </div>
 
@@ -246,7 +246,7 @@ tr:last-child td { border-bottom: none; }
 
       <div class="form-group">
         <label>万札投函金額（円）</label>
-        <input type="number" id="ten-thousand-deposit" placeholder="例: 30000" min="0" step="10000"
+        <input type="text" inputmode="numeric" id="ten-thousand-deposit" placeholder="例: 30000"
           oninput="calcCarryOver()">
       </div>
 
@@ -508,15 +508,24 @@ async function loadPrevBalance() {
 }
 
 // ============================================================
+// 金額入力をパース（カンマ・￥・空白を除去して数値化。未入力はNaN）
+// ============================================================
+function _yenVal(id) {
+  const el = document.getElementById(id);
+  if (!el) return NaN;
+  const s = (el.value || '').replace(/[^0-9-]/g, '');
+  return s === '' ? NaN : parseInt(s, 10);
+}
+
+// ============================================================
 // 差異チェック（出勤時）
 // ============================================================
 function checkBalanceDiff() {
   const prevEl = document.getElementById('prev-balance-amount');
-  const balEl  = document.getElementById('opening-balance');
   const wrap   = document.getElementById('balance-diff-wrap');
 
   const prev    = prevEl.textContent ? parseInt(prevEl.textContent.replace(/[¥,]/g,'')) : null;
-  const current = parseInt(balEl.value) || null;
+  const current = isNaN(_yenVal('opening-balance')) ? null : _yenVal('opening-balance');
 
   if (prev === null || current === null) { wrap.style.display = 'none'; return; }
 
@@ -539,11 +548,11 @@ function checkBalanceDiff() {
 // ============================================================
 async function submitOpening() {
   const room    = document.getElementById('opening-room').value;
-  const balance = parseInt(document.getElementById('opening-balance').value) || 0;
+  const balance = _yenVal('opening-balance');
   const note    = document.getElementById('opening-note').value.trim();
 
   if (!room)    { alert('ルームを選択してください'); return; }
-  if (!document.getElementById('opening-balance').value) { alert('金庫残高を入力してください'); return; }
+  if (isNaN(balance)) { alert('金庫残高を入力してください'); return; }
 
   try {
     showOverlay();
@@ -693,12 +702,11 @@ async function loadClosingData(log) {
 // ============================================================
 function checkClosingDiff() {
   const expectedEl = document.getElementById('calc-expected');
-  const closingEl  = document.getElementById('closing-balance');
   const wrap       = document.getElementById('closing-diff-wrap');
 
   const expectedStr = expectedEl.textContent.replace(/[¥,]/g,'');
   const expected = parseInt(expectedStr) || null;
-  const closing  = parseInt(closingEl.value) || null;
+  const closing  = isNaN(_yenVal('closing-balance')) ? null : _yenVal('closing-balance');
 
   if (expected === null || closing === null) { wrap.style.display = 'none'; calcCarryOver(); return; }
 
@@ -721,8 +729,8 @@ function checkClosingDiff() {
 // 繰越計算
 // ============================================================
 function calcCarryOver() {
-  const closing  = parseInt(document.getElementById('closing-balance').value) || 0;
-  const deposit  = parseInt(document.getElementById('ten-thousand-deposit').value) || 0;
+  const closing  = isNaN(_yenVal('closing-balance')) ? 0 : _yenVal('closing-balance');
+  const deposit  = isNaN(_yenVal('ten-thousand-deposit')) ? 0 : _yenVal('ten-thousand-deposit');
   const carryOver = closing - deposit;
 
   const wrap = document.getElementById('carry-over-wrap');
@@ -740,8 +748,8 @@ function calcCarryOver() {
 async function submitClosing() {
   if (!_currentLogId) { alert('出勤記録が見つかりません'); return; }
 
-  const closing = parseInt(document.getElementById('closing-balance').value);
-  const deposit = parseInt(document.getElementById('ten-thousand-deposit').value) || 0;
+  const closing = _yenVal('closing-balance');
+  const deposit = isNaN(_yenVal('ten-thousand-deposit')) ? 0 : _yenVal('ten-thousand-deposit');
   const note    = document.getElementById('closing-note').value.trim();
 
   if (isNaN(closing)) { alert('退勤時の金庫残高を入力してください'); return; }
@@ -962,7 +970,7 @@ function toggleEditOpening() {
 
 async function saveEditOpening() {
   if (!_currentLogId) return;
-  const newBalance = parseInt(document.getElementById('edit-opening-balance').value);
+  const newBalance = _yenVal('edit-opening-balance');
   if (isNaN(newBalance)) { alert('金額を入力してください'); return; }
 
   try {
