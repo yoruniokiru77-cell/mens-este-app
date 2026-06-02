@@ -10010,8 +10010,11 @@ function renderResvByTherapist(data, el) {
 
 function renderResvTable(data) {
   const el = document.getElementById('resv-table-wrap');
-  if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">予約なし</p>'; return; }
   window._resvTableData = data;
+  // 予約0件かつシフトもない場合のみ「予約なし」
+  if (!data.length && (!window._resvShiftMap || !Object.keys(window._resvShiftMap).length)) {
+    el.innerHTML = '<p style="color:var(--muted)">予約なし</p>'; return;
+  }
 
   // セラピスト別ビュー
   if (_resvViewMode === 'therapist') {
