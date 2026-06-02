@@ -9853,6 +9853,12 @@ function renderResvByTherapist(data, el) {
     if (!groups[th]) groups[th] = [];
     groups[th].push(r);
   });
+  // シフトあり・予約なしのセラピストも表示
+  if (window._resvShiftMap) {
+    Object.keys(window._resvShiftMap).forEach(name => {
+      if (!groups[name]) groups[name] = [];
+    });
+  }
   const therapistNames = Object.keys(groups).sort();
 
   const totalSales = data.filter(r => r.status !== 'cancelled').reduce((s, r) => s + Number(r.price || 0), 0);
