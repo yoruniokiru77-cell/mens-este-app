@@ -70,7 +70,50 @@
 ALTER TABLE therapists ADD COLUMN IF NOT EXISTS discount_mode text DEFAULT NULL;
 ```
 
-**⚠ 上記SQLがまだ実行されていない場合は次セッション開始時に実行すること**
+**✅ 2026/6/1 実行済み**
+
+### ⚠ 重大バグ（2026/6/1 発覚・解消）
+
+上記 `discount_mode` カラムが未作成だった間、`getPayroll` 内の therapists 取得クエリ（`select=...,discount_mode`）が **400エラー**で失敗 → `tMap` が空になり、全セラピストの `course_back` がデフォルト `0.5` にフォールバック → **給料計算の店落ちが全店舗・全員で「売上×0.5」になっていた**。カラム追加＋スキーマリロードで解消。
+
+→ 教訓: コードで新カラム/新テーブルを参照する変更を入れたら、必ず同時にSupabase側のスキーマ・RLSを反映する。
+
+### therapist_menu_backs の RLS ポリシー（2026/6/1 追加）
+
+固定バック保存時に `new row violates row-level security policy` エラー。RLSは有効だがポリシーが0件だった。`therapists` と同パターン＋DELETE（保存処理が全削除→再INSERTするため）の4ポリシーを作成。
+
+```sql
+ALTER TABLE therapist_menu_backs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY anon_read_menu_backs   ON therapist_menu_backs FOR SELECT TO anon USING (true);
+CREATE POLICY anon_insert_menu_backs ON therapist_menu_backs FOR INSERT TO anon WITH CHECK (true);
+CREATE POLICY anon_update_menu_backs ON therapist_menu_backs FOR UPDATE TO anon USING (true);
+CREATE POLICY anon_delete_menu_backs ON therapist_menu_backs FOR DELETE TO anon USING (true);
+```
+
+### 固定バックを本指名/それ以外で分離（2026/6/1 追加）
+
+固定バックモーダルを「本指名」「それ以外（フリー・指名）」の2入力に分離。`therapist_menu_backs` に列追加。
+
+```sql
+ALTER TABLE therapist_menu_backs ADD COLUMN IF NOT EXISTS back_amount_honshimei numeric;
+```
+
+- 保存: `back_amount`=それ以外、`back_amount_honshimei`=本指名。片方のみ入力はフロントでバリデーションエラー。
+- 給料計算: 売上の `nomination==='honshimei'` なら本指名額、それ以外は通常額を使用。該当区分が未設定ならもう片方へフォールバック（既存データの後方互換）。
+- 関連: `openMenuBackModal` / `saveMenuBacks`(front/back) / `getPayroll` の menuBackMap・固定バック選択ロジック。
+
+### customer_memos の RLS不足で「メモが削除できず復活」（2026/6/2 解消）
+
+顧客詳細でメモを削除しても再表示すると復活する不具合。`customer_memos` に INSERT/SELECT のRLSしか無く、DELETE/UPDATEポリシーが欠落 → 削除・編集がエラーなしで0件処理されていた。UPDATE/DELETEポリシーを追加して解消。
+
+```sql
+CREATE POLICY anon_update_customer_memos ON customer_memos FOR UPDATE TO anon USING (true);
+CREATE POLICY anon_delete_customer_memos ON customer_memos FOR DELETE TO anon USING (true);
+```
+
+- 併せて、過去の古いバージョンが自動生成した「【予約確定】…」メモ7件（ひめか名義）を一括削除。
+  `DELETE FROM customer_memos WHERE memo LIKE '【予約確定】%';`
+- 現行コードには予約確定メモの自動保存経路は無し（テスト予約で再発しないことを確認済み）。
 
 ---
 

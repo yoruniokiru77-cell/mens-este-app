@@ -340,7 +340,7 @@ Supabaseのスキーマ変更後は「API → Reload schema」でキャッシュ
 ### セッション17 未完了タスク（次回継続）
 - shift-sync-tool VPSデプロイ（ConoHa VPS契約待ち）
 - VPS契約後: `index.html` の `VPS_BASE_URL` / `VPS_API_KEY` を設定してpush
-- Supabase SQL実行が必要: `ALTER TABLE therapists ADD COLUMN IF NOT EXISTS discount_mode text DEFAULT NULL;`
+- ~~Supabase SQL実行が必要: `ALTER TABLE therapists ADD COLUMN IF NOT EXISTS discount_mode text DEFAULT NULL;`~~ **✅実行済み（2026/6/1）** — 未実行の間、therapists取得クエリが400エラーで失敗し、給料計算でcourse_backが全員0.5にフォールバックする重大バグが発生していた
 
 ---
 
