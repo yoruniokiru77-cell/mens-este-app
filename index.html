@@ -9990,8 +9990,9 @@ function renderResvByTherapist(data, el) {
       return `
         <div style="margin-bottom:16px">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:${headerBg};color:#fff;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;flex-wrap:wrap;gap:6px">
-            <span>👤 ${th}${(window._resvRoomMap && window._resvRoomMap[th]) ? ` <span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:4px">🚪 ${window._resvRoomMap[th]}</span>` : ''}${attendanceBadge}${availLabel}</span>
+            <span>👤 ${th}${(window._resvRoomMap && window._resvRoomMap[th]) ? ` <span style="font-size:11px;font-weight:600;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:4px">🚪 ${window._resvRoomMap[th]}</span>` : ''}${attendanceBadge}</span>
             <span style="font-size:12px;opacity:.85">${shiftLabel || (valid.length + '件 ¥' + sales.toLocaleString())}</span>
+            ${availLabel ? `<div style="flex-basis:100%;margin-top:4px">${availLabel}</div>` : ''}
           </div>
           <div style="border-radius:0 0 8px 8px;border:1px solid var(--border);border-top:none;padding:8px">
                 ${rows.map((r, _i) => {
