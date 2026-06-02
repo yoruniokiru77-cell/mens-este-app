@@ -3124,6 +3124,15 @@ case 'sendReminderToOne': {
         const { data: c } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
         if (c) custId = c.id;
       }
+      // 顧客マスタ未登録（tel有り）→ 自動登録してIDを取得
+      if (!custId && tel) {
+        const { data: newC, error: insErr } = await _sb.from('customers').insert({
+          store_id: STORE_ID, tel: tel,
+          name: params.customerName || tel, status: 'normal'
+        }).select('id').single();
+        if (!insErr && newC) custId = newC.id;
+      }
+      if (!custId) throw new Error('顧客情報が特定できません（電話番号を登録してください）');
       const { error } = await _sb.from('customer_memos').insert({
         customer_id:    custId,
         therapist_id:   therapistId,
@@ -7233,7 +7242,11 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
   document.getElementById('customer-modal-history').innerHTML = '';
   document.getElementById('customer-modal-ng') && (document.getElementById('customer-modal-ng').innerHTML = '');
   document.getElementById('customer-modal').dataset.therapistName = therapistName || '';
-  document.getElementById('customer-memo-input').value = '';
+  const _memoInput = document.getElementById('customer-memo-input');
+  _memoInput.value = '';
+  _memoInput.dataset.customerId = '';
+  _memoInput.dataset.customerNo = '';
+  _memoInput.dataset.customerTel = '';
   const histTitleEl = document.querySelector('#customer-modal .hist-title');
   if (histTitleEl) histTitleEl.textContent = isAdminMode ? '📅 来店履歴（全セラピスト）' : '📅 来店履歴（自分への来店）';
   const memoTitleEl2 = document.querySelector('#customer-modal .memo-title');
@@ -7435,7 +7448,7 @@ function cancelEditMemo(memoId, text) {
 }
 
 async function deleteMemoById(memoId) {
-  if (!confirm('このメモを削除しますか？')) return;
+  if (!await _confirm('このメモを削除しますか？')) return;
   try {
     showOverlay();
     await apiGet('deleteCustomerMemo', { memoId });
@@ -7759,14 +7772,15 @@ async function removeCustomerModalNG(therapistName, tel, customerNo, custName, c
 }
 
 async function saveCustomerMemo() {
-  const input      = document.getElementById('customer-memo-input');
-  const customerId = input.dataset.customerId || '';
-  const customerNo = input.dataset.customerNo || '';
-  const customerTel= input.dataset.customerTel || '';
-  const memo       = input.value.trim();
+  const input        = document.getElementById('customer-memo-input');
+  const customerId   = input.dataset.customerId || '';
+  const customerNo   = input.dataset.customerNo || '';
+  const customerTel  = input.dataset.customerTel || '';
+  const customerName = document.getElementById('customer-modal-title-name')?.textContent?.replace('様','').trim() || '';
+  const memo         = input.value.trim();
   if (!memo) { alert('メモを入力してください'); return; }
   try {
-    await apiGet('saveCustomerMemo', { customerId, customerNo, tel: customerTel, therapist: loggedInTherapist, memo });
+    await apiGet('saveCustomerMemo', { customerId, customerNo, tel: customerTel, customerName, therapist: loggedInTherapist, memo });
     input.value = '';
     showToast('メモを保存しました');
     // 再読み込み
