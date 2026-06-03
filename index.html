@@ -4690,7 +4690,7 @@ async function sendPayrollLine(uid, name, dateLabel) {
             const { data: shiftData } = await _sb.from('shifts')
               .select('room_name')
               .eq('store_id', STORE_ID)
-              .eq('therapist', name)
+              .eq('therapist_name', name)
               .eq('date', dateSlash)
               .eq('status', 'approved')
               .not('room_name', 'is', null)
