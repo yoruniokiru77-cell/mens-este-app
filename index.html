@@ -851,8 +851,8 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <button id="cal-view-date" class="btn btn-secondary btn-sm" style="flex:1;font-size:12px" onclick="setCalView('date')">📅 日付順</button>
       <button id="cal-view-therapist" class="btn btn-secondary btn-sm" style="flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)" onclick="setCalView('therapist')">👤 セラピスト縦軸</button>
     </div>
-    <!-- 週/月切替（日付順のみ表示） -->
-    <div id="cal-date-range-toggle" style="display:none;gap:6px;margin-bottom:10px">
+    <!-- 週/月切替（常時表示） -->
+    <div id="cal-date-range-toggle" style="display:flex;gap:6px;margin-bottom:10px">
       <button id="cal-range-week" class="btn btn-sm" onclick="setDateRangeMode('week')"
         style="flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)">週</button>
       <button id="cal-range-month" class="btn btn-secondary btn-sm" onclick="setDateRangeMode('month')"
@@ -9098,8 +9098,8 @@ async function loadShiftCalendar() {
   const el   = document.getElementById('shift-calendar-content');
   el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">読み込み中...</p>';
 
-  // 日付順・月表示の場合は月単位でデータ取得
-  const isMonthMode = _calViewMode === 'date' && _calDateRangeMode === 'month';
+  // 月表示の場合は月単位でデータ取得（両ビュー共通）
+  const isMonthMode = _calDateRangeMode === 'month';
   const days = isMonthMode ? getMonthDates(_calendarMonthOffset) : getWeekDates(_calendarWeekOffset);
 
   const month = days[0].getFullYear() + '-' + String(days[0].getMonth()+1).padStart(2,'0');
@@ -9509,31 +9509,13 @@ function setCalView(mode) {
   _calViewMode = mode;
   const btnDate = document.getElementById('cal-view-date');
   const btnTh   = document.getElementById('cal-view-therapist');
-  const rangeToggle = document.getElementById('cal-date-range-toggle');
   if (btnDate) btnDate.style.cssText = mode === 'date'
     ? 'flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)'
     : 'flex:1;font-size:12px';
   if (btnTh) btnTh.style.cssText = mode === 'therapist'
     ? 'flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)'
     : 'flex:1;font-size:12px';
-  // 週/月切替は日付順のみ表示
-  if (rangeToggle) rangeToggle.style.display = mode === 'date' ? 'flex' : 'none';
-  // セラピスト縦軸に切り替えたら週ナビに戻す
-  if (mode === 'therapist') {
-    const weekNav  = document.getElementById('cal-week-nav');
-    const monthNav = document.getElementById('cal-month-nav');
-    if (weekNav)  weekNav.style.display  = 'flex';
-    if (monthNav) monthNav.style.display = 'none';
-  }
-  // 月表示中に縦軸→日付順に戻ったときは月表示を維持
-  if (mode === 'date' && _calDateRangeMode === 'month') {
-    const weekNav  = document.getElementById('cal-week-nav');
-    const monthNav = document.getElementById('cal-month-nav');
-    if (weekNav)  weekNav.style.display  = 'none';
-    if (monthNav) monthNav.style.display = 'flex';
-    loadShiftCalendar();
-    return;
-  }
+  // キャッシュがあればそのまま再描画（データ取得不要）
   const el = document.getElementById('shift-calendar-content');
   if (_calDaysCache && _calShiftsCache) renderShiftCalendar(el, _calDaysCache, _calShiftsCache);
 }
@@ -9668,6 +9650,7 @@ function renderShiftCalendar(el, days, shifts) {
   _calShiftsCache = shifts;
 
   const today = fmtCalDate(new Date());
+  const isMonthMode = _calDateRangeMode === 'month';
 
   if (_calViewMode === 'therapist') {
     // ======== 縦軸セラピスト・横軸日付 ========
@@ -9704,7 +9687,7 @@ function renderShiftCalendar(el, days, shifts) {
 
     el.innerHTML = `
       <div style="overflow:auto;-webkit-overflow-scrolling:touch;max-height:75vh">
-        <table style="width:100%;border-collapse:separate;border-spacing:0;min-width:${52 * days.length + 90}px">
+        <table style="width:100%;border-collapse:separate;border-spacing:0;min-width:${(isMonthMode ? 40 : 52) * days.length + 90}px">
           <thead>
             <tr>
               <th style="padding:6px 8px;text-align:left;border-bottom:2px solid var(--border);font-size:12px;font-weight:700;min-width:88px;position:sticky;left:0;top:0;background:var(--surface);z-index:3">
@@ -9752,8 +9735,9 @@ function renderShiftCalendar(el, days, shifts) {
       byDate[s.date].push(s);
     });
 
-    const isMonthView = _calDateRangeMode === 'month';
+    const isMonthView = isMonthMode; // renderShiftCalendar スコープの変数を使用
     const WDAYS = ['日','月','火','水','木','金','土'];
+
 
     if (isMonthView) {
       // ---- 月表示: 日付を縦に並べたリスト形式 ----
