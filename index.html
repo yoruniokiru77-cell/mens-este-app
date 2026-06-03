@@ -6747,7 +6747,37 @@ async function openAdminSalesFromResv(idx) {
 let _editSalesMenus = []; // コースマスタキャッシュ
 let _editDynamicOptions = []; // 管理者売上編集モーダル用オプションマスタ
 
+// 給料計算キャッシュが未設定の場合にDBから取得する（給料計算ページを開かなくても固定バックが反映される）
+async function _ensurePayrollCache() {
+  if (window._cachedStoreSettings && window._payrollMenuByMin && window._payrollMenuBackMap) return;
+  const [settingsRes, therapistRes, menuRes] = await Promise.all([
+    _sb.from('store_settings').select('*').eq('store_id', STORE_ID).single(),
+    _sb.from('therapists').select('id,name,course_back,option_back,discount_mode,parking_fee').eq('store_id', STORE_ID).eq('active', true),
+    _sb.from('menus').select('id,name,duration_min,type').eq('store_id', STORE_ID).eq('active', true)
+  ]);
+  window._cachedStoreSettings = settingsRes.data || {};
+  const menuByMin = {};
+  (menuRes.data || []).forEach(m => {
+    if (m.type === 'course' && m.duration_min) menuByMin[m.duration_min] = m.id;
+  });
+  window._payrollMenuByMin = menuByMin;
+  const therapistIds = (therapistRes.data || []).map(t => t.id).filter(Boolean);
+  let menuBackMap = {};
+  if (therapistIds.length) {
+    const { data: backs } = await _sb.from('therapist_menu_backs')
+      .select('*').eq('store_id', STORE_ID).in('therapist_id', therapistIds);
+    (backs || []).forEach(b => {
+      menuBackMap[b.therapist_id + '_' + b.menu_id] = {
+        other:     b.back_amount,
+        honshimei: b.back_amount_honshimei
+      };
+    });
+  }
+  window._payrollMenuBackMap = menuBackMap;
+}
+
 async function openSalesEditModal(rowId, customer, datetime, course, price, discount, nomination, optionPrice, memo) {
+  await _ensurePayrollCache();
   _editSalesRow = rowId;
   document.getElementById('sales-edit-customer').textContent = customer + '様　' + datetime;
   document.getElementById('sales-edit-nomination').value = nomination;
