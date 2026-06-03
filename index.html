@@ -7880,8 +7880,11 @@ function renderCustomerMaster(el, data, total, page, perPage) {
             <td style="font-size:12px;text-align:center">${cancelBadge}</td>
             <td style="font-size:12px;color:var(--muted)">${c.ngTherapists || '-'}</td>
             <td style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.memo || ''}">${c.memo ? '📝 ' + c.memo : '-'}</td>
-            <td>
+            <td style="white-space:nowrap">
               <button class="btn btn-secondary btn-sm"
+                data-no="${String(c.customerNo)}" data-tel="${(c.tel||'').replace(/'/g,'&#39;')}" data-name="${c.name.replace(/'/g,'&#39;')}"
+                onclick="openCustomerDetail(this.dataset.no,this.dataset.tel,this.dataset.name)">詳細</button>
+              <button class="btn btn-secondary btn-sm" style="margin-left:4px"
                 data-no="${String(c.customerNo)}"
                 onclick="editMasterCustomer(this.dataset.no,'${c.name}','${(c.tel||'').replace(/'/g,'&#39;')}','${c.status||'normal'}','${(c.ngTherapists||'').replace(/'/g,'&#39;')}')">編集</button>
             </td>
