@@ -362,6 +362,56 @@ Supabaseのスキーマ変更後は「API → Reload schema」でキャッシュ
 
 ---
 
+## セッション19（2026/6/3〜6/4）で実施した主な修正
+
+| # | 内容 |
+|---|---|
+| 1 | RLSポリシー追加: `therapist_menu_backs`（4件）・`customer_memos`（UPDATE/DELETE） |
+| 2 | 時刻プルダウン全画面で9:00開始に変更（予約・シフト・姫予約・ルーム空き） |
+| 3 | 固定バックを本指名/それ以外で分けて設定可能に（`back_amount_honshimei`列） |
+| 4 | 金庫画面でカンマ・￥付き金額入力を許容（`_yenVal()`ヘルパー追加） |
+| 5 | シフトカレンダー日付順ビューに月表示追加・週/月切替を両ビュー共通化 |
+| 6 | 月表示で曜日がundefinedになるバグ修正（インデックス→`d.getDay()`） |
+| 7 | 管理画面シフト追加で未承認時のルーム選択を任意に |
+| 8 | 回収管理のルーム分け修正（シフトからルーム名を取得して保存） |
+| 9 | オプション固定バックを給料計算に適用・差額を店落ちに加算 |
+| 10 | **`_calcPayroll`を唯一の給料計算ロジックに統一・不変条件を保証** |
+| 11 | 売上編集モーダルのプレビューを`_calcPayroll`に完全委譲 |
+| 12 | storeDropのmiscFee/accomFee二重計上バグを修正 |
+| 13 | 最短案内バッジをiPhoneで表示されるよう独立行に配置 |
+
+### 給料計算の不変条件（セッション19で確立・重要）
+
+`_calcPayroll` 関数が唯一の正規実装。以下の設計を維持すること：
+
+```
+storeDrop = 会計金額 - baseTherapistPay
+  会計金額       = coursePrice + actualOptPrice + nomFee - discount
+  baseTherapistPay = therapistCoursePay + therapistOptPay + nomFee
+  therapistPay   = baseTherapistPay - miscFee - accomFee
+```
+
+⚠ **miscFee/accomFee はUI層（recalcPayroll の newStore）で加算される。`_calcPayroll` 内では baseTherapistPay（miscFee除外）で storeDrop を算出すること。二重計上に注意。**
+
+### グローバルキャッシュ（getPayroll実行時に設定）
+
+| 変数 | 内容 |
+|---|---|
+| `window._payrollMenuByMin` | course_min → menu_id |
+| `window._payrollMenuBackMap` | therapistId+'_'+menuId → {other, honshimei} |
+| `window._cachedStoreSettings` | 店舗設定 |
+
+売上編集モーダルの`calcSalesEditTotal`がこれらを参照して`_calcPayroll`を呼び出す。**給料計算ページを一度開いてからでないとキャッシュが存在しない点に注意。**
+
+### 未完了タスク（セッション19→次回継続）
+
+- **VPSデプロイ（shift-sync-tool）**: ConoHa VPS（IP: 133.88.117.129）起動済み・SSH未接続
+  - rootパスワード: `/xiSa!8xZsZ7uDy`
+  - ファイル: `C:\Users\skb81\OneDrive\事業\AI\1.メンエス\シフト自動連係\shift-sync-tool\`
+  - 完了後: `index.html` の `VPS_BASE_URL` / `VPS_API_KEY` を更新して git push
+
+---
+
 ## 過去の作業ログ（参照先）
 
 詳細な作業履歴はdocsフォルダを参照してください。
@@ -373,5 +423,6 @@ Supabaseのスキーマ変更後は「API → Reload schema」でキャッシュ
 | docs/work_log_session16.md | セッション16（5/31）の作業内容 |
 | docs/work_log_session17.md | セッション17（6/1）の作業内容 |
 | docs/work_log_session18.md | セッション18（6/2）の作業内容 |
+| docs/work_log_session19.md | セッション19（6/3〜6/4）の作業内容 |
 
 **不明な仕様・消えた機能はまず作業ログを確認すること。**
