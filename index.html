@@ -2028,10 +2028,11 @@ function _timeToMin27(t) {
 // ======================================================
 // 給料計算ロジック（唯一の正規実装）
 //
-// 【不変条件】店落ち = 会計金額 - セラピスト給料
-//   会計金額 = coursePrice + optPrice + nomFee - discount
-//   therapistPay = therapistCoursePay + therapistOptPay + nomFee - miscFee - accomFee
-//   storeDrop = 会計金額 - therapistPay  ← 常にこの式で算出
+// 【不変条件】店落ち = 会計金額 - (コース給料 + オプション給料 + 指名料)
+//   会計金額    = coursePrice + optPrice + nomFee - discount
+//   storeDrop   = 会計金額 - baseTherapistPay  ← 常にこの式で算出
+//   therapistPay = baseTherapistPay - miscFee - accomFee
+//   ※ miscFee/accomFee は UI 層で storeDrop に加算されるため、ここでは除外
 //
 // 【引数】
 //   row: 売上レコード（course_price, option_price, nomination_fee, discount,
@@ -2111,12 +2112,15 @@ function _calcPayroll(row, storeSettings, opts = {}) {
     therapistOptPay = Math.round(optPrice * optionBack);
   }
 
-  // ── 給料合計 ──
-  const therapistPay = therapistCoursePay + therapistOptPay + nomFee - miscFee - accomFee;
-
   // ── 店落ち（不変条件: 会計金額 - セラピスト給料）──
-  const totalAmount = coursePrice + actualOptPrice + nomFee - discount;
-  const storeDrop   = totalAmount - therapistPay;
+  // ※ miscFee/accomFee は UI 層（recalcPayroll）で storeDrop に加算されるため
+  //    ここでは除外した "base" で storeDrop を算出し二重計上を防ぐ
+  const baseTherapistPay = therapistCoursePay + therapistOptPay + nomFee;
+  const totalAmount      = coursePrice + actualOptPrice + nomFee - discount;
+  const storeDrop        = totalAmount - baseTherapistPay;
+
+  // ── 給料合計（miscFee/accomFee を差し引いた実際の受取額）──
+  const therapistPay = baseTherapistPay - miscFee - accomFee;
 
   return { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack, fixedBack };
 }
