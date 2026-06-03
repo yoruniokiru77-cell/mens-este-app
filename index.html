@@ -4683,6 +4683,22 @@ async function sendPayrollLine(uid, name, dateLabel) {
         // 水戸・神栖: 店落ち額でcash_logsを新規作成（回収管理用）
         const storeDropNum = parseInt((store || '¥0').replace(/[^0-9-]/g, '')) || 0;
         if (storeDropNum > 0) {
+          // シフトからルーム名を取得
+          let cashRoomName = '';
+          try {
+            const dateSlash = dateStr.replace(/-/g, '/');
+            const { data: shiftData } = await _sb.from('shifts')
+              .select('room_name')
+              .eq('store_id', STORE_ID)
+              .eq('therapist', name)
+              .eq('date', dateSlash)
+              .eq('status', 'approved')
+              .not('room_name', 'is', null)
+              .limit(1)
+              .maybeSingle();
+            if (shiftData && shiftData.room_name) cashRoomName = shiftData.room_name;
+          } catch(e2) { console.warn('ルーム取得エラー:', e2); }
+
           // 同日・同セラピストのレコードが既になければ作成
           const { data: existing } = await _sb.from('cash_logs')
             .select('id')
@@ -4694,7 +4710,7 @@ async function sendPayrollLine(uid, name, dateLabel) {
             await _sb.from('cash_logs').insert({
               store_id:       STORE_ID,
               therapist_name: name,
-              room_name:      '',
+              room_name:      cashRoomName,
               work_date:      dateStr,
               store_drop:     storeDropNum,
               status:         'closed',
@@ -4702,7 +4718,7 @@ async function sendPayrollLine(uid, name, dateLabel) {
             });
           } else {
             await _sb.from('cash_logs')
-              .update({ store_drop: storeDropNum, is_collected: false })
+              .update({ store_drop: storeDropNum, is_collected: false, room_name: cashRoomName || undefined })
               .eq('id', existing.id);
           }
         }
