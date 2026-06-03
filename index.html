@@ -2047,6 +2047,10 @@ function _calcPayroll(row, storeSettings, opts = {}) {
   const discount    = Number(row.discount || 0);
   const miscFee     = Number(opts.miscFee     || 0); // 雑費
   const accomFee    = Number(opts.accomFee    || 0); // 宿泊費
+  // オプション固定バック用
+  const optItems    = opts.optItems    || null; // [{menuId, amount}]
+  const mbMap       = opts.menuBackMap || null; // therapist_id+'_'+menu_id → {other, honshimei}
+  const therapistId = opts.therapistId || null;
 
   // 固定バック（menu_idで指定された場合はそちらを優先）
   const fixedBack = (row.fixed_back_amount !== undefined && row.fixed_back_amount !== null)
@@ -2073,7 +2077,25 @@ function _calcPayroll(row, storeSettings, opts = {}) {
     therapistCoursePay = Math.round(courseNet * courseBack);
   }
 
-  const therapistOptPay = Math.round(optPrice * optionBack);
+  // オプション給料：固定バックが設定されていれば優先、なければバック率で計算
+  let therapistOptPay;
+  if (optItems && optItems.length > 0 && mbMap && therapistId) {
+    const isHon = row.nomination === 'honshimei';
+    therapistOptPay = optItems.reduce((sum, opt) => {
+      const mbKey = therapistId + '_' + opt.menuId;
+      const mb = opt.menuId ? mbMap[mbKey] : null;
+      if (mb) {
+        const primary  = isHon ? mb.honshimei : mb.other;
+        const fallback = isHon ? mb.other     : mb.honshimei;
+        const fixedOpt = (primary  !== null && primary  !== undefined) ? primary
+                       : (fallback !== null && fallback !== undefined)  ? fallback : null;
+        if (fixedOpt !== null) return sum + Number(fixedOpt);
+      }
+      return sum + Math.round(opt.amount * optionBack);
+    }, 0);
+  } else {
+    therapistOptPay = Math.round(optPrice * optionBack);
+  }
   const therapistPay    = therapistCoursePay + therapistOptPay + nomFee - miscFee - accomFee;
 
   return { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack, fixedBack };
@@ -2444,11 +2466,31 @@ async function apiGet(action, params = {}) {
         });
       }
 
-      // メニューマスタ（course_min → menu_idの逆引き用）
-      const { data: menuData } = await _sb.from('menus').select('id,duration_min,extension_price')
-        .eq('store_id', STORE_ID).eq('type', 'course').eq('active', true);
-      const menuByMin = {}; // course_min → menu_id
-      (menuData || []).forEach(m => { menuByMin[m.duration_min] = m.id; });
+      // メニューマスタ（コース: course_min → menu_id / オプション: name → menu_id）
+      const { data: menuData } = await _sb.from('menus').select('id,name,duration_min,type,extension_price')
+        .eq('store_id', STORE_ID).eq('active', true);
+      const menuByMin  = {}; // course_min → menu_id（コース用）
+      const menuByName = {}; // name → menu_id（オプション用）
+      (menuData || []).forEach(m => {
+        if (m.type === 'course' && m.duration_min) menuByMin[m.duration_min] = m.id;
+        if (m.type === 'option') menuByName[m.name] = m.id;
+      });
+
+      // sale_optionsを取得してオプション固定バック計算に使用
+      const salesResvIds = (salesRes.data || []).map(r => r.reservation_id).filter(Boolean);
+      let saleOptMap = {}; // reservation_id → [{menuId, amount}]
+      if (salesResvIds.length) {
+        const { data: saleOpts } = await _sb.from('sale_options')
+          .select('reservation_id, menu_name, amount')
+          .in('reservation_id', salesResvIds);
+        (saleOpts || []).forEach(o => {
+          if (!saleOptMap[o.reservation_id]) saleOptMap[o.reservation_id] = [];
+          saleOptMap[o.reservation_id].push({
+            menuId: menuByName[o.menu_name] || null,
+            amount: Number(o.amount)
+          });
+        });
+      }
 
       // 新規客判定：電話番号ベースで期間前の売上を確認
       const custTels = [...new Set((salesRes.data || []).map(r => r.customer_tel).filter(Boolean))];
@@ -2516,7 +2558,11 @@ async function apiGet(action, params = {}) {
           therapist_discount_mode: tInfo.discount_mode || null,
         };
         const { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack }
-          = _calcPayroll(rowWithBack, ss);
+          = _calcPayroll(rowWithBack, ss, {
+              optItems:    r.reservation_id ? (saleOptMap[r.reservation_id] || null) : null,
+              menuBackMap: menuBackMap,
+              therapistId: tInfo.id || null,
+            });
         const key = dateLabel + '_' + r.therapist_name;
         if (!result[key]) {
           const pf = tInfo.parking_fee ? Number(tInfo.parking_fee) : 0;
