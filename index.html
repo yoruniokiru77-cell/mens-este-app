@@ -821,10 +821,17 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <div id="cal-unsubmitted-list">読み込み中...</div>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-      <div style="display:flex;align-items:center;gap:8px">
+      <!-- 週ナビ -->
+      <div id="cal-week-nav" style="display:flex;align-items:center;gap:8px">
         <button onclick="changeCalendarWeek(-1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">◀</button>
         <span id="calendar-week-label" style="font-size:15px;font-weight:700;min-width:180px;text-align:center"></span>
         <button onclick="changeCalendarWeek(1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">▶</button>
+      </div>
+      <!-- 月ナビ（日付順・月表示時のみ） -->
+      <div id="cal-month-nav" style="display:none;align-items:center;gap:8px">
+        <button onclick="changeCalendarMonth(-1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">◀</button>
+        <span id="calendar-month-label" style="font-size:15px;font-weight:700;min-width:120px;text-align:center"></span>
+        <button onclick="changeCalendarMonth(1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">▶</button>
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn btn-secondary btn-sm" onclick="loadShiftCalendar()">更新</button>
@@ -840,9 +847,16 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       </div>
     </div>
     <!-- 表示切替 -->
-    <div style="display:flex;gap:6px;margin-bottom:10px">
+    <div style="display:flex;gap:6px;margin-bottom:6px">
       <button id="cal-view-date" class="btn btn-secondary btn-sm" style="flex:1;font-size:12px" onclick="setCalView('date')">📅 日付順</button>
       <button id="cal-view-therapist" class="btn btn-secondary btn-sm" style="flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)" onclick="setCalView('therapist')">👤 セラピスト縦軸</button>
+    </div>
+    <!-- 週/月切替（日付順のみ表示） -->
+    <div id="cal-date-range-toggle" style="display:none;gap:6px;margin-bottom:10px">
+      <button id="cal-range-week" class="btn btn-sm" onclick="setDateRangeMode('week')"
+        style="flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)">週</button>
+      <button id="cal-range-month" class="btn btn-secondary btn-sm" onclick="setDateRangeMode('month')"
+        style="flex:1;font-size:12px">月</button>
     </div>
     <div id="shift-calendar-content">読み込み中...</div>
 
@@ -9082,14 +9096,17 @@ async function loadAttendanceSummary() {
 async function loadShiftCalendar() {
   loadAttendanceSummary();
   const el   = document.getElementById('shift-calendar-content');
-  const days  = getWeekDates(_calendarWeekOffset);
-  const month = days[0].getFullYear() + '-' + String(days[0].getMonth()+1).padStart(2,'0');
-
   el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">読み込み中...</p>';
+
+  // 日付順・月表示の場合は月単位でデータ取得
+  const isMonthMode = _calViewMode === 'date' && _calDateRangeMode === 'month';
+  const days = isMonthMode ? getMonthDates(_calendarMonthOffset) : getWeekDates(_calendarWeekOffset);
+
+  const month = days[0].getFullYear() + '-' + String(days[0].getMonth()+1).padStart(2,'0');
 
   try {
     // セラピストマスタとシフトを並行取得
-    const month2 = days[6].getFullYear() + '-' + String(days[6].getMonth()+1).padStart(2,'0');
+    const month2 = days[days.length-1].getFullYear() + '-' + String(days[days.length-1].getMonth()+1).padStart(2,'0');
     const [shiftsData, shiftsData2] = await Promise.all([
       apiGet('getShifts', { month }),
       month !== month2 ? apiGet('getShifts', { month: month2 }) : Promise.resolve([])
@@ -9151,6 +9168,53 @@ async function loadShiftCalendar() {
 
 // カレンダー表示モード（'therapist'=縦軸セラピスト, 'date'=日付順）
 let _calViewMode = 'therapist';
+// 日付順ビューの期間モード（'week'=週, 'month'=月）
+let _calDateRangeMode = 'week';
+let _calendarMonthOffset = 0; // 0=今月, 1=来月, -1=先月
+
+// 月の全日付を返す
+function getMonthDates(offset) {
+  const now = new Date();
+  const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+  const year = target.getFullYear();
+  const month = target.getMonth();
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const days = [];
+  for (let d = 1; d <= lastDay; d++) days.push(new Date(year, month, d));
+  return days;
+}
+
+function updateCalendarMonthLabel() {
+  const now = new Date();
+  const target = new Date(now.getFullYear(), now.getMonth() + _calendarMonthOffset, 1);
+  const el = document.getElementById('calendar-month-label');
+  if (el) el.textContent = target.getFullYear() + '年' + (target.getMonth()+1) + '月';
+}
+
+function changeCalendarMonth(delta) {
+  _calendarMonthOffset += delta;
+  updateCalendarMonthLabel();
+  loadShiftCalendar();
+}
+
+function setDateRangeMode(mode) {
+  _calDateRangeMode = mode;
+  const weekNav  = document.getElementById('cal-week-nav');
+  const monthNav = document.getElementById('cal-month-nav');
+  const btnWeek  = document.getElementById('cal-range-week');
+  const btnMonth = document.getElementById('cal-range-month');
+  const isMonth = mode === 'month';
+  if (weekNav)  weekNav.style.display  = isMonth ? 'none' : 'flex';
+  if (monthNav) monthNav.style.display = isMonth ? 'flex' : 'none';
+  if (btnWeek)  btnWeek.style.cssText  = !isMonth
+    ? 'flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)'
+    : 'flex:1;font-size:12px';
+  if (btnMonth) btnMonth.style.cssText = isMonth
+    ? 'flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)'
+    : 'flex:1;font-size:12px';
+  if (isMonth) updateCalendarMonthLabel();
+  loadShiftCalendar();
+}
 // loadShiftCalendar のデータキャッシュ
 let _calDaysCache  = null;
 let _calShiftsCache = null;
@@ -9444,12 +9508,31 @@ function setCalView(mode) {
   _calViewMode = mode;
   const btnDate = document.getElementById('cal-view-date');
   const btnTh   = document.getElementById('cal-view-therapist');
+  const rangeToggle = document.getElementById('cal-date-range-toggle');
   if (btnDate) btnDate.style.cssText = mode === 'date'
     ? 'flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)'
     : 'flex:1;font-size:12px';
   if (btnTh) btnTh.style.cssText = mode === 'therapist'
     ? 'flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)'
     : 'flex:1;font-size:12px';
+  // 週/月切替は日付順のみ表示
+  if (rangeToggle) rangeToggle.style.display = mode === 'date' ? 'flex' : 'none';
+  // セラピスト縦軸に切り替えたら週ナビに戻す
+  if (mode === 'therapist') {
+    const weekNav  = document.getElementById('cal-week-nav');
+    const monthNav = document.getElementById('cal-month-nav');
+    if (weekNav)  weekNav.style.display  = 'flex';
+    if (monthNav) monthNav.style.display = 'none';
+  }
+  // 月表示中に縦軸→日付順に戻ったときは月表示を維持
+  if (mode === 'date' && _calDateRangeMode === 'month') {
+    const weekNav  = document.getElementById('cal-week-nav');
+    const monthNav = document.getElementById('cal-month-nav');
+    if (weekNav)  weekNav.style.display  = 'none';
+    if (monthNav) monthNav.style.display = 'flex';
+    loadShiftCalendar();
+    return;
+  }
   const el = document.getElementById('shift-calendar-content');
   if (_calDaysCache && _calShiftsCache) renderShiftCalendar(el, _calDaysCache, _calShiftsCache);
 }
@@ -9525,8 +9608,21 @@ function _calDateCard(s) {
     ? `<div style="font-size:9px;font-weight:800;margin-top:2px">${isAbsent ? '❌' : '⚠'} ${ATTENDANCE_LABEL[s.attendanceType]?.label || s.attendanceType}</div>`
     : '';
   const nameStyle = isAbsent ? 'font-weight:700;text-decoration:line-through;opacity:.75' : 'font-weight:700';
-  return `<div style="background:${bg};color:#fff;border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.4;${isAbsent ? 'opacity:.8' : ''}">
+  const hasChangeReq = s.hasChangeRequest;
+  const bgFinal = isAbsent     ? 'rgba(107,114,128,0.55)'
+                : isPending    ? 'rgba(107,114,128,0.6)'
+                : hasChangeReq ? '#f97316'
+                : getRoomColor(s.roomName).bg;
+  const border = hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
+  const safeTherapist = (s.therapist||'').replace(/'/g,"\\'");
+  const safeDate = (s.date||'').replace(/'/g,"\\'");
+  const safeStart = (s.startTime||'').replace(/'/g,"\\'");
+  const safeEnd   = (s.endTime||'').replace(/'/g,"\\'");
+  const safeRoom  = (s.roomName||'').replace(/'/g,"\\'");
+  return `<div style="background:${bgFinal};color:#fff;border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.4;${isAbsent?'opacity:.8;':''}${border}cursor:pointer"
+    onclick="_openCalShiftMenu(event,'${s.row}','${s.status}','${safeTherapist}','${safeDate}','${safeStart}','${safeEnd}','${safeRoom}','${s.attendanceType||'normal'}',${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','')">
     ${isPending ? '<div style="font-size:9px;opacity:.85">⏳ 未承認</div>' : ''}
+    ${hasChangeReq ? '<div style="font-size:9px;font-weight:800">✏️ 変更申請</div>' : ''}
     <div style="${nameStyle}">${s.therapist}</div>
     <div>${s.startTime}〜${s.endTime}</div>
     ${s.roomName ? '<div style="opacity:.85">🚪' + s.roomName + '</div>' : ''}
@@ -9648,37 +9744,73 @@ function renderShiftCalendar(el, days, shifts) {
       ${_calLegend()}<div style="font-size:11px;color:var(--muted);margin-top:6px">💡 セルをダブルタップでシフト追加 / バッジをタップで操作メニュー</div>`;
 
   } else {
-    // ======== 日付順（横軸日付・縦一行） ========
+    // ======== 日付順 ========
     const byDate = {};
     shifts.forEach(s => {
       if (!byDate[s.date]) byDate[s.date] = [];
       byDate[s.date].push(s);
     });
 
-    el.innerHTML = `
-      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-        <table style="width:100%;border-collapse:collapse;min-width:${68 * days.length}px">
-          <thead>
-            <tr>
-              ${days.map((d, i) => _calDateHeader(d, i, today)).join('')}
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              ${days.map((d, i) => {
-                const dateStr = fmtCalDate(d);
-                const dayShifts = byDate[dateStr] || [];
-                const isToday = dateStr === today;
-                return `<td style="vertical-align:top;padding:4px 2px;border-right:1px solid var(--border);min-width:68px;${isToday ? 'background:rgba(233,69,96,0.04)' : ''}">
-                  ${dayShifts.length ? dayShifts.map(s => _calDateCard(s)).join('')
-                  : '<div style="color:var(--border);text-align:center;padding:8px 0;font-size:18px">—</div>'}
-                </td>`;
-              }).join('')}
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      ${_calLegend()}`;
+    const isMonthView = _calDateRangeMode === 'month';
+    const WDAYS = ['日','月','火','水','木','金','土'];
+
+    if (isMonthView) {
+      // ---- 月表示: 日付を縦に並べたリスト形式 ----
+      const listHtml = days.map(d => {
+        const dateStr = fmtCalDate(d);
+        const isToday = dateStr === today;
+        const dayShifts = (byDate[dateStr] || []).sort((a, b) => a.startTime.localeCompare(b.startTime));
+        const dow = WDAYS[d.getDay()];
+        const isSun = d.getDay() === 0;
+        const isSat = d.getDay() === 6;
+        const headerColor = isToday ? '#e94560' : isSun ? '#dc2626' : isSat ? '#2563eb' : 'var(--text)';
+        return `
+        <div style="margin-bottom:12px;border-radius:10px;overflow:hidden;border:1px solid ${isToday ? '#e94560' : 'var(--border)'}">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:${isToday ? 'rgba(233,69,96,0.08)' : 'var(--surface)'}">
+            <span style="font-size:14px;font-weight:700;color:${headerColor}">
+              ${d.getMonth()+1}/${d.getDate()}（${dow}）${isToday ? ' 🔴 今日' : ''}
+            </span>
+            <span style="font-size:12px;color:var(--muted)">${dayShifts.length}件</span>
+          </div>
+          <div style="padding:6px 8px;background:var(--bg)">
+            ${dayShifts.length
+              ? dayShifts.map(s => _calDateCard(s)).join('')
+              : `<div style="color:var(--muted);font-size:12px;padding:4px 0">シフトなし</div>`}
+            ${isAdminMode ? `<button onclick="openCalAddShift('','${dateStr}')"
+              style="margin-top:4px;width:100%;padding:4px;border:1.5px dashed var(--border);border-radius:6px;background:none;color:var(--muted);font-size:11px;cursor:pointer">＋ シフト追加</button>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+      el.innerHTML = `<div>${listHtml}</div>${_calLegend()}
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">💡 バッジをタップで操作メニュー</div>`;
+    } else {
+      // ---- 週表示: 横スクロールテーブル ----
+      el.innerHTML = `
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+          <table style="width:100%;border-collapse:collapse;min-width:${68 * days.length}px">
+            <thead>
+              <tr>
+                ${days.map((d, i) => _calDateHeader(d, i, today)).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                ${days.map((d, i) => {
+                  const dateStr = fmtCalDate(d);
+                  const dayShifts = byDate[dateStr] || [];
+                  const isToday = dateStr === today;
+                  return `<td style="vertical-align:top;padding:4px 2px;border-right:1px solid var(--border);min-width:68px;${isToday ? 'background:rgba(233,69,96,0.04)' : ''}">
+                    ${dayShifts.length ? dayShifts.map(s => _calDateCard(s)).join('')
+                    : '<div style="color:var(--border);text-align:center;padding:8px 0;font-size:18px">—</div>'}
+                  </td>`;
+                }).join('')}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        ${_calLegend()}
+        <div style="font-size:11px;color:var(--muted);margin-top:6px">💡 バッジをタップで操作メニュー</div>`;
+    }
   }
 }
 // トースト通知
