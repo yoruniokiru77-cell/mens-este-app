@@ -4686,12 +4686,11 @@ async function sendPayrollLine(uid, name, dateLabel) {
           // シフトからルーム名を取得
           let cashRoomName = '';
           try {
-            const dateSlash = dateStr.replace(/-/g, '/');
             const { data: shiftData } = await _sb.from('shifts')
               .select('room_name')
               .eq('store_id', STORE_ID)
               .eq('therapist_name', name)
-              .eq('date', dateSlash)
+              .eq('date', dateStr)
               .eq('status', 'approved')
               .not('room_name', 'is', null)
               .limit(1)
