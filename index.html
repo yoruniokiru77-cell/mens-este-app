@@ -2475,6 +2475,9 @@ async function apiGet(action, params = {}) {
         if (m.type === 'course' && m.duration_min) menuByMin[m.duration_min] = m.id;
         if (m.type === 'option') menuByName[m.name] = m.id;
       });
+      // 売上編集モーダルのプレビュー計算で参照できるようにグローバルキャッシュへ保存
+      window._payrollMenuByMin   = menuByMin;
+      window._payrollMenuBackMap = menuBackMap;
 
       // sale_optionsを取得してオプション固定バック計算に使用
       const salesResvIds = (salesRes.data || []).map(r => r.reservation_id).filter(Boolean);
@@ -6981,17 +6984,64 @@ function calcSalesEditTotal() {
   document.getElementById('se-discount-display').textContent     = '-¥' + discount.toLocaleString();
   document.getElementById('se-total-display').textContent        = '¥' + Math.max(0, total).toLocaleString();
 
-  // 給料・店落ちのプレビュー計算
+  // 給料・店落ちのプレビュー計算（固定バック対応・_calcPayrollと同一ロジック）
   const therapistName = document.getElementById('sales-edit-therapist').value;
   const th = therapists.find(t => t.name === therapistName);
   const courseBack = th && th.courseBack !== '' ? Number(th.courseBack) : 0.5;
   const optionBack = th && th.optionBack !== '' ? Number(th.optionBack) : 1.0;
-  const courseNet  = coursePrice - discount;
-  const pay  = Math.round(courseNet * courseBack) + Math.round(optTotal * optionBack) + nomFee;
-  const drop = total - pay + discount - discount; // 整理: total - pay = store drop
-  const storeDrop = Math.round(courseNet * (1 - courseBack));
+  const courseMin  = selVal ? Number(selVal.split('|')[0]) : 0;
+
+  // コース固定バックを取得（menuBacksキャッシュから）
+  let fixedCourseBack = null;
+  if (th && th.id && courseMin) {
+    const menuId = (window._payrollMenuByMin || {})[courseMin];
+    if (menuId) {
+      const mb = (window._payrollMenuBackMap || {})[th.id + '_' + menuId];
+      if (mb) {
+        const isHon = nomination === 'honshimei';
+        const prim = isHon ? mb.honshimei : mb.other;
+        const fall = isHon ? mb.other     : mb.honshimei;
+        fixedCourseBack = (prim !== null && prim !== undefined) ? prim
+          : (fall !== null && fall !== undefined) ? fall : null;
+      }
+    }
+  }
+
+  // コース給料・店落ち
+  let therapistCoursePay, storeDrop;
+  if (fixedCourseBack !== null) {
+    therapistCoursePay = fixedCourseBack;
+    storeDrop = coursePrice - fixedCourseBack - discount;
+  } else {
+    const courseNet = coursePrice - discount;
+    therapistCoursePay = Math.round(courseNet * courseBack);
+    storeDrop = Math.round(courseNet * (1 - courseBack));
+  }
+
+  // オプション給料（固定バックがあれば優先）
+  let therapistOptPay = 0;
+  const selOptItems = getEditSelectedOptionsData(); // [{menuId, name, amount}]
+  if (selOptItems.length > 0 && th && th.id && window._payrollMenuBackMap) {
+    selOptItems.forEach(opt => {
+      const mb = opt.menuId ? (window._payrollMenuBackMap[th.id + '_' + opt.menuId] || null) : null;
+      if (mb) {
+        const isHon = nomination === 'honshimei';
+        const prim = isHon ? mb.honshimei : mb.other;
+        const fall = isHon ? mb.other     : mb.honshimei;
+        const fixedOpt = (prim !== null && prim !== undefined) ? prim
+          : (fall !== null && fall !== undefined) ? fall : null;
+        therapistOptPay += fixedOpt !== null ? Number(fixedOpt) : Math.round(opt.amount * optionBack);
+      } else {
+        therapistOptPay += Math.round(opt.amount * optionBack);
+      }
+    });
+  } else {
+    therapistOptPay = Math.round(optTotal * optionBack);
+  }
+
+  const pay = therapistCoursePay + therapistOptPay + nomFee;
   document.getElementById('se-pay-display').textContent  = '¥' + pay.toLocaleString();
-  document.getElementById('se-drop-display').textContent = '¥' + storeDrop.toLocaleString();
+  document.getElementById('se-drop-display').textContent = '¥' + Math.max(0, storeDrop).toLocaleString();
 
   // メモを自動生成（optPartsをジョイン）
   // 既存メモのうちオプション以外の部分を保持
