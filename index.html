@@ -4633,29 +4633,48 @@ function openPayrollPreviewModal(uid, name, dateLabel) {
   const tData = (window._payrollData || []).find(d => d.name === name && d.dateLabel === dateLabel);
   const details = (tData ? tData.details : []).filter(d => !d.isGuarantee);
 
+  // セラピストIDを取得（固定バック判定用）
+  const thInfo = (therapists || []).find(t => t.name === name);
+  const thId   = thInfo ? thInfo.id : null;
+
+  // 行ごとに固定バック使用有無を判定するヘルパー
+  function _isFixedBack(courseMin, nomination) {
+    if (!thId || !window._payrollMenuByMin || !window._payrollMenuBackMap) return false;
+    const menuId = window._payrollMenuByMin[courseMin];
+    if (!menuId) return false;
+    const mb = window._payrollMenuBackMap[thId + '_' + menuId];
+    if (!mb) return false;
+    const val = nomination === 'honshimei' ? mb.honshimei : mb.other;
+    return val !== null && val !== undefined;
+  }
+
   // 合計行
-  const totPrice   = details.reduce((s, d) => s + d.price, 0);
-  const totOpt     = details.reduce((s, d) => s + (d.optionPrice || 0), 0);
-  const totCBack   = details.reduce((s, d) => s + (d.therapistCoursePay || 0), 0);
-  const totStore   = details.reduce((s, d) => s + d.storeDrop, 0);
+  const totPrice = details.reduce((s, d) => s + d.price, 0);
+  const totOpt   = details.reduce((s, d) => s + (d.optionPrice || 0), 0);
+  const totCBack = details.reduce((s, d) => s + (d.therapistCoursePay || 0), 0);
+  const totStore = details.reduce((s, d) => s + d.storeDrop, 0);
 
   const rows = details.map(d => {
-    const nomLabel = d.nomination === 'honshimei' ? '本指名' : d.nomination === 'nomination' ? '指名' : 'フリー';
-    const discStr  = d.discount > 0 ? `<span style="color:#dc2626;font-size:10px"> -¥${d.discount.toLocaleString()}</span>` : '';
-    const nomStr   = d.nominationFee > 0 ? `<span style="font-size:10px;color:var(--muted)"> +指名¥${d.nominationFee.toLocaleString()}</span>` : '';
+    const nomLabel  = d.nomination === 'honshimei' ? '本指名' : d.nomination === 'nomination' ? '指名' : 'フリー';
+    const discStr   = d.discount > 0 ? `<span style="color:#dc2626;font-size:10px"> -¥${d.discount.toLocaleString()}</span>` : '';
+    const nomStr    = d.nominationFee > 0 ? `<span style="font-size:10px;color:var(--muted)"> +指名¥${d.nominationFee.toLocaleString()}</span>` : '';
+    const fixedBack = _isFixedBack(d.course, d.nomination);
+    // 固定バック→青太字、バック率→グレー＋%(率)ラベル付き
+    const backColor = fixedBack ? '#0f3460' : 'var(--muted)';
+    const backLabel = fixedBack ? '' : `<br><span style="font-size:9px">(率)</span>`;
     return `
       <tr style="border-top:1px solid var(--border)">
         <td style="padding:7px 6px;font-size:13px;white-space:nowrap">${d.date}</td>
         <td style="padding:7px 6px;font-size:13px">${d.course}分<br><span style="font-size:10px;color:var(--muted)">${nomLabel}</span></td>
         <td style="padding:7px 6px;font-size:13px;text-align:right">¥${d.price.toLocaleString()}${discStr}${nomStr}</td>
-        <td style="padding:7px 6px;font-size:13px;text-align:right;color:#0f3460;font-weight:600">¥${(d.therapistCoursePay || 0).toLocaleString()}</td>
+        <td style="padding:7px 6px;font-size:13px;text-align:right;color:${backColor};font-weight:${fixedBack ? '600' : '400'}">¥${(d.therapistCoursePay || 0).toLocaleString()}${backLabel}</td>
         <td style="padding:7px 6px;font-size:13px;text-align:right;color:var(--accent2)">${d.optionPrice > 0 ? '¥' + d.optionPrice.toLocaleString() : '-'}</td>
         <td style="padding:7px 6px;font-size:13px;text-align:right;font-weight:600">¥${d.storeDrop.toLocaleString()}</td>
       </tr>`;
   }).join('');
 
-  const payEl   = document.getElementById('pay-'   + uid);
-  const storeEl = document.getElementById('store-' + uid);
+  const payEl      = document.getElementById('pay-'   + uid);
+  const storeEl    = document.getElementById('store-' + uid);
   const finalPay   = payEl   ? payEl.textContent.trim()   : '¥0';
   const finalStore = storeEl ? storeEl.textContent.trim() : '¥0';
 
@@ -4665,6 +4684,9 @@ function openPayrollPreviewModal(uid, name, dateLabel) {
       <span>給料（確定）: <strong style="font-size:15px">${finalPay}</strong></span>
       <span>店落ち（確定）: <strong style="font-size:15px">${finalStore}</strong></span>
     </div>
+    <div style="margin-bottom:8px;font-size:11px;color:var(--muted)">
+      バック列：<span style="color:#0f3460;font-weight:600">青太字</span> = 固定バック　<span style="color:var(--muted)">グレー(率)</span> = コースバック率で計算
+    </div>
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead>
@@ -4672,7 +4694,7 @@ function openPayrollPreviewModal(uid, name, dateLabel) {
             <th style="padding:7px 6px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap">時刻</th>
             <th style="padding:7px 6px;text-align:left;font-size:11px;color:var(--muted);font-weight:600">コース</th>
             <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">合計金額</th>
-            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">固定バック</th>
+            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">バック</th>
             <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">オプション</th>
             <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">店落ち</th>
           </tr>
@@ -4682,7 +4704,7 @@ function openPayrollPreviewModal(uid, name, dateLabel) {
           <tr style="border-top:2px solid var(--border);background:var(--bg)">
             <td colspan="2" style="padding:8px 6px;font-size:12px;font-weight:700;color:var(--muted)">${details.length}件合計</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700">¥${totPrice.toLocaleString()}</td>
-            <td style="padding:8px 6px;text-align:right;font-weight:700;color:#0f3460">¥${totCBack.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--muted)">¥${totCBack.toLocaleString()}</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--accent2)">${totOpt > 0 ? '¥' + totOpt.toLocaleString() : '-'}</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700">¥${totStore.toLocaleString()}</td>
           </tr>
