@@ -2228,9 +2228,11 @@ async function apiGet(action, params = {}) {
       const allTels = [...new Set(rows.map(r => r.customer_tel || telMap[r.customer_no]).filter(Boolean))];
       const visitByTherapist = {};
       const visitByTherapistMonth = {};
+      const visitTotalByTel = {}; // 店舗全体の総来店回数（NEW判定用）
       if (allTels.length) {
         const nowMonth = dateStr.slice(0, 7);
         const countedKeys = new Set();
+        const countedDayKeys = new Set(); // 店舗全体の日付重複排除用
 
         // reservationsから集計（キャンセル除く・日付単位で重複排除）
         const { data: resvHist } = await _sb.from('reservations')
@@ -2249,6 +2251,12 @@ async function apiGet(action, params = {}) {
           visitByTherapist[key] = (visitByTherapist[key] || 0) + 1;
           if (r.date && r.date.slice(0, 7) === nowMonth) {
             visitByTherapistMonth[key] = (visitByTherapistMonth[key] || 0) + 1;
+          }
+          // 店舗全体の総来店回数（日付×tel 単位で重複排除）
+          const totalDayKey = (r.date||'').slice(0, 10) + '_' + tel;
+          if (!countedDayKeys.has(totalDayKey)) {
+            countedDayKeys.add(totalDayKey);
+            visitTotalByTel[tel] = (visitTotalByTel[tel] || 0) + 1;
           }
         });
       }
@@ -2269,7 +2277,11 @@ async function apiGet(action, params = {}) {
         optionPrice:r.option_price || 0,
         nominationFee: r.nomination_fee || 0,
         status:        r.status || 'active',
-        isNewCustomer: r.is_new_customer || false,
+        isNewCustomer: (() => {
+          const tel = r.customer_tel || telMap[r.customer_no] || '';
+          // DBフラグ OR 店舗全体の総来店回数が1（初来店）
+          return r.is_new_customer || (tel ? (visitTotalByTel[tel] || 0) === 1 : false);
+        })(),
         isHime:        r.is_hime || false,
         isHimeApproved: r.is_hime_approved || false,
         visitCount:      (() => { const t = r.customer_tel || telMap[r.customer_no] || ''; return t ? (visitByTherapist[t + '_' + r.therapist_name] || 0) : 0; })(),
