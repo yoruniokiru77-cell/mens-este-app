@@ -4468,6 +4468,7 @@ function renderPayrollCards(data) {
               <button class="btn btn-secondary btn-sm" onclick="toggleDetail('detail-${uid}')">明細</button>
               <button class="btn btn-secondary btn-sm" onclick="copyPayroll('${uid}','${t.name}','${dateLabel}','pay')">💴 給料</button>
               <button class="btn btn-secondary btn-sm" onclick="copyPayroll('${uid}','${t.name}','${dateLabel}','store')">🏪 店落ち</button>
+              <button class="btn btn-secondary btn-sm" onclick="openPayrollPreviewModal('${uid}','${t.name}','${dateLabel}')">📊 確認</button>
               <button class="btn btn-line btn-sm" onclick="sendPayrollLine('${uid}','${t.name}','${dateLabel}')">LINE送信</button>
               <span id="payconf-${uid}">${(() => {
                 const conf = _payrollConfirmations[t.name];
@@ -4615,6 +4616,89 @@ async function copyPayroll(uid, name, dateLabel, type) {
 
   await _copyToClipboard(text);
   showToast('📋 ' + label);
+}
+
+// ============================================================
+// 給料計算確認モーダル
+// ============================================================
+let _payrollPreviewUid  = '';
+let _payrollPreviewName = '';
+let _payrollPreviewDate = '';
+
+function openPayrollPreviewModal(uid, name, dateLabel) {
+  _payrollPreviewUid  = uid;
+  _payrollPreviewName = name;
+  _payrollPreviewDate = dateLabel;
+
+  const tData = (window._payrollData || []).find(d => d.name === name && d.dateLabel === dateLabel);
+  const details = (tData ? tData.details : []).filter(d => !d.isGuarantee);
+
+  // 合計行
+  const totPrice   = details.reduce((s, d) => s + d.price, 0);
+  const totOpt     = details.reduce((s, d) => s + (d.optionPrice || 0), 0);
+  const totCBack   = details.reduce((s, d) => s + (d.therapistCoursePay || 0), 0);
+  const totStore   = details.reduce((s, d) => s + d.storeDrop, 0);
+
+  const rows = details.map(d => {
+    const nomLabel = d.nomination === 'honshimei' ? '本指名' : d.nomination === 'nomination' ? '指名' : 'フリー';
+    const discStr  = d.discount > 0 ? `<span style="color:#dc2626;font-size:10px"> -¥${d.discount.toLocaleString()}</span>` : '';
+    const nomStr   = d.nominationFee > 0 ? `<span style="font-size:10px;color:var(--muted)"> +指名¥${d.nominationFee.toLocaleString()}</span>` : '';
+    return `
+      <tr style="border-top:1px solid var(--border)">
+        <td style="padding:7px 6px;font-size:13px;white-space:nowrap">${d.date}</td>
+        <td style="padding:7px 6px;font-size:13px">${d.course}分<br><span style="font-size:10px;color:var(--muted)">${nomLabel}</span></td>
+        <td style="padding:7px 6px;font-size:13px;text-align:right">¥${d.price.toLocaleString()}${discStr}${nomStr}</td>
+        <td style="padding:7px 6px;font-size:13px;text-align:right;color:#0f3460;font-weight:600">¥${(d.therapistCoursePay || 0).toLocaleString()}</td>
+        <td style="padding:7px 6px;font-size:13px;text-align:right;color:var(--accent2)">${d.optionPrice > 0 ? '¥' + d.optionPrice.toLocaleString() : '-'}</td>
+        <td style="padding:7px 6px;font-size:13px;text-align:right;font-weight:600">¥${d.storeDrop.toLocaleString()}</td>
+      </tr>`;
+  }).join('');
+
+  const payEl   = document.getElementById('pay-'   + uid);
+  const storeEl = document.getElementById('store-' + uid);
+  const finalPay   = payEl   ? payEl.textContent.trim()   : '¥0';
+  const finalStore = storeEl ? storeEl.textContent.trim() : '¥0';
+
+  document.getElementById('payroll-preview-title').textContent = name + ' / ' + dateLabel;
+  document.getElementById('payroll-preview-body').innerHTML = `
+    <div style="margin-bottom:14px;padding:10px 12px;background:#f0f9ff;border-radius:8px;font-size:13px;display:flex;gap:16px;flex-wrap:wrap">
+      <span>給料（確定）: <strong style="font-size:15px">${finalPay}</strong></span>
+      <span>店落ち（確定）: <strong style="font-size:15px">${finalStore}</strong></span>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--bg)">
+            <th style="padding:7px 6px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap">時刻</th>
+            <th style="padding:7px 6px;text-align:left;font-size:11px;color:var(--muted);font-weight:600">コース</th>
+            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">合計金額</th>
+            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">固定バック</th>
+            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">オプション</th>
+            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">店落ち</th>
+          </tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--muted)">明細なし</td></tr>'}</tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);background:var(--bg)">
+            <td colspan="2" style="padding:8px 6px;font-size:12px;font-weight:700;color:var(--muted)">${details.length}件合計</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:700">¥${totPrice.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:700;color:#0f3460">¥${totCBack.toLocaleString()}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--accent2)">${totOpt > 0 ? '¥' + totOpt.toLocaleString() : '-'}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:700">¥${totStore.toLocaleString()}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
+  _showModal('payroll-preview-modal');
+}
+
+function closePayrollPreviewModal() {
+  _hideModal('payroll-preview-modal');
+}
+
+async function sendPayrollLineFromPreview() {
+  closePayrollPreviewModal();
+  await sendPayrollLine(_payrollPreviewUid, _payrollPreviewName, _payrollPreviewDate);
 }
 
 // LINEで給料・店落ちを送信（uid版）
@@ -14661,6 +14745,21 @@ window.addEventListener('DOMContentLoaded', init);
   <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:480px;padding:24px;max-height:90vh;overflow-y:auto;margin:auto">
     <div id="checklist-detail-content"></div>
     <button class="btn btn-primary btn-block" style="margin-top:16px" onclick="_hideModal('checklist-detail-modal')">閉じる</button>
+  </div>
+</div>
+
+<!-- 給料計算確認モーダル -->
+<div id="payroll-preview-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9600;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:560px;padding:20px;max-height:92vh;overflow-y:auto;margin:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:16px;font-weight:700">📊 給料計算確認</div>
+      <div id="payroll-preview-title" style="font-size:13px;color:var(--muted)"></div>
+    </div>
+    <div id="payroll-preview-body"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="sendPayrollLineFromPreview()">📨 LINEで送信する</button>
+      <button class="btn btn-secondary" onclick="closePayrollPreviewModal()">閉じる</button>
+    </div>
   </div>
 </div>
 
