@@ -5824,7 +5824,7 @@ async function loadCalUnsubmitted() {
   const listEl  = document.getElementById('cal-unsubmitted-list');
   const weekEl  = document.getElementById('cal-shift-week-label');
   try {
-    const data = await apiGet('getUnsubmittedShifts', {});
+    const data = await apiGet('getUnsubmittedTherapists', {});
     if (weekEl) weekEl.textContent = data.weekLabel || '';
     if (!data.unsubmitted.length) {
       listEl.innerHTML = '<p style="color:var(--success);font-size:13px">全員提出済みです ✓</p>';
