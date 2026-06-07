@@ -5246,21 +5246,42 @@ async function submitAllShifts() {
   try {
     showOverlay();
 
-    // 来週シフト締め切りチェック
+    // シフト提出通知チェック
     const settings = await apiGet('getStoreSettings');
-    const deadline = settings.shift_deadline || '';
-    if (deadline) {
-      const deadlineMon = new Date(deadline + 'T12:00:00');
-      const deadlineSun = new Date(deadlineMon); deadlineSun.setDate(deadlineMon.getDate() + 6);
-      // 提出しようとしているシフトに来週分が含まれているか確認
-      const hasNextWeek = pendingShifts.some(s => {
+    const storeLineName = settings.store_line_name || '';
+    if (storeLineName) {
+      // 今週の月〜日を計算
+      const today = new Date();
+      const todayDay = today.getDay();
+      const thisMon = new Date(today); thisMon.setDate(today.getDate() - (todayDay === 0 ? 6 : todayDay - 1)); thisMon.setHours(0,0,0,0);
+      const thisSun = new Date(thisMon); thisSun.setDate(thisMon.getDate() + 6); thisSun.setHours(23,59,59,0);
+
+      // ① 今週分のシフトが含まれる場合は通知
+      const hasThisWeek = pendingShifts.some(s => {
         const d = new Date(s.date + 'T12:00:00');
-        return d >= deadlineMon && d <= deadlineSun;
+        return d >= thisMon && d <= thisSun;
       });
-      if (hasNextWeek) {
-        // 管理者のLINEに通知（申請はブロックしない）
-        const storeLineName = settings.store_line_name || '';
-        if (storeLineName) {
+      if (hasThisWeek) {
+        try {
+          const therapistsAll = await apiGet('getTherapists');
+          const storeT = therapistsAll.find(t => t.name === storeLineName);
+          if (storeT && storeT.userId) {
+            const msg = '【📅 今週のシフト申請】\n' + therapist + ' さんが今週のシフトを申請しました。';
+            await apiGet('sendLineMessage', { userId: storeT.userId, message: msg });
+          }
+        } catch(le) { console.warn('LINE通知エラー:', le); }
+      }
+
+      // ② 締め切り設定済みで来週分が含まれる場合も通知
+      const deadline = settings.shift_deadline || '';
+      if (deadline) {
+        const deadlineMon = new Date(deadline + 'T12:00:00');
+        const deadlineSun = new Date(deadlineMon); deadlineSun.setDate(deadlineMon.getDate() + 6);
+        const hasDeadlineWeek = pendingShifts.some(s => {
+          const d = new Date(s.date + 'T12:00:00');
+          return d >= deadlineMon && d <= deadlineSun;
+        });
+        if (hasDeadlineWeek) {
           try {
             const therapistsAll = await apiGet('getTherapists');
             const storeT = therapistsAll.find(t => t.name === storeLineName);
