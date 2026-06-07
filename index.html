@@ -6417,7 +6417,9 @@ function renderShiftList(el, data, isAdmin) {
                 : '-';
               const rc = getRoomColor(r.roomName);
               return `
-              <tr${r.hasChangeRequest && isAdmin
+              <tr${r.status === 'rejected'
+                    ? ' style="background:#fff5f5;opacity:0.7;text-decoration:line-through;"'
+                    : r.hasChangeRequest && isAdmin
                     ? ' style="background:#fffbeb"'
                     : (r.attendanceType === 'absent' || r.attendanceType === 'noshow') ? ' style="background:#fff5f5"' : ''}>
                 ${isAdmin ? `<td style="font-weight:600">${r.therapist}${r.hasChangeRequest ? ' <span style="font-size:10px;background:#f59e0b;color:#fff;padding:1px 5px;border-radius:8px;font-weight:700">変更申請</span>' : ''}</td>` : ''}
@@ -6429,9 +6431,9 @@ function renderShiftList(el, data, isAdmin) {
                 <td><span class="badge ${s.cls}">${s.label}</span></td>
                 ${isAdmin ? `<td style="font-size:12px">${attBadge}</td>` : ''}
                 <td style="white-space:nowrap">${r.roomName ? `<span style="background:${rc.bg};color:${rc.text};padding:2px 6px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">🚪 ${r.roomName}</span>` : '-'}</td>
-                <td style="font-size:12px">${
+                <td style="font-size:12px;text-decoration:none">${
                   r.status === 'rejected' && r.memo
-                    ? `<span style="color:#b91c1c;font-weight:600">❌ 却下理由: ${r.memo}</span>`
+                    ? `<span style="color:#b91c1c;font-weight:600;text-decoration:none">❌ 却下理由: ${r.memo}</span>`
                     : r.status === 'rejected'
                     ? '<span style="color:var(--muted)">-</span>'
                     : `<span style="color:var(--muted)">${r.memo || '-'}</span>`
