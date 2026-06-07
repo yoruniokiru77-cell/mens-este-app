@@ -2947,8 +2947,7 @@ async function apiGet(action, params = {}) {
           .eq('store_id', STORE_ID).gte('date', monStr).lte('date', sunStr)
       ]);
       const all           = (tRes.data || []).filter(t => t.name && t.name !== '管理者');
-      // 却下(rejected)は提出済みとみなさない
-      const submittedSet  = new Set((sRes.data || []).filter(s => s.status !== 'rejected').map(s => s.therapist_name));
+      const submittedSet  = new Set((sRes.data || []).map(s => s.therapist_name));
       const unsubmitted   = all.filter(t => !submittedSet.has(t.name)).map(t => ({ name: t.name, userId: t.line_user_id||'' }));
       const submitted     = all.filter(t =>  submittedSet.has(t.name)).map(t => t.name);
       return { unsubmitted, submitted, weekLabel: monStr.replace(/-/g,'/') + ' 〜 ' + sunStr.replace(/-/g,'/') };
@@ -2970,7 +2969,7 @@ case 'sendShiftReminder': {
       _sb.from('therapists').select('name,line_user_id').eq('store_id', STORE_ID).eq('active', true),
       _sb.from('shifts').select('therapist_name,status').eq('store_id', STORE_ID).gte('date', monStr).lte('date', sunStr)
     ]);
-    const submittedSet = new Set((sRes.data || []).filter(s => s.status !== 'rejected').map(s => s.therapist_name));
+    const submittedSet = new Set((sRes.data || []).map(s => s.therapist_name));
     const targets = (tRes.data || []).filter(t => t.name && t.name !== '管理者' && !submittedSet.has(t.name) && t.line_user_id);
     let sent = 0;
     for (const t of targets) {
