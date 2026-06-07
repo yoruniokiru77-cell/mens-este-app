@@ -9397,9 +9397,25 @@ async function loadShiftCalendar() {
         const deadlineBanner = document.getElementById('shift-deadline-banner');
         if (deadlineBtnWrap) deadlineBtnWrap.style.display = '';
         if (deadline) {
-          // 来週の月〜日を計算して表示
+          // 締め切り週が過去なら自動クリア
           const monDate = new Date(deadline + 'T12:00:00');
           const sunDate = new Date(monDate); sunDate.setDate(monDate.getDate() + 6);
+          const todayStart = new Date(); todayStart.setHours(0,0,0,0);
+          if (sunDate < todayStart) {
+            // 過去週の締め切りは自動解除
+            await apiGet('saveStoreSettings', { shift_deadline: null });
+            if (deadlineBanner) deadlineBanner.style.display = 'none';
+            if (deadlineBtn) {
+              deadlineBtn.textContent = '🔒 来週シフト締め切り';
+              deadlineBtn.style.background = '#dc2626';
+              deadlineBtn.style.borderColor = '#dc2626';
+              deadlineBtn.disabled = false;
+              deadlineBtn.style.opacity = '';
+              deadlineBtn.style.cursor = '';
+            }
+            hideOverlay && hideOverlay();
+            return; // 以降の表示処理はスキップ
+          }
           const fmt = d => (d.getMonth()+1) + '/' + d.getDate();
           if (deadlineBanner) {
             deadlineBanner.textContent = '🔒 来週（' + fmt(monDate) + '〜' + fmt(sunDate) + '）のシフトは締め切られています';
