@@ -840,7 +840,10 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       </div>
     </div>
     <!-- 来週シフト締め切りボタン・まとめて通知・バナー（管理者のみ） -->
-    <div id="shift-deadline-banner" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:13px;font-weight:700;color:#b91c1c;text-align:center"></div>
+    <div id="shift-deadline-banner" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:13px;font-weight:700;color:#b91c1c;display:none;align-items:center;justify-content:space-between;gap:8px">
+      <span id="shift-deadline-banner-text"></span>
+      <button onclick="clearShiftDeadline()" style="background:#b91c1c;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap;font-weight:600">解除</button>
+    </div>
     <div style="display:flex;gap:6px;margin-bottom:10px">
       <button class="btn btn-sm" id="btn-notify-all-shifts" style="display:none;flex:1;background:#06c755;color:#fff;border-color:#06c755" onclick="notifyAllApprovedShifts()">📨 まとめて通知</button>
       <div id="shift-deadline-btn-wrap" style="display:none;flex:1">
@@ -9421,9 +9424,10 @@ async function loadShiftCalendar() {
           // 締め切り週が過去なら自動クリア
           const monDate = new Date(deadline + 'T12:00:00');
           const sunDate = new Date(monDate); sunDate.setDate(monDate.getDate() + 6);
-          const todayStart = new Date(); todayStart.setHours(0,0,0,0);
-          if (sunDate < todayStart) {
-            // 過去週の締め切りは自動解除
+          const today = new Date(); today.setHours(0,0,0,0);
+          const sunDateOnly = new Date(sunDate); sunDateOnly.setHours(0,0,0,0);
+          if (sunDateOnly <= today) {
+            // 締め切り週の日曜当日 or 過去週 → 自動解除
             await apiGet('saveStoreSettings', { shift_deadline: null });
             if (deadlineBanner) deadlineBanner.style.display = 'none';
             if (deadlineBtn) {
@@ -9435,12 +9439,13 @@ async function loadShiftCalendar() {
               deadlineBtn.style.cursor = '';
             }
             hideOverlay && hideOverlay();
-            return; // 以降の表示処理はスキップ
+            return;
           }
           const fmt = d => (d.getMonth()+1) + '/' + d.getDate();
           if (deadlineBanner) {
-            deadlineBanner.textContent = '🔒 来週（' + fmt(monDate) + '〜' + fmt(sunDate) + '）のシフトは締め切られています';
-            deadlineBanner.style.display = '';
+            const bannerText = document.getElementById('shift-deadline-banner-text');
+            if (bannerText) bannerText.textContent = '🔒 来週（' + fmt(monDate) + '〜' + fmt(sunDate) + '）のシフトは締め切られています';
+            deadlineBanner.style.display = 'flex';
           }
           if (deadlineBtn) {
             deadlineBtn.textContent = fmt(monDate) + '〜' + fmt(sunDate) + ' 締切済';
@@ -13498,6 +13503,21 @@ async function notifyShiftToTherapist(therapistName) {
     showToast('📨 ' + therapistName + ' にLINE通知しました');
   } catch(e) {
     alert('通知エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+// 来週シフト締め切り手動解除
+async function clearShiftDeadline() {
+  if (!confirm('シフト締め切りを解除しますか？')) return;
+  try {
+    showOverlay();
+    await apiGet('saveStoreSettings', { shift_deadline: null });
+    showToast('🔓 締め切りを解除しました');
+    loadShiftCalendar();
+  } catch(e) {
+    alert('エラー: ' + e.message);
   } finally {
     hideOverlay();
   }
