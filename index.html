@@ -6417,7 +6417,7 @@ function renderShiftList(el, data, isAdmin) {
                 : '-';
               const rc = getRoomColor(r.roomName);
               return `
-              <tr${r.status === 'rejected'
+              <tr${r.status === 'rejected' && isAdmin
                     ? ' style="background:#fff5f5;opacity:0.7;text-decoration:line-through;"'
                     : r.hasChangeRequest && isAdmin
                     ? ' style="background:#fffbeb"'
