@@ -6016,6 +6016,10 @@ async function openRoomApproveModal(row, therapist, date, startTime, endTime, cu
   // ルーム重複チェック
   await checkRoomConflict(date, startTime, endTime, row, 'room-approve-warning');
 
+  // 管理者メモ欄をリセット
+  const adminMemoEl = document.getElementById('room-approve-admin-memo');
+  if (adminMemoEl) adminMemoEl.value = '';
+
   _showModal('room-approve-modal');
 }
 
@@ -6151,8 +6155,10 @@ async function confirmApproveShift() {
 
   try {
     showOverlay();
-    // 日時・ルームを更新してから承認
-    await apiGet('updateShift', { row, date: newDateSlash, startTime: newStart, endTime: newEnd, roomId, roomName });
+    // 管理者メモを取得
+    const adminMemo = (document.getElementById('room-approve-admin-memo')?.value || '').trim() || null;
+    // 日時・ルーム・管理者メモを更新してから承認
+    await apiGet('updateShift', { row, date: newDateSlash, startTime: newStart, endTime: newEnd, roomId, roomName, memo: adminMemo });
     await apiGet('approveShift', { row });
 
     closeRoomApproveModal();
@@ -14544,6 +14550,12 @@ window.addEventListener('DOMContentLoaded', init);
         <label>終了時間</label>
         <select id="room-approve-end"></select>
       </div>
+    </div>
+
+    <div class="form-group" style="margin-top:12px;margin-bottom:0">
+      <label>管理者メモ（セラピストへ）</label>
+      <input type="text" id="room-approve-admin-memo" placeholder="例：ルーム変更あり・時間注意など（省略可）"
+        style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
     </div>
 
     <div style="display:flex;gap:8px;margin-top:16px">
