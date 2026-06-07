@@ -9380,8 +9380,8 @@ async function loadShiftCalendar() {
 
     let data = shiftsData.concat(shiftsData2);
 
-    // rejected は非表示、pending・approved を両方表示
-    const visible = data.filter(r => r.status !== 'rejected');
+    // 管理者は rejected も表示、セラピストは非表示
+    const visible = isAdminMode ? data : data.filter(r => r.status !== 'rejected');
 
     renderShiftCalendar(el, days, visible);
     // 管理者モード時のみ通知ボタンを表示（描画完了後に再設定）
@@ -9848,69 +9848,71 @@ function _calDateHeader(d, i, today) {
 
 // 日付順ビュー用シフトカード
 function _calDateCard(s) {
+  const isRejected  = s.status === 'rejected';
   const isAbsent    = s.attendanceType === 'absent' || s.attendanceType === 'noshow';
   const isAbnormal  = s.attendanceType && s.attendanceType !== 'normal';
   const isPending   = s.status === 'pending';
-  const bg = isAbsent  ? 'rgba(107,114,128,0.55)'
-           : isPending ? 'rgba(107,114,128,0.6)'
-           : getRoomColor(s.roomName).bg;
-  const attLabel = isAbnormal
-    ? `<div style="font-size:9px;font-weight:800;margin-top:2px">${isAbsent ? '❌' : '⚠'} ${ATTENDANCE_LABEL[s.attendanceType]?.label || s.attendanceType}</div>`
-    : '';
-  const nameStyle = isAbsent ? 'font-weight:700;text-decoration:line-through;opacity:.75' : 'font-weight:700';
   const hasChangeReq = s.hasChangeRequest;
-  const bgFinal = isAbsent     ? 'rgba(107,114,128,0.55)'
+  const bgFinal = isRejected   ? 'rgba(185,28,28,0.15)'
+                : isAbsent     ? 'rgba(107,114,128,0.55)'
                 : isPending    ? 'rgba(107,114,128,0.6)'
                 : hasChangeReq ? '#f97316'
                 : getRoomColor(s.roomName).bg;
-  const border = hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
-  const safeTherapist = (s.therapist||'').replace(/'/g,"\\'");
-  const safeDate = (s.date||'').replace(/'/g,"\\'");
-  const safeStart = (s.startTime||'').replace(/'/g,"\\'");
-  const safeEnd   = (s.endTime||'').replace(/'/g,"\\'");
-  const safeRoom  = (s.roomName||'').replace(/'/g,"\\'");
-  return `<div style="background:${bgFinal};color:#fff;border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.4;${isAbsent?'opacity:.8;':''}${border}cursor:pointer"
+  const textColor   = isRejected ? '#7f1d1d' : '#fff';
+  const border      = hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
+  const wrapOpacity = (isRejected || isAbsent) ? 'opacity:.7;' : '';
+  const attLabel = isAbnormal
+    ? `<div style="font-size:9px;font-weight:800;margin-top:2px">${isAbsent ? '❌' : '⚠'} ${ATTENDANCE_LABEL[s.attendanceType]?.label || s.attendanceType}</div>`
+    : '';
+  const nameStyle = (isAbsent || isRejected) ? 'font-weight:700;text-decoration:line-through;opacity:.75' : 'font-weight:700';
+  const safeTherapist = (s.therapist||'').replace(/'/g,"'");
+  const safeDate = (s.date||'').replace(/'/g,"'");
+  const safeStart = (s.startTime||'').replace(/'/g,"'");
+  const safeEnd   = (s.endTime||'').replace(/'/g,"'");
+  const safeRoom  = (s.roomName||'').replace(/'/g,"'");
+  return `<div style="background:${bgFinal};color:${textColor};border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.4;${wrapOpacity}${border}cursor:pointer"
     onclick="_openCalShiftMenu(event,'${s.row}','${s.status}','${safeTherapist}','${safeDate}','${safeStart}','${safeEnd}','${safeRoom}','${s.attendanceType||'normal'}',${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','')">
+    ${isRejected ? '<div style="font-size:9px;font-weight:800">❌ 却下</div>' : ''}
     ${isPending ? '<div style="font-size:9px;opacity:.85">⏳ 未承認</div>' : ''}
     ${hasChangeReq ? '<div style="font-size:9px;font-weight:800">✏️ 変更申請</div>' : ''}
     <div style="${nameStyle}">${s.therapist}</div>
-    <div>${s.startTime}〜${s.endTime}</div>
-    ${s.roomName ? '<div style="opacity:.85">🚪' + s.roomName + '</div>' : ''}
+    <div style="${isRejected ? 'text-decoration:line-through;opacity:.75' : ''}">${s.startTime}～${s.endTime}</div>
+    ${s.roomName && !isRejected ? '<div style="opacity:.85">🚪' + s.roomName + '</div>' : ''}
     ${attLabel}
   </div>`;
 }
-
 // シフトセル（時間帯バッジ＋アクション）
 function _calShiftBadge(s) {
+  const isRejected   = s.status === 'rejected';
   const isPending    = s.status === 'pending';
   const hasChangeReq = s.hasChangeRequest;
   const isAbsent     = s.attendanceType === 'absent' || s.attendanceType === 'noshow';
   const isAbnormal   = s.attendanceType && s.attendanceType !== 'normal';
-  // 背景色優先順位: 欠勤/無断欠勤 > 未承認 > 変更申請 > ルームカラー
-  const c = isAbsent     ? { bg: 'rgba(107,114,128,0.55)', text: '#fff' }
+  const c = isRejected   ? { bg: 'rgba(185,28,28,0.15)', text: '#7f1d1d' }
+          : isAbsent     ? { bg: 'rgba(107,114,128,0.55)', text: '#fff' }
           : isPending    ? { bg: 'rgba(107,114,128,0.6)',  text: '#fff' }
           : hasChangeReq ? { bg: '#f97316',                text: '#fff' }
           : getRoomColor(s.roomName);
   const att = isAbnormal
     ? `<div style="font-size:9px;font-weight:800;margin-top:1px">${isAbsent ? '❌' : '⚠'} ${ATTENDANCE_LABEL[s.attendanceType]?.label||s.attendanceType}</div>` : '';
-  const border     = hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
-  const nameStyle  = isAbsent ? 'font-weight:700;text-decoration:line-through;opacity:.75' : 'font-weight:700';
-  const wrapOpacity = isAbsent ? 'opacity:.85;' : '';
-  const memoAttr   = s.memo ? ` title="📝 ${s.memo.replace(/"/g,"'")}"` : '';
+  const border      = hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
+  const nameStyle   = (isAbsent || isRejected) ? 'font-weight:700;text-decoration:line-through;opacity:.75' : 'font-weight:700';
+  const wrapOpacity = (isAbsent || isRejected) ? 'opacity:.7;' : '';
+  const memoAttr    = s.memo ? ` title="📝 ${s.memo.replace(/"/g,"'")}"` : '';
   return `<div style="background:${c.bg};color:${c.text};border-radius:5px;padding:3px 5px;margin-bottom:3px;font-size:10px;line-height:1.4;cursor:pointer;${border}${wrapOpacity}"
     data-row="${s.row}" data-status="${s.status}" data-therapist="${s.therapist}"
     data-date="${s.date}" data-start="${s.startTime}" data-end="${s.endTime}"
     data-room="${s.roomName||''}" data-att="${s.attendanceType||'normal'}"
     onclick="_openCalShiftMenu(event,this.dataset.row,this.dataset.status,this.dataset.therapist,this.dataset.date,this.dataset.start,this.dataset.end,this.dataset.room,this.dataset.att,${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','')"${memoAttr}>
+    ${isRejected ? '<div style="font-size:9px;font-weight:800">❌ 却下</div>' : ''}
     ${isPending ? '<div style="font-size:9px;opacity:.85">⏳ 未承認</div>' : ''}
     ${hasChangeReq ? '<div style="font-size:9px;font-weight:800;letter-spacing:0.5px">✏️ 変更申請</div>' : ''}
-    <div style="${nameStyle}">${s.startTime}〜${s.endTime}</div>
-    ${s.roomName ? '<div style="opacity:.85;font-size:9px">🚪' + s.roomName + '</div>' : ''}
+    <div style="${nameStyle}">${s.startTime}～${s.endTime}</div>
+    ${s.roomName && !isRejected ? '<div style="opacity:.85;font-size:9px">🚪' + s.roomName + '</div>' : ''}
     ${s.memo ? '<div style="opacity:.85;font-size:9px">📝</div>' : ''}
     ${att}
   </div>`;
 }
-
 function renderShiftCalendar(el, days, shifts) {
   // キャッシュ保存
   _calDaysCache   = days;
