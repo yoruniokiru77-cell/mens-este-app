@@ -7693,13 +7693,14 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
       window._histDetailData = res.history;
       histEl.innerHTML = res.history.map((h, i) => {
         const nomLabel = NOMINATION_LABEL[h.nomination] || h.nomination || '-';
+        const histTotal = Number(h.price||0) + Number(h.optionPrice||0) - Number(h.discount||0);
         return `
         <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden">
           <div onclick="toggleHistDetail(${i})" style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--surface);cursor:pointer;gap:8px">
             <div style="font-size:12px;color:var(--muted);white-space:nowrap">${h.date.split(' ')[0] || h.date}</div>
             <div style="font-size:13px;font-weight:700;flex:1;white-space:nowrap">${h.course}分 ${nomLabel}</div>
             ${isAdminMode ? `<div style="font-size:11px;color:var(--muted);white-space:nowrap">${h.therapist||''}</div>` : ''}
-            <div style="font-size:13px;font-weight:700;white-space:nowrap">¥${Number(h.price).toLocaleString()}</div>
+            <div style="font-size:13px;font-weight:700;white-space:nowrap">¥${histTotal.toLocaleString()}</div>
             <div id="hist-arrow-${i}" style="font-size:12px;color:var(--muted);transition:transform .2s">▼</div>
           </div>
           <div id="hist-detail-${i}" style="display:none;background:var(--bg);padding:10px 14px;font-size:12px;border-top:1px solid var(--border)">
@@ -7714,7 +7715,7 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
             })()}
             ${h.nominationFee > 0 ? `<div style="display:flex;justify-content:space-between;padding:3px 0"><span style="color:var(--muted)">指名料</span><span>¥${Number(h.nominationFee).toLocaleString()}</span></div>` : ''}
             ${h.discount > 0 ? `<div style="display:flex;justify-content:space-between;padding:3px 0;color:var(--accent)"><span>割引</span><span>-¥${Number(h.discount).toLocaleString()}</span></div>` : ''}
-            <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--border);font-weight:700;margin-top:4px"><span>合計</span><span>¥${Number(h.price).toLocaleString()}</span></div>
+            <div style="display:flex;justify-content:space-between;padding:5px 0 3px;border-top:1px solid var(--border);font-weight:700;margin-top:4px"><span>合計</span><span>¥${histTotal.toLocaleString()}</span></div>
             ${h.memo ? `<div style="margin-top:6px;padding:6px 8px;background:var(--surface);border-radius:6px;color:var(--muted)">📝 ${h.memo}</div>` : ''}
           </div>
         </div>`;
