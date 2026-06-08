@@ -10430,7 +10430,10 @@ function renderResvByTherapist(data, el) {
       // シフト情報・最短案内時刻（複数シフト対応）
       // 今日の予約一覧のみ表示（未来日は不要）
       const viewingDate = currentResvDate;
-      const todayDate   = new Date(); todayDate.setHours(0,0,0,0);
+      // 27時ルール: 0〜2時台は前日扱いのため、"今日"もその基準で判定
+      const todayDate = new Date();
+      if (todayDate.getHours() < 3) todayDate.setDate(todayDate.getDate() - 1);
+      todayDate.setHours(0, 0, 0, 0);
       const isToday = viewingDate.toDateString() === todayDate.toDateString();
       const shifts = window._resvShiftMap && window._resvShiftMap[th];
       let shiftLabel = '';
