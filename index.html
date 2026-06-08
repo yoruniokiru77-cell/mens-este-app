@@ -6097,23 +6097,54 @@ async function checkRoomConflict(date, startTime, endTime, excludeRow, warningEl
     const month = date.slice(0,7).replace(/\//g,'-');
     const data  = await apiGet('getShifts', { month });
 
-    // インターバルを考慮した時間比較用ヘルパー
-    const toMin = t => { const [h,m] = t.split(':').map(Number); return h*60+m; };
+    // インターバルを考慮した時間比較用ヘルパー（27時ルール対応・深夜またぎ対応）
+    const toMin = t => { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+(m||0); };
+    // 深夜またぎ対応：終了が開始より小さければ +1440（翌日扱い）
+    const normalizeEnd = (start, end) => end < start ? end + 1440 : end;
+
     const startMin = toMin(startTime);
-    const endMin   = toMin(endTime);
+    const endMin   = normalizeEnd(startMin, toMin(endTime));
+
+    // チェック対象日の前後1日も含めて取得（深夜またぎ対応）
+    const checkDate = (date||'').replace(/\//g,'-');
 
     const conflicts = data.filter(s => {
       if (s.status !== 'approved') return false;
       if (s.row === excludeRow)    return false;
       if (s.roomName !== roomName) return false;
-      // 欠勤・無断欠勤は除外
       if (s.attendanceType === 'absent' || s.attendanceType === 'noshow') return false;
-      const d1 = (s.date||'').replace(/\//g,'-');
-      const d2 = (date||'').replace(/\//g,'-');
-      if (d1 !== d2) return false;
+
+      const sDate = (s.date||'').replace(/\//g,'-');
       const sStart = toMin(s.startTime);
-      const sEnd   = toMin(s.endTime) + intervalMin; // インターバルを終了時間に加算
-      return startMin < sEnd && endMin > toMin(s.startTime);
+      const sEndRaw = toMin(s.endTime);
+      const sEnd   = normalizeEnd(sStart, sEndRaw) + intervalMin;
+
+      // 同日チェック
+      if (sDate === checkDate) {
+        return startMin < sEnd && endMin > sStart;
+      }
+
+      // 既存シフトが前日で深夜またぎの場合（例：前日22:00〜翌02:00）
+      const prevDate = new Date(checkDate + 'T12:00:00');
+      prevDate.setDate(prevDate.getDate() - 1);
+      const prevStr = prevDate.toISOString().slice(0,10);
+      if (sDate === prevStr && sEndRaw < sStart) {
+        // 前日から続くシフト：時刻を+1440してオフセット比較
+        const sStartOffset = sStart;
+        const sEndOffset   = sEndRaw + 1440 + intervalMin; // 前日の02:00 → 1560
+        return startMin + 1440 < sEndOffset && endMin + 1440 > sStartOffset;
+      }
+
+      // 新シフトが深夜またぎで翌日にはみ出す場合
+      if (endMin > 1440 && sDate !== checkDate) {
+        const nextDate = new Date(checkDate + 'T12:00:00');
+        nextDate.setDate(nextDate.getDate() + 1);
+        const nextStr = nextDate.toISOString().slice(0,10);
+        if (sDate === nextStr) {
+          return (startMin - 1440) < sEnd && (endMin - 1440) > sStart;
+        }
+      }
+      return false;
     });
 
     if (conflicts.length) {
