@@ -7693,7 +7693,10 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
       window._histDetailData = res.history;
       histEl.innerHTML = res.history.map((h, i) => {
         const nomLabel = NOMINATION_LABEL[h.nomination] || h.nomination || '-';
-        const histTotal = Number(h.price||0) + Number(h.optionPrice||0) - Number(h.discount||0);
+        const _histOptTotal = h.options && h.options.length > 0
+          ? h.options.reduce((s, o) => s + Number(o.amount||0), 0)
+          : Number(h.optionPrice||0);
+        const histTotal = Number(h.price||0) + _histOptTotal - Number(h.discount||0);
         return `
         <div style="border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow:hidden">
           <div onclick="toggleHistDetail(${i})" style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;background:var(--surface);cursor:pointer;gap:8px">
