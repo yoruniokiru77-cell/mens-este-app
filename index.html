@@ -725,6 +725,10 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--accent);margin-bottom:-2px;color:var(--accent);cursor:pointer">
         📆 シフト提出
       </button>
+      <button id="shift-tab-dayoff" onclick="switchShiftTab('dayoff')"
+        style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer">
+        🛌 お休み申請
+      </button>
       <button id="shift-tab-availability" onclick="switchShiftTab('availability')"
         style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer">
         🚪 ルーム空き状況
@@ -776,6 +780,30 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     </div>
     </div><!-- /shift-tab-content-submit -->
 
+    <!-- お休み申請タブ -->
+    <div id="shift-tab-content-dayoff" style="display:none">
+      <div class="card" style="margin-bottom:14px">
+        <div class="sec-title" style="margin-bottom:14px">🛌 お休み申請</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+          <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
+            <label>お休み希望日</label>
+            <input type="date" id="dayoff-date">
+          </div>
+          <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
+            <label>理由（任意）</label>
+            <input type="text" id="dayoff-reason" placeholder="例：体調不良">
+          </div>
+          <button class="btn btn-primary" style="white-space:nowrap" onclick="submitDayoffRequest()">申請する</button>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:0">管理者が承認するとシフトに反映されます。</p>
+      </div>
+      <!-- 申請済み一覧 -->
+      <div class="card">
+        <div class="sec-title" style="margin-bottom:12px">📋 お休み申請一覧</div>
+        <div id="dayoff-request-list">読み込み中...</div>
+      </div>
+    </div><!-- /shift-tab-content-dayoff -->
+
     <!-- ルーム空き状況タブ -->
     <div id="shift-tab-content-availability" style="display:none">
       <div class="card" style="margin-bottom:14px">
@@ -807,6 +835,8 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
 
   <!-- ===== シフトカレンダーページ ===== -->
   <div id="page-shift-calendar" class="page">
+    <!-- お休み申請承認パネル -->
+    <div id="dayoff-pending-panel" style="display:none;margin-bottom:12px"></div>
     <!-- 未提出者パネル -->
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -2786,6 +2816,7 @@ async function apiGet(action, params = {}) {
         changeRequestStart: r.change_request_start || '',
         changeRequestEnd:   r.change_request_end   || '',
         changeRequestMemo:  r.change_request_memo  || '',
+        isDayoffRequest:    r.is_dayoff_request || false,
         _id:           r.id
       }));
     }
@@ -2818,6 +2849,83 @@ async function apiGet(action, params = {}) {
 
     case 'deleteShift': {
       const { error } = await _sb.from('shifts').delete().eq('id', params.row).eq('store_id', STORE_ID);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'submitDayoffRequest': {
+      // セラピストがお休み申請を送信
+      const therapistId = await _getTherapistId(params.therapist);
+      // 同日にすでに未却下のお休み申請があれば重複防止
+      const { data: dupCheck } = await _sb.from('shifts')
+        .select('id, status')
+        .eq('store_id', STORE_ID)
+        .eq('therapist_name', params.therapist)
+        .eq('date', params.date)
+        .eq('is_dayoff_request', true)
+        .neq('status', 'rejected')
+        .maybeSingle();
+      if (dupCheck) return { ok: false, message: 'すでにお休み申請済みです' };
+      const { error } = await _sb.from('shifts').insert({
+        store_id:          STORE_ID,
+        therapist_id:      therapistId,
+        therapist_name:    params.therapist,
+        date:              params.date,
+        start_time:        '00:00',
+        end_time:          '00:00',
+        status:            'pending',
+        is_dayoff_request: true,
+        memo:              params.reason || null,
+        submitted_at:      new Date().toISOString()
+      });
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'getDayoffRequests': {
+      // 管理者向け: 承認待ちのお休み申請一覧
+      const { data, error } = await _sb.from('shifts')
+        .select('*')
+        .eq('store_id', STORE_ID)
+        .eq('is_dayoff_request', true)
+        .eq('status', 'pending')
+        .order('date', { ascending: true });
+      if (error) throw new Error(error.message);
+      return (data || []).map(r => ({
+        row:       r.id,
+        therapist: r.therapist_name || '',
+        date:      r.date ? r.date.replace(/-/g, '/') : '',
+        reason:    r.memo || '',
+      }));
+    }
+
+    case 'approveDayoffRequest': {
+      // 当日 → absent（当日欠勤）、それ以外 → pre_absent（事前欠勤）
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const shiftDateStr = (params.date || '').replace(/\//g, '-');
+      const attType = shiftDateStr === todayStr ? 'absent' : 'pre_absent';
+      // このお休み申請を承認
+      const { error } = await _sb.from('shifts').update({
+        status:          'approved',
+        attendance_type: attType,
+        approved_at:     new Date().toISOString()
+      }).eq('id', params.row).eq('store_id', STORE_ID);
+      if (error) throw new Error(error.message);
+      // 同日・同セラピストの他の承認済みシフトにも attendance_type を反映
+      await _sb.from('shifts').update({ attendance_type: attType })
+        .eq('store_id', STORE_ID)
+        .eq('therapist_name', params.therapist)
+        .eq('date', shiftDateStr)
+        .eq('status', 'approved')
+        .eq('is_dayoff_request', false);
+      return { ok: true, attendanceType: attType };
+    }
+
+    case 'rejectDayoffRequest': {
+      const { error } = await _sb.from('shifts').update({
+        status: 'rejected',
+        memo:   params.reason || null
+      }).eq('id', params.row).eq('store_id', STORE_ID);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
@@ -4952,20 +5060,19 @@ let pendingShifts = [];
 
 // シフト提出ページ タブ切り替え
 function switchShiftTab(tab) {
-  const isSubmit = tab === 'submit';
-  document.getElementById('shift-tab-content-submit').style.display      = isSubmit ? '' : 'none';
-  document.getElementById('shift-tab-content-availability').style.display = isSubmit ? 'none' : '';
-  const btnSubmit = document.getElementById('shift-tab-submit');
-  const btnAvail  = document.getElementById('shift-tab-availability');
-  if (btnSubmit) {
-    btnSubmit.style.borderBottomColor = isSubmit ? 'var(--accent)' : 'transparent';
-    btnSubmit.style.color             = isSubmit ? 'var(--accent)' : 'var(--muted)';
-  }
-  if (btnAvail) {
-    btnAvail.style.borderBottomColor = !isSubmit ? 'var(--accent)' : 'transparent';
-    btnAvail.style.color             = !isSubmit ? 'var(--accent)' : 'var(--muted)';
-  }
-  if (!isSubmit) loadRoomAvailability();
+  document.getElementById('shift-tab-content-submit').style.display      = tab === 'submit'       ? '' : 'none';
+  document.getElementById('shift-tab-content-dayoff').style.display      = tab === 'dayoff'       ? '' : 'none';
+  document.getElementById('shift-tab-content-availability').style.display = tab === 'availability' ? '' : 'none';
+  const tabs = ['submit', 'dayoff', 'availability'];
+  tabs.forEach(t => {
+    const btn = document.getElementById('shift-tab-' + t);
+    if (btn) {
+      btn.style.borderBottomColor = t === tab ? 'var(--accent)' : 'transparent';
+      btn.style.color             = t === tab ? 'var(--accent)' : 'var(--muted)';
+    }
+  });
+  if (tab === 'availability') loadRoomAvailability();
+  if (tab === 'dayoff')       loadMyDayoffRequests();
 }
 
 // ルーム空き状況
@@ -5317,9 +5424,10 @@ async function loadMyShifts() {
   appEl.innerHTML = '読み込み中...';
   try {
     const data = await apiGet('getShifts', { therapist: loggedInTherapist, futureOnly: true });
-    // 承認済みと未承認を分離
+    // 承認済み（通常シフト＋お休み承認済み）と未承認を分離
+    // お休み申請のpending/rejectedは「お休み申請タブ」で表示するためここでは除外
     const approved = data.filter(s => s.status === 'approved');
-    const pending  = data.filter(s => s.status !== 'approved');
+    const pending  = data.filter(s => s.status !== 'approved' && !s.isDayoffRequest);
     renderApprovedShifts(appEl, approved);
     renderShiftList(el, pending, false);
   } catch(e) {
@@ -5373,6 +5481,20 @@ function renderApprovedShifts(el, data) {
     <div style="margin-bottom:12px">
       <div style="font-size:13px;font-weight:700;margin-bottom:8px;${dateColor}">${date}（${dow}）</div>
       ${list.map(r => {
+        const isDayoff = r.isDayoffRequest;
+        const isAbsent = isDayoff && (r.attendanceType === 'absent' || r.attendanceType === 'pre_absent');
+        if (isDayoff) {
+          // お休み承認済みカード
+          const attLabel = r.attendanceType === 'absent' ? '当日欠勤' : '事前欠勤';
+          return `
+          <div style="background:#f3f4f6;border-radius:10px;margin-bottom:6px;padding:10px 12px;display:flex;align-items:center;gap:10px;opacity:0.85">
+            <span style="font-size:20px">🛌</span>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:700;color:var(--accent)">お休み承認済み（${attLabel}）</div>
+              ${r.memo ? `<div style="font-size:12px;color:var(--muted)">理由: ${r.memo}</div>` : ''}
+            </div>
+          </div>`;
+        }
         const rc = getRoomColor(r.roomName);
         return `
         <div style="background:var(--bg);border-radius:10px;margin-bottom:6px;overflow:hidden">
@@ -5389,6 +5511,175 @@ function renderApprovedShifts(el, data) {
       }).join('')}
     </div>`;
   }).join('');
+}
+
+// ============================================================
+// お休み申請（セラピスト）
+// ============================================================
+async function submitDayoffRequest() {
+  const therapist = loggedInTherapist;
+  if (!therapist) { alert('ログインしてください'); return; }
+  const dateVal  = document.getElementById('dayoff-date').value;
+  const reason   = document.getElementById('dayoff-reason').value.trim();
+  if (!dateVal) { alert('お休み希望日を選択してください'); return; }
+  try {
+    showOverlay();
+    const result = await apiGet('submitDayoffRequest', { therapist, date: dateVal, reason });
+    if (!result.ok) { alert(result.message || 'エラーが発生しました'); return; }
+    showToast('お休み申請を送信しました');
+    document.getElementById('dayoff-date').value   = '';
+    document.getElementById('dayoff-reason').value = '';
+    loadMyDayoffRequests();
+    // 店舗LINE通知
+    try {
+      const settings = await apiGet('getStoreSettings');
+      const storeLineName = settings.store_line_name || '';
+      if (storeLineName) {
+        const tAll = await apiGet('getTherapists');
+        const storeT = tAll.find(t => t.name === storeLineName);
+        if (storeT && storeT.userId) {
+          const msg = `【🛌 お休み申請】\n${therapist} さんが ${dateVal.replace(/-/g,'/')} のお休みを申請しました。${reason ? '\n理由: ' + reason : ''}`;
+          await apiGet('sendLineMessage', { userId: storeT.userId, message: msg });
+        }
+      }
+    } catch(le) { console.warn('LINE通知エラー:', le); }
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function loadMyDayoffRequests() {
+  const el = document.getElementById('dayoff-request-list');
+  if (!el) return;
+  el.innerHTML = '読み込み中...';
+  try {
+    const therapist = loggedInTherapist;
+    if (!therapist) { el.innerHTML = '<p style="color:var(--muted)">ログインが必要です</p>'; return; }
+    // futureOnly=false で過去含む直近1ヶ月分を取得
+    const allShifts = await apiGet('getShifts', { therapist });
+    const dayoffs = allShifts.filter(s => s.isDayoffRequest);
+    if (!dayoffs.length) {
+      el.innerHTML = '<p style="color:var(--muted);font-size:13px">お休み申請はありません</p>';
+      return;
+    }
+    const SHIFT_STATUS_LABEL = { pending: '⏳ 審査中', approved: '✅ 承認済み', rejected: '❌ 却下' };
+    const DOW = ['日','月','火','水','木','金','土'];
+    el.innerHTML = `<div class="table-wrap"><table>
+      <thead><tr><th>日付</th><th>状態</th><th>理由</th></tr></thead>
+      <tbody>
+        ${dayoffs.sort((a,b) => a.date > b.date ? -1 : 1).map(r => {
+          const dt  = new Date((r.date||'').replace(/\//g,'-') + 'T00:00:00');
+          const dow = DOW[dt.getDay()];
+          const statusLabel = SHIFT_STATUS_LABEL[r.status] || r.status;
+          const attLabel = r.attendanceType === 'absent' ? '（当日欠勤）' : r.attendanceType === 'pre_absent' ? '（事前欠勤）' : '';
+          return `<tr>
+            <td style="white-space:nowrap">${r.date}（${dow}）</td>
+            <td style="white-space:nowrap;font-weight:600">${statusLabel}${r.status === 'approved' ? ' <span style="font-size:11px;color:var(--accent)">' + attLabel + '</span>' : ''}</td>
+            <td style="font-size:12px;color:var(--muted)">${r.memo || '-'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table></div>`;
+  } catch(e) {
+    el.innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+// ============================================================
+// お休み申請承認（管理者）
+// ============================================================
+async function loadDayoffPendingPanel() {
+  const panel = document.getElementById('dayoff-pending-panel');
+  if (!panel || !isAdminMode) return;
+  try {
+    const requests = await apiGet('getDayoffRequests', {});
+    if (!requests.length) {
+      panel.style.display = 'none';
+      return;
+    }
+    panel.style.display = '';
+    const DOW = ['日','月','火','水','木','金','土'];
+    panel.innerHTML = `
+    <div class="card" style="border:1.5px solid #fcd34d;background:#fffbeb">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:14px;font-weight:700;color:#92400e">🛌 お休み申請（承認待ち ${requests.length}件）</div>
+        <button class="btn btn-secondary btn-sm" onclick="loadDayoffPendingPanel()">更新</button>
+      </div>
+      ${requests.map(r => {
+        const dt  = new Date((r.date||'').replace(/\//g,'-') + 'T00:00:00');
+        const dow = DOW[dt.getDay()];
+        const safeTherapist = (r.therapist||'').replace(/'/g,"&#39;");
+        const safeDate      = (r.date||'').replace(/'/g,"&#39;");
+        const safeRow       = r.row || '';
+        return `
+        <div style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:160px">
+            <div style="font-size:14px;font-weight:700">${r.therapist}</div>
+            <div style="font-size:13px;color:var(--muted)">${r.date}（${dow}）${r.reason ? ' / 理由: ' + r.reason : ''}</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" onclick="approveDayoffRequest('${safeRow}','${safeTherapist}','${safeDate}')">✅ 承認</button>
+            <button class="btn btn-danger btn-sm" onclick="rejectDayoffRequest('${safeRow}','${safeTherapist}')">❌ 却下</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  } catch(e) {
+    console.warn('お休み申請取得エラー:', e);
+  }
+}
+
+async function approveDayoffRequest(row, therapist, date) {
+  if (!confirm(`${therapist} さんの ${date} のお休み申請を承認しますか？`)) return;
+  try {
+    showOverlay();
+    const result = await apiGet('approveDayoffRequest', { row, therapist, date });
+    const label = result.attendanceType === 'absent' ? '当日欠勤' : '事前欠勤';
+    showToast(`承認しました（${label}）`);
+    // セラピストにLINE通知
+    try {
+      const tAll = await apiGet('getTherapists');
+      const t = tAll.find(th => th.name === therapist);
+      if (t && t.userId) {
+        const msg = `【✅ お休み申請承認】\n${date} のお休みが承認されました。（${label}）`;
+        await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+      }
+    } catch(le) { console.warn('LINE通知エラー:', le); }
+    loadDayoffPendingPanel();
+    if (document.getElementById('page-shift-calendar').classList.contains('active')) {
+      loadShiftCalendar();
+    }
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function rejectDayoffRequest(row, therapist) {
+  const reason = prompt(`${therapist} さんのお休み申請を却下します。\n却下理由（任意）:`);
+  if (reason === null) return; // キャンセル
+  try {
+    showOverlay();
+    await apiGet('rejectDayoffRequest', { row, reason });
+    showToast('却下しました');
+    // セラピストにLINE通知
+    try {
+      const tAll = await apiGet('getTherapists');
+      const t = tAll.find(th => th.name === therapist);
+      if (t && t.userId) {
+        const msg = `【❌ お休み申請却下】\nお休み申請が却下されました。${reason ? '\n理由: ' + reason : ''}`;
+        await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+      }
+    } catch(le) { console.warn('LINE通知エラー:', le); }
+    loadDayoffPendingPanel();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
 }
 
 // ============================================================
@@ -6426,7 +6717,8 @@ const ATTENDANCE_LABEL = {
   late:        { label: '遅刻',     color: 'var(--warning)' },
   early_leave: { label: '早退',     color: 'var(--warning)' },
   absent:      { label: '欠勤',     color: 'var(--accent)'  },
-  noshow:      { label: '無断欠勤', color: 'var(--accent)'  }
+  noshow:      { label: '無断欠勤', color: 'var(--accent)'  },
+  pre_absent:  { label: '事前欠勤', color: 'var(--accent)'  }
 };
 
 function renderShiftList(el, data, isAdmin) {
@@ -9425,6 +9717,7 @@ async function loadAttendanceSummary() {
 
 async function loadShiftCalendar() {
   loadAttendanceSummary();
+  if (isAdminMode) loadDayoffPendingPanel();
   const el   = document.getElementById('shift-calendar-content');
   el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">読み込み中...</p>';
 
@@ -9931,17 +10224,19 @@ function _calDateHeader(d, i, today) {
 
 // 日付順ビュー用シフトカード
 function _calDateCard(s) {
-  const isRejected  = s.status === 'rejected';
-  const isAbsent    = s.attendanceType === 'absent' || s.attendanceType === 'noshow';
-  const isAbnormal  = s.attendanceType && s.attendanceType !== 'normal';
-  const isPending   = s.status === 'pending';
+  const isRejected   = s.status === 'rejected';
+  const isAbsent     = s.attendanceType === 'absent' || s.attendanceType === 'noshow' || s.attendanceType === 'pre_absent';
+  const isAbnormal   = s.attendanceType && s.attendanceType !== 'normal';
+  const isPending    = s.status === 'pending';
   const hasChangeReq = s.hasChangeRequest;
+  const isDayoff     = s.isDayoffRequest;
   const bgFinal = isRejected   ? 'rgba(185,28,28,0.15)'
                 : isAbsent     ? 'rgba(107,114,128,0.55)'
+                : (isDayoff && isPending) ? 'rgba(251,191,36,0.35)'
                 : isPending    ? 'rgba(107,114,128,0.6)'
                 : hasChangeReq ? '#f97316'
                 : getRoomColor(s.roomName).bg;
-  const textColor   = isRejected ? '#7f1d1d' : '#fff';
+  const textColor   = isRejected ? '#7f1d1d' : isDayoff && isPending ? '#92400e' : '#fff';
   const border      = hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
   const wrapOpacity = (isRejected || isAbsent) ? 'opacity:.7;' : '';
   const attLabel = isAbnormal
@@ -9956,11 +10251,13 @@ function _calDateCard(s) {
   return `<div style="background:${bgFinal};color:${textColor};border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.4;${wrapOpacity}${border}cursor:pointer"
     onclick="_openCalShiftMenu(event,'${s.row}','${s.status}','${safeTherapist}','${safeDate}','${safeStart}','${safeEnd}','${safeRoom}','${s.attendanceType||'normal'}',${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','')">
     ${isRejected ? '<div style="font-size:9px;font-weight:800">❌ 却下</div>' : ''}
-    ${isPending ? '<div style="font-size:9px;opacity:.85">⏳ 未承認</div>' : ''}
+    ${isDayoff && isPending ? '<div style="font-size:9px;font-weight:800">🛌 お休み申請中</div>' : ''}
+    ${isDayoff && !isRejected && !isPending ? '<div style="font-size:9px;font-weight:800">🛌 お休み</div>' : ''}
+    ${!isDayoff && isPending ? '<div style="font-size:9px;opacity:.85">⏳ 未承認</div>' : ''}
     ${hasChangeReq ? '<div style="font-size:9px;font-weight:800">✏️ 変更申請</div>' : ''}
     <div style="${nameStyle}">${s.therapist}</div>
-    <div style="${isRejected ? 'text-decoration:line-through;opacity:.75' : ''}">${s.startTime}～${s.endTime}</div>
-    ${s.roomName && !isRejected ? '<div style="opacity:.85">🚪' + s.roomName + '</div>' : ''}
+    ${!isDayoff ? `<div style="${isRejected ? 'text-decoration:line-through;opacity:.75' : ''}">${s.startTime}～${s.endTime}</div>` : ''}
+    ${s.roomName && !isRejected && !isDayoff ? '<div style="opacity:.85">🚪' + s.roomName + '</div>' : ''}
     ${attLabel}
   </div>`;
 }
@@ -9969,12 +10266,14 @@ function _calShiftBadge(s) {
   const isRejected   = s.status === 'rejected';
   const isPending    = s.status === 'pending';
   const hasChangeReq = s.hasChangeRequest;
-  const isAbsent     = s.attendanceType === 'absent' || s.attendanceType === 'noshow';
+  const isAbsent     = s.attendanceType === 'absent' || s.attendanceType === 'noshow' || s.attendanceType === 'pre_absent';
   const isAbnormal   = s.attendanceType && s.attendanceType !== 'normal';
-  const c = isRejected   ? { bg: 'rgba(185,28,28,0.15)', text: '#7f1d1d' }
-          : isAbsent     ? { bg: 'rgba(107,114,128,0.55)', text: '#fff' }
-          : isPending    ? { bg: 'rgba(107,114,128,0.6)',  text: '#fff' }
-          : hasChangeReq ? { bg: '#f97316',                text: '#fff' }
+  const isDayoff     = s.isDayoffRequest;
+  const c = isRejected          ? { bg: 'rgba(185,28,28,0.15)', text: '#7f1d1d' }
+          : isAbsent            ? { bg: 'rgba(107,114,128,0.55)', text: '#fff' }
+          : (isDayoff&&isPending)? { bg: 'rgba(251,191,36,0.35)', text: '#92400e' }
+          : isPending           ? { bg: 'rgba(107,114,128,0.6)',  text: '#fff' }
+          : hasChangeReq        ? { bg: '#f97316',                text: '#fff' }
           : getRoomColor(s.roomName);
   const att = isAbnormal
     ? `<div style="font-size:9px;font-weight:800;margin-top:1px">${isAbsent ? '❌' : '⚠'} ${ATTENDANCE_LABEL[s.attendanceType]?.label||s.attendanceType}</div>` : '';
@@ -9988,11 +10287,13 @@ function _calShiftBadge(s) {
     data-room="${s.roomName||''}" data-att="${s.attendanceType||'normal'}"
     onclick="_openCalShiftMenu(event,this.dataset.row,this.dataset.status,this.dataset.therapist,this.dataset.date,this.dataset.start,this.dataset.end,this.dataset.room,this.dataset.att,${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','')"${memoAttr}>
     ${isRejected ? '<div style="font-size:9px;font-weight:800">❌ 却下</div>' : ''}
-    ${isPending ? '<div style="font-size:9px;opacity:.85">⏳ 未承認</div>' : ''}
+    ${isDayoff && isPending ? '<div style="font-size:9px;font-weight:800">🛌 申請中</div>' : ''}
+    ${isDayoff && !isRejected && !isPending ? '<div style="font-size:9px;font-weight:800">🛌 お休み</div>' : ''}
+    ${!isDayoff && isPending ? '<div style="font-size:9px;opacity:.85">⏳ 未承認</div>' : ''}
     ${hasChangeReq ? '<div style="font-size:9px;font-weight:800;letter-spacing:0.5px">✏️ 変更申請</div>' : ''}
-    <div style="${nameStyle}">${s.startTime}～${s.endTime}</div>
-    ${s.roomName && !isRejected ? '<div style="opacity:.85;font-size:9px">🚪' + s.roomName + '</div>' : ''}
-    ${s.memo ? '<div style="opacity:.85;font-size:9px">📝</div>' : ''}
+    ${!isDayoff ? `<div style="${nameStyle}">${s.startTime}～${s.endTime}</div>` : `<div style="${nameStyle}">${s.therapist}</div>`}
+    ${s.roomName && !isRejected && !isDayoff ? '<div style="opacity:.85;font-size:9px">🚪' + s.roomName + '</div>' : ''}
+    ${s.memo && !isDayoff ? '<div style="opacity:.85;font-size:9px">📝</div>' : ''}
     ${att}
   </div>`;
 }
