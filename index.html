@@ -3311,14 +3311,34 @@ case 'sendReminderToOne': {
         nominationFee: r.nomination_fee || 0,
         memo:          r.memo || '',
         resvId:        r.id,
-        options:       optionsMap[r.id] || null, // nullはsale_optionsなし→フォールバック
+        options:       optionsMap[r.id] || null,
       }));
+      // キャンセル履歴（管理者向け・お客様都合含む全件）
+      let cancelHistory = [];
+      if (params.includeCancel) {
+        const cancelQ = lookupTel
+          ? _sb.from('reservations').select('date,course_min,therapist_name,cancel_reason,memo')
+              .eq('store_id', STORE_ID).ilike('customer_tel', lookupTel)
+              .eq('status', 'cancelled').order('date', { ascending: false }).limit(20)
+          : _sb.from('reservations').select('date,course_min,therapist_name,cancel_reason,memo')
+              .eq('store_id', STORE_ID).eq('customer_no', no)
+              .eq('status', 'cancelled').order('date', { ascending: false }).limit(20);
+        const { data: cancelData } = await cancelQ;
+        const CANCEL_REASON_LABEL = { customer: 'お客様都合', therapist: 'セラピスト都合', other: 'その他' };
+        cancelHistory = (cancelData || []).map(r => ({
+          date:      _fmtDatetimeJp(r.date),
+          course:    r.course_min,
+          therapist: r.therapist_name || '',
+          reason:    CANCEL_REASON_LABEL[r.cancel_reason] || r.cancel_reason || '不明',
+          memo:      r.memo || '',
+        }));
+      }
       const memos = (memoRes.data || []).map(r => ({
         id:        r.id,
         therapist: r.therapist_name||'', memo: r.memo||'',
         date: _fmtDateJp(r.created_at)
       }));
-      return { history, memos, customer };
+      return { history, memos, customer, cancelHistory };
     }
 
     case 'saveCustomerMemo': {
@@ -7888,6 +7908,8 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
   document.getElementById('customer-modal-memos').innerHTML = '';
   document.getElementById('customer-modal-history').innerHTML = '';
   document.getElementById('customer-modal-ng') && (document.getElementById('customer-modal-ng').innerHTML = '');
+  const _cancelWrapReset = document.getElementById('customer-modal-cancel-wrap');
+  if (_cancelWrapReset) _cancelWrapReset.style.display = 'none';
   document.getElementById('customer-modal').dataset.therapistName = therapistName || '';
   const _memoInput = document.getElementById('customer-memo-input');
   _memoInput.value = '';
@@ -7928,7 +7950,7 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
     document.getElementById('customer-memo-input').dataset.customerTel = resolvedTel;
     // 管理者モードは全セラピストの履歴、セラピストモードは自分のみ
     const histTherapist = isAdminMode ? '' : loggedInTherapist;
-    const res = await apiGet('getCustomerHistory', { customerNo: resolvedNo, tel: resolvedTel, therapist: histTherapist });
+    const res = await apiGet('getCustomerHistory', { customerNo: resolvedNo, tel: resolvedTel, therapist: histTherapist, includeCancel: isAdminMode });
 
     // 顧客IDをdatasetに保存（メモ保存時に使用）
     if (res.customer && res.customer.id) {
@@ -8016,6 +8038,32 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
         </div>`;
       }).join('');
     }
+    // キャンセル履歴（管理者のみ）
+    const cancelWrap = document.getElementById('customer-modal-cancel-wrap');
+    const cancelEl   = document.getElementById('customer-modal-cancel');
+    if (isAdminMode && cancelWrap && cancelEl) {
+      const cancelList = res.cancelHistory || [];
+      if (cancelList.length) {
+        cancelWrap.style.display = '';
+        cancelEl.innerHTML = `<div class="table-wrap"><table>
+          <thead><tr><th>日時</th><th>コース</th><th>担当</th><th>理由</th><th>メモ</th></tr></thead>
+          <tbody>
+            ${cancelList.map(h => `<tr>
+              <td style="white-space:nowrap;font-size:12px">${h.date.split(' ')[0] || h.date}</td>
+              <td style="white-space:nowrap">${h.course}分</td>
+              <td style="font-size:12px">${h.therapist}</td>
+              <td style="white-space:nowrap"><span style="background:#fee2e2;color:#b91c1c;padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600">${h.reason}</span></td>
+              <td style="font-size:12px;color:var(--muted)">${h.memo || '-'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table></div>`;
+      } else {
+        cancelWrap.style.display = 'none';
+      }
+    } else if (cancelWrap) {
+      cancelWrap.style.display = 'none';
+    }
+
     // NG管理セクション（管理者のみ）
     if (isAdminMode && c && c.found) {
       const ngEl = document.getElementById('customer-modal-ng');
@@ -14562,6 +14610,11 @@ window.addEventListener('DOMContentLoaded', init);
     <div>
       <div class="hist-title" style="font-size:13px;font-weight:600;margin-bottom:8px">📅 来店履歴</div>
       <div id="customer-modal-history"></div>
+    </div>
+    <!-- キャンセル履歴（管理者のみ） -->
+    <div id="customer-modal-cancel-wrap" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--accent)">🚫 キャンセル履歴</div>
+      <div id="customer-modal-cancel"></div>
     </div>
   </div>
 </div>
