@@ -10627,12 +10627,22 @@ async function loadReservations() {
       if (s.therapist) {
         if (!window._resvShiftMap[s.therapist]) window._resvShiftMap[s.therapist] = [];
         window._resvShiftMap[s.therapist].push({
-          start:          s.startTime      || '',
-          end:            s.endTime        || '',
-          roomName:       s.roomName       || '',
-          attendanceType: s.attendanceType || 'normal',
-          intervalMin:    30
+          start:            s.startTime      || '',
+          end:              s.endTime        || '',
+          roomName:         s.roomName       || '',
+          attendanceType:   s.attendanceType || 'normal',
+          isDayoffRequest:  s.isDayoffRequest || false,
+          intervalMin:      30
         });
+      }
+    });
+    // お休み申請承認済み（全シフトがday-off）のセラピストをシフトマップから除外
+    // ただし既存予約がある場合は表示を維持
+    const resvTherapistSet = new Set((data || []).filter(r => r.status !== 'cancelled').map(r => r.therapist));
+    Object.keys(window._resvShiftMap).forEach(name => {
+      const allDayoff = window._resvShiftMap[name].every(s => s.isDayoffRequest);
+      if (allDayoff && !resvTherapistSet.has(name)) {
+        delete window._resvShiftMap[name];
       }
     });
     // 各セラピストのシフトを開始時刻順にソート＆ルームマップ作成
