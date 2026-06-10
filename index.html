@@ -10724,6 +10724,7 @@ function renderResvByTherapist(data, el) {
   // 最短案内時刻を計算
   // 引数: 予約配列、インターバル分、現在時刻分、シフト終了分
   // 戻り値: 最短開始時刻(分) or null（シフト終了）
+  // earliest と、そこから入れられる最大コース時間(remaining)を返す
   function calcEarliestAvailable(reservations, intervalMin, nowMin, shiftEndMin) {
     const MIN_COURSE = 60; // 最短コース時間（分）
     const minGap = MIN_COURSE + intervalMin;
@@ -10739,18 +10740,25 @@ function renderResvByTherapist(data, el) {
       .sort((a, b) => a.startMin - b.startMin);
 
     let candidate = nowMin;
-    for (const resv of valid) {
+    for (let i = 0; i < valid.length; i++) {
+      const resv = valid[i];
       if (candidate < resv.startMin) {
         // 隙間あり
         const gap = resv.startMin - candidate;
-        if (gap >= minGap) return candidate;
+        if (gap >= minGap) {
+          // 次の予約開始までの残り時間からインターバル分を引いた値が残コース時間
+          const remaining = resv.startMin - candidate - intervalMin;
+          return { earliest: candidate, remaining };
+        }
       }
       // 予約期間+インターバルまで進める
       const blockedUntil = resv.endMin + intervalMin;
       if (candidate < blockedUntil) candidate = blockedUntil;
     }
     if (shiftEndMin && candidate >= shiftEndMin) return null;
-    return candidate;
+    // 後続の予約なし → シフト終了まで全部使える
+    const remaining = shiftEndMin ? shiftEndMin - candidate : 0;
+    return { earliest: candidate, remaining };
   }
 
   // 分→HH:MM文字列（27時ルール対応）
@@ -10807,9 +10815,10 @@ function renderResvByTherapist(data, el) {
             }
           } else {
             const baseCandidate = Math.max(nowMin, target.start);
-            const earliest = calcEarliestAvailable(rows, target.intervalMin || 30, baseCandidate, target.end);
-            if (earliest != null && earliest < target.end) {
-              const remaining = target.end - earliest;
+            const availResult = calcEarliestAvailable(rows, target.intervalMin || 30, baseCandidate, target.end);
+            if (availResult != null && availResult.earliest < target.end) {
+              const earliest  = availResult.earliest;
+              const remaining = availResult.remaining;
               availLabel = `<span style="font-size:11px;font-weight:600;background:#10b981;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">⏱ 最短 ${minToTimeStr(earliest)}〜（残${remaining}分）</span>`;
             } else if (nowMin < target.start) {
               // シフト開始前は完売にしない
