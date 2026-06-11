@@ -10237,12 +10237,15 @@ function _openCalShiftMenu(e, row, status, therapist, date, startTime, endTime, 
   const isPending    = status === 'pending';
   const isApproved   = status === 'approved';
   const hasChgReq    = !!hasChangeRequest;
-  document.getElementById('cal-menu-approve').style.display        = isPending  ? '' : 'none';
-  document.getElementById('cal-menu-reject').style.display         = isPending  ? '' : 'none';
-  document.getElementById('cal-menu-room').style.display           = isPending  ? '' : 'none';
-  document.getElementById('cal-menu-change-approve').style.display = hasChgReq  ? '' : 'none';
-  document.getElementById('cal-menu-change-reject').style.display  = hasChgReq  ? '' : 'none';
-  document.getElementById('cal-menu-att').style.display            = isApproved ? '' : 'none';
+  const isInterview  = therapist.startsWith('[面接]');
+  document.getElementById('cal-menu-hire').style.display           = isInterview ? '' : 'none';
+  document.getElementById('cal-menu-reject-hire').style.display    = isInterview ? '' : 'none';
+  document.getElementById('cal-menu-approve').style.display        = !isInterview && isPending  ? '' : 'none';
+  document.getElementById('cal-menu-reject').style.display         = !isInterview && isPending  ? '' : 'none';
+  document.getElementById('cal-menu-room').style.display           = !isInterview && isPending  ? '' : 'none';
+  document.getElementById('cal-menu-change-approve').style.display = !isInterview && hasChgReq  ? '' : 'none';
+  document.getElementById('cal-menu-change-reject').style.display  = !isInterview && hasChgReq  ? '' : 'none';
+  document.getElementById('cal-menu-att').style.display            = !isInterview && isApproved ? '' : 'none';
 
   // 位置調整
   const x = Math.min(e.clientX, window.innerWidth  - 220);
@@ -10260,6 +10263,46 @@ function _openCalShiftMenu(e, row, status, therapist, date, startTime, endTime, 
 function _closeCalMenu() {
   document.getElementById('cal-shift-menu').style.display = 'none';
   document.removeEventListener('click', _closeCalMenu);
+}
+
+async function _calMenuHire() {
+  _closeCalMenu();
+  const s = { ..._calMenuShift };
+  // "[面接] 名前" → "名前" に変換
+  const name = s.therapist.replace(/^\[面接\]\s*/, '');
+  if (!await _confirm('「' + name + '」を採用しますか？\n正式セラピストとして登録されます。')) return;
+  try {
+    showOverlay();
+    // therapistsのis_interviewをfalseに更新
+    const { data: th } = await _sb.from('therapists').select('id').eq('store_id', STORE_ID).eq('name', name).eq('active', true).maybeSingle();
+    if (th) {
+      await apiGet('hireTherapist', { id: th.id });
+    } else {
+      // 未登録の場合は正式セラピストとして新規登録
+      await _sb.from('therapists').insert({ store_id: STORE_ID, name, interval_min: 30, active: true, is_interview: false });
+    }
+    therapists = await apiGet('getTherapists');
+    showToast('採用しました：' + name);
+    loadShiftCalendar();
+  } catch(e) { alert('エラー: ' + e.message); } finally { hideOverlay(); }
+}
+
+async function _calMenuRejectHire() {
+  _closeCalMenu();
+  const s = { ..._calMenuShift };
+  const name = s.therapist.replace(/^\[面接\]\s*/, '');
+  if (!await _confirm('「' + name + '」を不採用にしますか？\nシフト予定とセラピスト情報を削除します。')) return;
+  try {
+    showOverlay();
+    // シフト削除
+    await _sb.from('shifts').delete().eq('id', s.row);
+    // therapistsから削除
+    const { data: th } = await _sb.from('therapists').select('id').eq('store_id', STORE_ID).eq('name', name).eq('active', true).maybeSingle();
+    if (th) await apiGet('rejectTherapist', { id: th.id });
+    therapists = await apiGet('getTherapists');
+    showToast('不採用にしました：' + name);
+    loadShiftCalendar();
+  } catch(e) { alert('エラー: ' + e.message); } finally { hideOverlay(); }
 }
 
 async function _calMenuApprove() {
@@ -14986,6 +15029,8 @@ window.addEventListener('DOMContentLoaded', init);
 <!-- シフトカレンダー アクションメニュー -->
 <div id="cal-shift-menu" style="display:none;position:fixed;z-index:9300;background:var(--surface);border-radius:var(--radius);box-shadow:0 4px 24px rgba(0,0,0,0.18);min-width:220px;padding:8px 0">
   <div id="cal-shift-menu-info" style="padding:8px 14px 6px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);margin-bottom:4px"></div>
+  <button id="cal-menu-hire"           onclick="_calMenuHire()"          style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 採用</button>
+  <button id="cal-menu-reject-hire"    onclick="_calMenuRejectHire()"    style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ 不採用</button>
   <button id="cal-menu-approve"        onclick="_calMenuApprove()"       style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 承認</button>
   <button id="cal-menu-reject"         onclick="_calMenuReject()"        style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ 却下</button>
   <button id="cal-menu-room"           onclick="_calMenuRoom()"          style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px">🚪 ルーム変更・承認</button>
