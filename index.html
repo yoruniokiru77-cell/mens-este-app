@@ -1471,7 +1471,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
             </div>
           </label>
         </div>
-        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:16px">
+        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:8px">
           <label class="toggle-wrap" style="margin:0">
             <span class="toggle-switch">
               <input type="checkbox" id="st-send-store-line" checked>
@@ -1480,6 +1480,18 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
             <div>
               <div style="font-size:14px;font-weight:600">店落ちをLINEで送信する</div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px">OFFの場合、LINE送信ボタンを押しても店落ち金額は送信されません</div>
+            </div>
+          </label>
+        </div>
+        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:16px">
+          <label class="toggle-wrap" style="margin:0">
+            <span class="toggle-switch">
+              <input type="checkbox" id="st-send-expense-line">
+              <span class="toggle-slider"></span>
+            </span>
+            <div>
+              <div style="font-size:14px;font-weight:600">雑費・宿泊費・その他の内訳をLINEで送信する</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">ONにすると給料LINE送信時に雑費・宿泊費・その他の内訳を追記します</div>
             </div>
           </label>
         </div>
@@ -3997,6 +4009,7 @@ case 'sendLineMessage': {
       if (params.store_line_name    !== undefined) upd.store_line_name    = params.store_line_name;
       if (params.send_payroll_line       !== undefined) upd.send_payroll_line       = params.send_payroll_line;
       if (params.send_store_line         !== undefined) upd.send_store_line         = params.send_store_line;
+      if (params.send_expense_line       !== undefined) upd.send_expense_line       = params.send_expense_line;
       if (params.show_room_availability  !== undefined) upd.show_room_availability  = params.show_room_availability;
       if (params.shift_reminder_enabled  !== undefined) upd.shift_reminder_enabled  = params.shift_reminder_enabled;
       if (params.shift_reminder_day      !== undefined) upd.shift_reminder_day      = Number(params.shift_reminder_day);
@@ -4895,6 +4908,7 @@ async function sendPayrollLine(uid, name, dateLabel) {
   const settings = await apiGet('getStoreSettings');
   const sendPayroll = settings.send_payroll_line !== false;
   const sendStore   = settings.send_store_line   !== false;
+  const sendExpense = settings.send_expense_line === true;
 
   if (!sendPayroll && !sendStore) {
     alert('給料・店落ちのLINE送信が両方OFFになっています。\n店舗設定から変更してください。');
@@ -4926,6 +4940,27 @@ async function sendPayrollLine(uid, name, dateLabel) {
       }
       const total = storeNum + Math.abs(bal) * (bal < 0 ? 1 : -1);
       message += '\n合計請求：¥' + total.toLocaleString();
+    }
+  }
+
+  // 雑費・宿泊費・その他の内訳（設定がONの場合のみ）
+  if (sendExpense) {
+    const miscChkEl  = document.getElementById('misc-'  + uid);
+    const accomChkEl = document.getElementById('accom-' + uid);
+    const miscAmtEl  = document.getElementById('misc-amt-'  + uid);
+    const accomAmtEl = document.getElementById('accom-amt-' + uid);
+    const otherAmtEl  = document.getElementById('other-amt-'  + uid);
+    const otherSignEl = document.getElementById('other-sign-' + uid);
+    const miscAmt  = miscChkEl?.checked  ? (Number(miscAmtEl?.value)  || 0) : 0;
+    const accomAmt = accomChkEl?.checked ? (Number(accomAmtEl?.value) || 0) : 0;
+    const otherRaw = Number(otherAmtEl?.value) || 0;
+    const otherAmt = otherSignEl && otherSignEl.textContent === '-' ? -Math.abs(otherRaw) : Math.abs(otherRaw);
+    const hasExp = miscAmt !== 0 || accomAmt !== 0 || otherAmt !== 0;
+    if (hasExp) {
+      message += '\n\n--- 経費内訳 ---';
+      if (miscAmt  !== 0) message += '\n雑費：¥' + miscAmt.toLocaleString();
+      if (accomAmt !== 0) message += '\n宿泊費：¥' + accomAmt.toLocaleString();
+      if (otherAmt !== 0) message += '\nその他：' + (otherAmt < 0 ? '-' : '') + '¥' + Math.abs(otherAmt).toLocaleString();
     }
   }
 
@@ -14496,6 +14531,8 @@ async function loadStoreSettingsUI() {
     if (splEl) splEl.checked = s.send_payroll_line !== false;
     const sslEl = document.getElementById('st-send-store-line');
     if (sslEl) sslEl.checked = s.send_store_line !== false;
+    const selEl = document.getElementById('st-send-expense-line');
+    if (selEl) selEl.checked = s.send_expense_line === true;
     // ルーム空き状況表示設定
     const sraEl = document.getElementById('st-show-room-availability');
     if (sraEl) sraEl.checked = s.show_room_availability !== false;
@@ -14578,6 +14615,7 @@ async function saveStoreSettings() {
       store_line_name:            document.getElementById('st-store-line-name')?.value?.trim() || '',
       send_payroll_line:          document.getElementById('st-send-payroll-line')?.checked !== false,
       send_store_line:            document.getElementById('st-send-store-line')?.checked !== false,
+      send_expense_line:          document.getElementById('st-send-expense-line')?.checked || false,
       show_room_availability:     document.getElementById('st-show-room-availability')?.checked !== false,
       shift_reminder_enabled:     document.getElementById('st-shift-reminder-enabled')?.checked || false,
       shift_reminder_day:         Number(document.getElementById('st-shift-reminder-day')?.value ?? 5),
