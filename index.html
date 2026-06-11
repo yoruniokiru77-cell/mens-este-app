@@ -10953,14 +10953,18 @@ function _calDateCard(s) {
   const isPending    = s.status === 'pending';
   const hasChangeReq = s.hasChangeRequest;
   const isDayoff     = s.isDayoffRequest;
-  const bgFinal = isRejected   ? 'rgba(185,28,28,0.15)'
+  const isIvShift    = (s.therapist || '').startsWith('[面接]');
+  const displayName  = isIvShift ? s.therapist.replace(/^\[面接\]\s*/, '') : s.therapist;
+  const bgFinal = isIvShift    ? 'rgba(255,255,255,0.9)'
+                : isRejected   ? 'rgba(185,28,28,0.15)'
                 : isAbsent     ? 'rgba(107,114,128,0.55)'
                 : (isDayoff && isPending) ? 'rgba(251,191,36,0.35)'
                 : isPending    ? 'rgba(107,114,128,0.6)'
                 : hasChangeReq ? '#f97316'
                 : getRoomColor(s.roomName).bg;
-  const textColor   = isRejected ? '#7f1d1d' : isDayoff && isPending ? '#92400e' : '#fff';
-  const border      = hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
+  const textColor   = isIvShift ? '#92400e' : isRejected ? '#7f1d1d' : isDayoff && isPending ? '#92400e' : '#fff';
+  const border      = isIvShift    ? 'border:2px dashed #d97706;'
+                    : hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
   const wrapOpacity = (isRejected || isAbsent) ? 'opacity:.7;' : '';
   const attLabel = isAbnormal
     ? `<div style="font-size:9px;font-weight:800;margin-top:2px">${isAbsent ? '❌' : '⚠'} ${ATTENDANCE_LABEL[s.attendanceType]?.label || s.attendanceType}</div>`
@@ -10973,12 +10977,13 @@ function _calDateCard(s) {
   const safeRoom  = (s.roomName||'').replace(/'/g,"'");
   return `<div style="background:${bgFinal};color:${textColor};border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.4;${wrapOpacity}${border}cursor:pointer"
     onclick="_openCalShiftMenu(event,'${s.row}','${s.status}','${safeTherapist}','${safeDate}','${safeStart}','${safeEnd}','${safeRoom}','${s.attendanceType||'normal'}',${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','')">
+    ${isIvShift ? '<div style="font-size:9px;font-weight:800;color:#d97706">🤝 面接</div>' : ''}
     ${isRejected ? '<div style="font-size:9px;font-weight:800">❌ 却下</div>' : ''}
     ${isDayoff && isPending ? '<div style="font-size:9px;font-weight:800">🛌 お休み申請中</div>' : ''}
     ${isDayoff && !isRejected && !isPending ? '<div style="font-size:9px;font-weight:800">🛌 お休み</div>' : ''}
     ${!isDayoff && isPending ? '<div style="font-size:9px;opacity:.85">⏳ 未承認</div>' : ''}
     ${hasChangeReq ? '<div style="font-size:9px;font-weight:800">✏️ 変更申請</div>' : ''}
-    <div style="${nameStyle}">${s.therapist}</div>
+    <div style="${nameStyle}">${displayName}</div>
     ${!isDayoff ? `<div style="${isRejected ? 'text-decoration:line-through;opacity:.75' : ''}">${s.startTime}～${s.endTime}</div>` : ''}
     ${s.roomName && !isRejected && !isDayoff ? '<div style="opacity:.85">🚪' + s.roomName + '</div>' : ''}
     ${attLabel}
@@ -10992,7 +10997,10 @@ function _calShiftBadge(s) {
   const isAbsent     = s.attendanceType === 'absent' || s.attendanceType === 'noshow' || s.attendanceType === 'pre_absent';
   const isAbnormal   = s.attendanceType && s.attendanceType !== 'normal';
   const isDayoff     = s.isDayoffRequest;
-  const c = isRejected          ? { bg: 'rgba(185,28,28,0.15)', text: '#7f1d1d' }
+  const isIvShift    = (s.therapist || '').startsWith('[面接]');
+  const displayName  = isIvShift ? s.therapist.replace(/^\[面接\]\s*/, '') : s.therapist;
+  const c = isIvShift           ? { bg: 'rgba(255,255,255,0.85)', text: '#92400e' }
+          : isRejected          ? { bg: 'rgba(185,28,28,0.15)', text: '#7f1d1d' }
           : isAbsent            ? { bg: 'rgba(107,114,128,0.55)', text: '#fff' }
           : (isDayoff&&isPending)? { bg: 'rgba(251,191,36,0.35)', text: '#92400e' }
           : isPending           ? { bg: 'rgba(107,114,128,0.6)',  text: '#fff' }
@@ -11000,7 +11008,8 @@ function _calShiftBadge(s) {
           : getRoomColor(s.roomName);
   const att = isAbnormal
     ? `<div style="font-size:9px;font-weight:800;margin-top:1px">${isAbsent ? '❌' : '⚠'} ${ATTENDANCE_LABEL[s.attendanceType]?.label||s.attendanceType}</div>` : '';
-  const border      = hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
+  const border      = isIvShift    ? 'border:2px dashed #d97706;'
+                    : hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
   const nameStyle   = (isAbsent || isRejected) ? 'font-weight:700;text-decoration:line-through;opacity:.75' : 'font-weight:700';
   const wrapOpacity = (isAbsent || isRejected) ? 'opacity:.7;' : '';
   const memoAttr    = s.memo ? ` title="📝 ${s.memo.replace(/"/g,"'")}"` : '';
@@ -11009,12 +11018,13 @@ function _calShiftBadge(s) {
     data-date="${s.date}" data-start="${s.startTime}" data-end="${s.endTime}"
     data-room="${s.roomName||''}" data-att="${s.attendanceType||'normal'}"
     onclick="_openCalShiftMenu(event,this.dataset.row,this.dataset.status,this.dataset.therapist,this.dataset.date,this.dataset.start,this.dataset.end,this.dataset.room,this.dataset.att,${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','')"${memoAttr}>
+    ${isIvShift ? '<div style="font-size:9px;font-weight:800;color:#d97706;letter-spacing:0.3px">🤝 面接</div>' : ''}
     ${isRejected ? '<div style="font-size:9px;font-weight:800">❌ 却下</div>' : ''}
     ${isDayoff && isPending ? '<div style="font-size:9px;font-weight:800">🛌 申請中</div>' : ''}
     ${isDayoff && !isRejected && !isPending ? '<div style="font-size:9px;font-weight:800">🛌 お休み</div>' : ''}
     ${!isDayoff && isPending ? '<div style="font-size:9px;opacity:.85">⏳ 未承認</div>' : ''}
     ${hasChangeReq ? '<div style="font-size:9px;font-weight:800;letter-spacing:0.5px">✏️ 変更申請</div>' : ''}
-    ${!isDayoff ? `<div style="${nameStyle}">${s.startTime}～${s.endTime}</div>` : `<div style="${nameStyle}">${s.therapist}</div>`}
+    ${!isDayoff ? `<div style="${nameStyle}">${s.startTime}～${s.endTime}</div>` : `<div style="${nameStyle}">${displayName}</div>`}
     ${s.roomName && !isRejected && !isDayoff ? '<div style="opacity:.85;font-size:9px">🚪' + s.roomName + '</div>' : ''}
     ${s.memo && !isDayoff ? '<div style="opacity:.85;font-size:9px">📝</div>' : ''}
     ${att}
