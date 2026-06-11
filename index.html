@@ -10196,6 +10196,23 @@ async function confirmCalAddShift() {
         roomId, roomName,
         memo: memo || (_calAddType === 'interview' ? '面接' : '特別予定')
       });
+
+      // 面接の場合、therapistsに面接候補として仮登録（未登録の場合のみ）
+      if (_calAddType === 'interview') {
+        try {
+          const { data: exists } = await _sb.from('therapists')
+            .select('id').eq('store_id', STORE_ID).eq('name', name).eq('active', true).maybeSingle();
+          if (!exists) {
+            await _sb.from('therapists').insert({
+              store_id:    STORE_ID,
+              name:        name,
+              interval_min: 30,
+              active:      true,
+              is_interview: true
+            });
+          }
+        } catch(e) { console.warn('面接候補自動登録エラー:', e); }
+      }
     }
 
     document.getElementById('cal-add-shift-modal').style.display = 'none';
