@@ -11012,7 +11012,6 @@ async function openEditResv(idx) {
       _tSel.value = '10:00';
     }
   }
-  _syncResvDatetime();
 
   const courseSelect = document.getElementById('resv-course');
   const validCourses = ['60','90','120','150','180'];
@@ -11050,7 +11049,15 @@ async function openEditResv(idx) {
   }
 
   const sel = document.getElementById('resv-therapist');
-  // セラピストリストを最新化・変更前のセラピスト名を保持して渡す
+  // _syncResvDatetime内でpopulateTherapistSelectが競合して呼ばれないよう先にロック
+  if (sel) {
+    sel.disabled = true;
+    sel.style.background = 'var(--bg)';
+    sel.style.color      = 'var(--muted)';
+  }
+  // セラピスト選択がロック済みの状態でresv-dateを同期（populateTherapistSelectは呼ばれない）
+  _syncResvDatetime();
+  // セラピストリストを最新化・変更前のセラピスト名を保持して渡す（1回だけ呼ぶ）
   await populateTherapistSelect(r.therapist);
   // 変更前のセラピストが選択肢にない場合は先頭に追加
   if (r.therapist && sel) {
@@ -11062,12 +11069,6 @@ async function openEditResv(idx) {
       sel.insertBefore(opt, sel.firstChild);
       sel.value = r.therapist;
     }
-  }
-  // セラピスト選択を初期ロック（変更ボタンで解除）
-  if (sel) {
-    sel.disabled = true;
-    sel.style.background = 'var(--bg)';
-    sel.style.color      = 'var(--muted)';
   }
   // 変更ボタンを表示
   let therapistChangeBtn = document.getElementById('resv-therapist-change-btn');
