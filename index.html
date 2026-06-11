@@ -1674,6 +1674,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
           <option value="rejected">不採用</option>
         </select>
         <button class="btn btn-primary btn-sm" onclick="loadInterviewMgmt()">検索</button>
+        <button class="btn btn-success btn-sm" onclick="openInterviewModal(null)" style="margin-left:auto">＋ 新規登録</button>
       </div>
       <div id="interview-list">読み込み中...</div>
     </div>
@@ -3845,6 +3846,20 @@ case 'sendReminderToOne': {
         if (params.shift_id) await _sb.from('shifts').delete().eq('id', params.shift_id);
       }
       return { ok: true, id: result.data?.id || params.id };
+    }
+
+    case 'deleteInterview': {
+      // 紐づくtherapist（is_interview=true）・シフトも削除
+      const { data: iv } = await _sb.from('interviews').select('name,shift_id').eq('id', params.id).maybeSingle();
+      if (iv) {
+        if (iv.shift_id) await _sb.from('shifts').delete().eq('id', iv.shift_id);
+        const { data: th } = await _sb.from('therapists').select('id')
+          .eq('store_id', STORE_ID).eq('name', iv.name).eq('is_interview', true).maybeSingle();
+        if (th) await _sb.from('therapists').delete().eq('id', th.id);
+      }
+      const { error } = await _sb.from('interviews').delete().eq('id', params.id);
+      if (error) throw new Error(error.message);
+      return { ok: true };
     }
 
     // LINEからの源氏名重複チェック（GASから呼び出し用）
@@ -10543,6 +10558,17 @@ let _ivCurrentId   = null;  // 編集中のinterview id
 let _ivShiftId     = null;  // 紐づくshift id
 let _ivOriginalName = null; // therapistsに登録されている元の名前
 
+async function deleteInterview(id, name) {
+  const ok = await _confirm(`「${name}」の面接記録を削除しますか？\n※紐づくシフト・面接候補セラピストも削除されます`);
+  if (!ok) return;
+  try {
+    showOverlay();
+    await apiGet('deleteInterview', { id });
+    showToast('削除しました');
+    loadInterviewMgmt();
+  } catch(e) { alert('エラー: ' + e.message); } finally { hideOverlay(); }
+}
+
 async function loadInterviewMgmt() {
   const el = document.getElementById('interview-list');
   if (!el) return;
@@ -10571,7 +10597,10 @@ async function loadInterviewMgmt() {
                 <td><span style="font-size:11px;font-weight:700;color:${IV_STATUS_COLOR[d.status]||'var(--muted)'}">${IV_STATUS_LABEL[d.status]||d.status}</span></td>
                 <td style="font-size:12px">${d.age ? d.age + '歳' : '-'}</td>
                 <td style="font-size:12px">${d.has_experience ? 'あり' : 'なし'}</td>
-                <td><button class="btn btn-secondary btn-sm" onclick="openInterviewModal(${JSON.stringify(d)})">詳細</button></td>
+                <td style="display:flex;gap:4px;justify-content:flex-end">
+                  <button class="btn btn-secondary btn-sm" onclick="openInterviewModal(${JSON.stringify(d).replace(/"/g,'&quot;')})">編集</button>
+                  <button class="btn btn-sm" style="background:#fff1f2;color:var(--accent);border:1px solid var(--accent)" onclick="deleteInterview('${d.id}',${JSON.stringify(d.name).replace(/"/g,'&quot;')})">削除</button>
+                </td>
               </tr>
             `).join('')}
           </tbody>
