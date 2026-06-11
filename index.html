@@ -1668,11 +1668,36 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
           <input type="number" id="line-interval" value="0" min="0">
         </div>
       </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer">
+        <input type="checkbox" id="line-is-interview">
+        <span style="font-size:14px">🤝 面接候補として登録（採用・不採用を後から選択）</span>
+      </label>
       <button class="btn btn-primary" onclick="saveLineEntry()">登録</button>
     </div>
+    <div id="line-interview-panel"></div>
+    <div id="line-unlinked-panel"></div>
     <div class="card">
       <div class="sec-title" style="margin-bottom:12px">登録済みセラピスト</div>
       <div id="line-users-table">読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LINE紐づけモーダル ===== -->
+<div id="link-line-modal" style="display:none;position:fixed;inset:0;z-index:300;overflow-y:auto;background:rgba(0,0,0,0.5)">
+  <div style="background:var(--card);border-radius:12px;max-width:420px;margin:80px auto;padding:24px">
+    <div style="font-weight:700;font-size:15px;margin-bottom:16px">🔗 LINE IDを紐づける</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px" id="link-line-modal-name"></div>
+    <div style="font-size:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px;margin-bottom:14px;color:#0369a1">
+      セラピストにLINEで「登録」と送ってもらい、Supabaseの therapists テーブルで確認したLINE user_idを入力してください。
+    </div>
+    <div class="form-group">
+      <label>LINE ユーザーID</label>
+      <input type="text" id="link-line-userid" placeholder="U...">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="confirmLinkLine()">紐づける</button>
+      <button class="btn btn-secondary" onclick="_hideModal('link-line-modal')">キャンセル</button>
     </div>
   </div>
 </div>
@@ -2176,7 +2201,31 @@ async function apiGet(action, params = {}) {
   switch(action) {
 
     // ===== セラピスト =====
-    case 'getTherapists':
+    case 'getTherapists': {
+      const { data, error } = await _sb.from('therapists')
+        .select('*').eq('store_id', STORE_ID).eq('active', true).eq('is_interview', false).order('registered_at');
+      if (error) throw new Error(error.message);
+      return (data || []).map(t => ({
+        name:        t.name,
+        userId:      t.line_user_id || '',
+        displayName: t.line_display_name || '',
+        registeredAt:t.registered_at || '',
+        interval:    t.interval_min ?? 30,
+        courseBack:  t.course_back !== null && t.course_back !== undefined ? Number(t.course_back) : '',
+        optionBack:  t.option_back !== null && t.option_back !== undefined ? Number(t.option_back) : '',
+        hasGuarantee: t.has_guarantee || false,
+        email:       t.email || '',
+        id:          t.id,
+        nominationFee: t.nomination_fee !== null && t.nomination_fee !== undefined ? Number(t.nomination_fee) : null,
+        hourlyRate:    t.hourly_rate !== null && t.hourly_rate !== undefined ? Number(t.hourly_rate) : null,
+        dailyGuarantee: t.daily_guarantee !== null && t.daily_guarantee !== undefined ? Number(t.daily_guarantee) : null,
+        sendPayrollLine: t.send_payroll_line !== false,
+        sendStoreLine:   t.send_store_line   !== false,
+        discountMode:    t.discount_mode || null,
+        parkingFee:      t.parking_fee !== null && t.parking_fee !== undefined ? Number(t.parking_fee) : null,
+      }));
+    }
+
     case 'getLineUsers': {
       const { data, error } = await _sb.from('therapists')
         .select('*').eq('store_id', STORE_ID).eq('active', true).order('registered_at');
@@ -2199,7 +2248,7 @@ async function apiGet(action, params = {}) {
         sendStoreLine:   t.send_store_line   !== false,
         discountMode:    t.discount_mode || null,
         parkingFee:      t.parking_fee !== null && t.parking_fee !== undefined ? Number(t.parking_fee) : null,
-        id:            t.id
+        isInterview:     t.is_interview === true,
       }));
     }
 
@@ -3523,8 +3572,27 @@ case 'sendReminderToOne': {
         course_back: params.courseBack !== undefined && params.courseBack !== '' ? Number(params.courseBack) : null,
         email:       params.email || null,
         nomination_fee: params.nominationFee !== undefined && params.nominationFee !== '' ? Number(params.nominationFee) : null,
-        active:      true
+        active:      true,
+        is_interview: params.isInterview === true
       });
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'hireTherapist': {
+      const { error } = await _sb.from('therapists').update({ is_interview: false }).eq('id', params.id).eq('store_id', STORE_ID);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'rejectTherapist': {
+      const { error } = await _sb.from('therapists').delete().eq('id', params.id).eq('store_id', STORE_ID);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'linkLineUser': {
+      const { error } = await _sb.from('therapists').update({ line_user_id: params.userId }).eq('id', params.id).eq('store_id', STORE_ID);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
@@ -13559,15 +13627,72 @@ async function loadLineUsers() {
   try {
     const data = await apiGet('getLineUsers');
     const el   = document.getElementById('line-users-table');
-    if (!data.length) {
+
+    // 面接候補パネル
+    const interviewList = data.filter(u => u.isInterview);
+    const interviewPanel = document.getElementById('line-interview-panel');
+    if (interviewPanel) {
+      if (interviewList.length) {
+        interviewPanel.innerHTML = `
+          <div class="card" style="margin-bottom:14px;border:2px solid #fbbf24;background:#fffbeb">
+            <div class="sec-title" style="margin-bottom:12px;color:#b45309">🤝 面接候補（${interviewList.length}名）</div>
+            ${interviewList.map(u => {
+              const safeName = JSON.stringify(u.name);
+              return `
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #fde68a">
+                <div>
+                  <span style="font-weight:700;font-size:14px">${u.name}</span>
+                  <span style="font-size:12px;color:var(--muted);margin-left:8px">${u.registeredAt ? new Date(u.registeredAt).toLocaleDateString('ja-JP') + '登録' : ''}</span>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button class="btn btn-sm" style="background:#22c55e;color:#fff" onclick="hireTherapist('${u.id}')">✅ 採用</button>
+                  <button class="btn btn-sm" style="background:var(--accent);color:#fff" onclick="rejectTherapist('${u.id}',${safeName})">❌ 不採用</button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>`;
+      } else {
+        interviewPanel.innerHTML = '';
+      }
+    }
+
+    // LINE未紐づけパネル（採用済みでLINE IDなし）
+    const unlinkedList = data.filter(u => !u.isInterview && !u.userId);
+    const unlinkedPanel = document.getElementById('line-unlinked-panel');
+    if (unlinkedPanel) {
+      if (unlinkedList.length) {
+        unlinkedPanel.innerHTML = `
+          <div class="card" style="margin-bottom:14px;border:2px solid #93c5fd;background:#eff6ff">
+            <div class="sec-title" style="margin-bottom:12px;color:#1d4ed8">🔗 LINE未紐づけセラピスト（${unlinkedList.length}名）</div>
+            ${unlinkedList.map(u => {
+              const safeName = JSON.stringify(u.name);
+              return `
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #bfdbfe">
+                <div>
+                  <span style="font-weight:700;font-size:14px">${u.name}</span>
+                  <span class="badge" style="background:#dbeafe;color:#1d4ed8;margin-left:8px">LINE未登録</span>
+                </div>
+                <button class="btn btn-sm btn-secondary" onclick="openLinkLineModal('${u.id}',${safeName})">🔗 LINEを紐づける</button>
+              </div>`;
+            }).join('')}
+          </div>`;
+      } else {
+        unlinkedPanel.innerHTML = '';
+      }
+    }
+
+    // 通常セラピスト（面接候補・未紐づけ以外）のみテーブルに表示
+    const normalData = data.filter(u => !u.isInterview);
+    if (!normalData.length) {
       el.innerHTML = '<p style="color:var(--muted)">まだ登録されていません。セラピストにLINE Botを友達追加してもらい、源氏名を送ってもらってください。</p>';
       return;
     }
+
     const isKamisu   = STORE_ID === '33333333-0000-0000-0000-000000000003';
     const isNeverland = STORE_ID === '44444444-0000-0000-0000-000000000004';
 
     // 固定バックの有無を判定（therapist_menu_backsに1件以上あるセラピストIDをSet化）
-    const therapistIdList = data.filter(u => u.id).map(u => u.id);
+    const therapistIdList = normalData.filter(u => u.id).map(u => u.id);
     const fixedBackSet = new Set();
     if (therapistIdList.length) {
       const { data: backs } = await _sb.from('therapist_menu_backs')
@@ -13606,7 +13731,7 @@ async function loadLineUsers() {
             </tr>
           </thead>
           <tbody>
-            ${data.map(u => {
+            ${normalData.map(u => {
               const cb    = u.courseBack  !== '' && u.courseBack  !== undefined ? u.courseBack  : '';
               const ob    = u.optionBack  !== '' && u.optionBack  !== undefined ? u.optionBack  : '';
               const cbPct = cb !== '' ? Math.round(cb * 100) : '';
@@ -13906,11 +14031,13 @@ async function deleteLineUser(userId, name) {
 }
 
 async function saveLineEntry() {
+  const isInterview = document.getElementById('line-is-interview')?.checked || false;
   const params = {
     name:        document.getElementById('line-name').value,
     userId:      document.getElementById('line-userid').value,
     courseBack:  Number(document.getElementById('line-courseback').value),
-    interval:    Number(document.getElementById('line-interval').value)
+    interval:    Number(document.getElementById('line-interval').value),
+    isInterview
   };
   if (!params.name) { alert('名前を入力してください'); return; }
   try {
@@ -13919,6 +14046,43 @@ async function saveLineEntry() {
     loadLineUsers();
     document.getElementById('line-name').value = '';
     document.getElementById('line-userid').value = '';
+    if (document.getElementById('line-is-interview')) document.getElementById('line-is-interview').checked = false;
+  } catch(e) { alert('エラー: ' + e.message); }
+}
+
+let _linkLineTargetId = null;
+function openLinkLineModal(id, name) {
+  _linkLineTargetId = id;
+  const nameEl = document.getElementById('link-line-modal-name');
+  if (nameEl) nameEl.textContent = '対象セラピスト：' + name;
+  const inp = document.getElementById('link-line-userid');
+  if (inp) inp.value = '';
+  _showModal('link-line-modal');
+}
+async function confirmLinkLine() {
+  const userId = document.getElementById('link-line-userid')?.value?.trim();
+  if (!userId) { alert('LINE ユーザーIDを入力してください'); return; }
+  try {
+    await apiGet('linkLineUser', { id: _linkLineTargetId, userId });
+    _hideModal('link-line-modal');
+    therapists = await apiGet('getTherapists');
+    loadLineUsers();
+  } catch(e) { alert('エラー: ' + e.message); }
+}
+async function hireTherapist(id) {
+  if (!await _confirm('採用として確定しますか？\n正式セラピストとして登録されます。')) return;
+  try {
+    await apiGet('hireTherapist', { id });
+    therapists = await apiGet('getTherapists');
+    loadLineUsers();
+  } catch(e) { alert('エラー: ' + e.message); }
+}
+async function rejectTherapist(id, name) {
+  if (!await _confirm('「' + name + '」を不採用としてデータを削除しますか？\nこの操作は取り消せません。')) return;
+  try {
+    await apiGet('rejectTherapist', { id });
+    therapists = await apiGet('getTherapists');
+    loadLineUsers();
   } catch(e) { alert('エラー: ' + e.message); }
 }
 
