@@ -3226,7 +3226,7 @@ async function apiGet(action, params = {}) {
     }
 
     case 'addInterviewShift': {
-      const { error } = await _sb.from('shifts').insert({
+      const { data: shiftData, error } = await _sb.from('shifts').insert({
         store_id:       STORE_ID,
         therapist_name: params.therapist,
         date:           params.date.replace(/\//g, '-'),
@@ -3238,9 +3238,9 @@ async function apiGet(action, params = {}) {
         memo:           params.memo || null,
         submitted_at:   new Date().toISOString(),
         approved_at:    new Date().toISOString()
-      });
+      }).select('id').single();
       if (error) throw new Error(error.message);
-      return { ok: true };
+      return { ok: true, shiftId: shiftData?.id || null };
     }
 
     case 'getMenuBacks': {
@@ -10425,7 +10425,7 @@ async function confirmCalAddShift() {
       }
     } else {
       // 面接・特別は常に approved で登録
-      await apiGet('addInterviewShift', {
+      const _addShiftResult = await apiGet('addInterviewShift', {
         therapist: therapistName,
         date: date.replace(/-/g, '/'),
         startTime: _normalizeTime(startTime),
@@ -10449,6 +10449,22 @@ async function confirmCalAddShift() {
             });
           }
         } catch(e) { console.warn('面接候補自動登録エラー:', e); }
+
+        // interviewsテーブルに面接予定として自動登録（未登録の場合のみ）
+        try {
+          const shiftId = _addShiftResult?.shiftId || null;
+          const { data: ivExists } = await _sb.from('interviews')
+            .select('id').eq('store_id', STORE_ID).eq('name', name).maybeSingle();
+          if (!ivExists) {
+            await _sb.from('interviews').insert({
+              store_id:       STORE_ID,
+              name:           name,
+              interview_date: date,
+              status:         'scheduled',
+              shift_id:       shiftId
+            });
+          }
+        } catch(e) { console.warn('面接自動登録エラー:', e); }
       }
     }
 
