@@ -1789,15 +1789,17 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
 
     <!-- 経験 -->
     <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">経験</div>
-    <div style="display:flex;gap:16px;margin-bottom:10px">
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="radio" name="iv-exp" id="iv-exp-yes" value="yes" onchange="toggleIvExp()">
-        <span style="font-size:14px">あり</span>
-      </label>
-      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="radio" name="iv-exp" id="iv-exp-no" value="no" onchange="toggleIvExp()" checked>
-        <span style="font-size:14px">なし</span>
-      </label>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="radio" name="iv-exp" id="iv-exp-yes" value="yes" onchange="toggleIvExp()" style="display:none">
+      <input type="radio" name="iv-exp" id="iv-exp-no"  value="no"  onchange="toggleIvExp()" style="display:none" checked>
+      <button type="button" id="iv-exp-btn-yes" onclick="document.getElementById('iv-exp-yes').checked=true;toggleIvExp();_ivExpUpdateBtn()"
+        style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s">
+        ✅ 経験あり
+      </button>
+      <button type="button" id="iv-exp-btn-no" onclick="document.getElementById('iv-exp-no').checked=true;toggleIvExp();_ivExpUpdateBtn()"
+        style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--accent);background:#fff1f2;color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s">
+        ❌ 経験なし
+      </button>
     </div>
 
     <!-- 経験ありの場合 -->
@@ -1831,9 +1833,17 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       </div>
       <div class="form-group" style="margin:0">
         <label>他で面接を受けているか</label>
-        <div style="display:flex;gap:16px;margin-top:4px">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="iv-other" value="yes"><span style="font-size:14px">あり</span></label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="iv-other" value="no" checked><span style="font-size:14px">なし</span></label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input type="radio" name="iv-other" id="iv-other-yes" value="yes" style="display:none">
+          <input type="radio" name="iv-other" id="iv-other-no"  value="no"  style="display:none" checked>
+          <button type="button" onclick="document.getElementById('iv-other-yes').checked=true;_ivOtherUpdateBtn()"
+            id="iv-other-btn-yes" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">
+            あり
+          </button>
+          <button type="button" onclick="document.getElementById('iv-other-no').checked=true;_ivOtherUpdateBtn()"
+            id="iv-other-btn-no" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--accent);background:#fff1f2;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">
+            なし
+          </button>
         </div>
       </div>
     </div>
@@ -10565,6 +10575,21 @@ function toggleIvExp() {
   const yes = document.getElementById('iv-exp-yes')?.checked;
   const sec = document.getElementById('iv-exp-section');
   if (sec) sec.style.display = yes ? '' : 'none';
+  _ivExpUpdateBtn();
+}
+function _ivExpUpdateBtn() {
+  const yes = document.getElementById('iv-exp-yes')?.checked;
+  const btnY = document.getElementById('iv-exp-btn-yes');
+  const btnN = document.getElementById('iv-exp-btn-no');
+  if (btnY) { btnY.style.borderColor = yes ? 'var(--success)' : 'var(--border)'; btnY.style.background = yes ? '#f0fdf4' : 'var(--surface)'; btnY.style.color = yes ? 'var(--success)' : ''; }
+  if (btnN) { btnN.style.borderColor = yes ? 'var(--border)' : 'var(--accent)'; btnN.style.background = yes ? 'var(--surface)' : '#fff1f2'; btnN.style.color = yes ? '' : 'var(--accent)'; }
+}
+function _ivOtherUpdateBtn() {
+  const yes = document.getElementById('iv-other-yes')?.checked;
+  const btnY = document.getElementById('iv-other-btn-yes');
+  const btnN = document.getElementById('iv-other-btn-no');
+  if (btnY) { btnY.style.borderColor = yes ? 'var(--warning)' : 'var(--border)'; btnY.style.background = yes ? '#fffbeb' : 'var(--surface)'; btnY.style.color = yes ? '#b45309' : ''; }
+  if (btnN) { btnN.style.borderColor = yes ? 'var(--border)' : 'var(--accent)'; btnN.style.background = yes ? 'var(--surface)' : '#fff1f2'; btnN.style.color = yes ? '' : 'var(--accent)'; }
 }
 
 function addPastStoreInput(value) {
@@ -10600,10 +10625,13 @@ function openInterviewModal(data) {
   document.getElementById('iv-exp-yes').checked = hasExp;
   document.getElementById('iv-exp-no').checked  = !hasExp;
   document.getElementById('iv-exp-section').style.display = hasExp ? '' : 'none';
+  _ivExpUpdateBtn();
 
   // 他面接中
-  const otherEls = document.querySelectorAll('input[name="iv-other"]');
-  otherEls.forEach(r => r.checked = (r.value === 'yes') === (data?.other_interviews === true));
+  const otherVal = data?.other_interviews === true;
+  document.getElementById('iv-other-yes').checked = otherVal;
+  document.getElementById('iv-other-no').checked  = !otherVal;
+  _ivOtherUpdateBtn();
 
   // 過去店舗
   const wrap = document.getElementById('iv-past-stores-wrap');
