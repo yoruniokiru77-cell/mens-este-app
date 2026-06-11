@@ -119,6 +119,7 @@ body.therapist-mode #bottom-nav {
 @media (min-width: 768px) {
   #page-shift-calendar,
   #page-master-mgmt,
+  #page-interview-mgmt,
   #page-line-mgmt,
   #page-scout { max-width: 100%; padding: 14px 24px; }
 }
@@ -537,6 +538,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     <button onclick="showPage('shift-calendar')" id="tab-shift-calendar">📅 シフト表</button>
     <button onclick="showPage('customer-master')" id="tab-customer-master">👥 顧客マスタ</button>
     <button onclick="showPage('master-mgmt')" id="tab-master-mgmt">⚙ マスタ管理</button>
+    <button onclick="showPage('interview-mgmt')" id="tab-interview-mgmt" style="display:none">🤝 面接管理</button>
     <button onclick="showPage('line-mgmt')" id="tab-line-mgmt" style="display:none">💬 LINE管理</button>
     <button onclick="showPage('broadcast')" id="tab-broadcast" style="display:none">📢 アナウンス</button>
     <button onclick="showPage('scout')" id="tab-scout" style="display:none">🔍 スカウト</button>
@@ -1656,6 +1658,27 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     </div>
   </div>
 
+  <!-- ===== 面接管理ページ ===== -->
+  <div id="page-interview-mgmt" class="page">
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-title" style="margin-bottom:12px">🔍 面接一覧</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <input type="text" id="iv-search-name" placeholder="名前で検索" style="flex:1;min-width:100px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+        <select id="iv-search-status" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface)">
+          <option value="">すべて</option>
+          <option value="scheduled">面接予定</option>
+          <option value="interviewed">面接済</option>
+          <option value="hired">採用</option>
+          <option value="training">講習中</option>
+          <option value="confirmed">源氏名確定</option>
+          <option value="rejected">不採用</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="loadInterviewMgmt()">検索</button>
+      </div>
+      <div id="interview-list">読み込み中...</div>
+    </div>
+  </div>
+
   <!-- ===== LINE管理ページ ===== -->
   <div id="page-line-mgmt" class="page">
     <div class="card" style="margin-bottom:14px">
@@ -1714,6 +1737,154 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     <div style="display:flex;gap:8px;margin-top:16px">
       <button class="btn btn-primary" style="flex:1" onclick="confirmLinkLine()">紐づける</button>
       <button class="btn btn-secondary" onclick="_hideModal('link-line-modal')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 面接詳細モーダル ===== -->
+<div id="interview-modal" style="display:none;position:fixed;inset:0;z-index:300;overflow-y:auto;background:rgba(0,0,0,0.5);padding:20px">
+  <div style="background:var(--card);border-radius:12px;max-width:480px;margin:0 auto;padding:24px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <span style="font-weight:700;font-size:16px">🤝 面接情報</span>
+      <button onclick="_hideModal('interview-modal')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+    </div>
+
+    <!-- 基本情報 -->
+    <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase">基本情報</div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="form-group" style="margin:0">
+        <label>名前（源氏名）</label>
+        <input type="text" id="iv-name" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>面接日</label>
+        <input type="date" id="iv-date" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="form-group" style="margin:0">
+        <label>年齢</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="iv-age" min="18" max="60" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted);flex-shrink:0">歳</span>
+        </div>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>身長</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="iv-height" min="140" max="200" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted);flex-shrink:0">cm</span>
+        </div>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>カップ数</label>
+      <select id="iv-cup" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface)">
+        <option value="">未回答</option>
+        <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+        <option value="D">D</option><option value="E">E</option><option value="F">F</option>
+        <option value="G">G</option><option value="H">H以上</option>
+      </select>
+    </div>
+
+    <!-- 経験 -->
+    <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">経験</div>
+    <div style="display:flex;gap:16px;margin-bottom:10px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="radio" name="iv-exp" id="iv-exp-yes" value="yes" onchange="toggleIvExp()">
+        <span style="font-size:14px">あり</span>
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="radio" name="iv-exp" id="iv-exp-no" value="no" onchange="toggleIvExp()" checked>
+        <span style="font-size:14px">なし</span>
+      </label>
+    </div>
+
+    <!-- 経験ありの場合 -->
+    <div id="iv-exp-section" style="display:none;background:var(--bg);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div class="form-group" style="margin-bottom:8px">
+        <label>経験年数</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="iv-exp-years" min="0" max="30" style="width:80px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted)">年</span>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label>過去店舗</label>
+        <div id="iv-past-stores-wrap" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px"></div>
+        <button type="button" onclick="addPastStoreInput()" class="btn btn-secondary btn-sm">＋ 追加</button>
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label>辞めた理由</label>
+        <textarea id="iv-quit-reason" rows="2" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label>志望動機</label>
+        <textarea id="iv-motivation" rows="2" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label>過去店舗でのお給料</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:13px;color:var(--muted)">¥</span>
+          <input type="number" id="iv-past-salary" min="0" step="1000" style="width:120px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+        </div>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>他で面接を受けているか</label>
+        <div style="display:flex;gap:16px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="iv-other" value="yes"><span style="font-size:14px">あり</span></label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="iv-other" value="no" checked><span style="font-size:14px">なし</span></label>
+        </div>
+      </div>
+    </div>
+
+    <!-- 共通 -->
+    <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">共通</div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="form-group" style="margin:0">
+        <label>週何日</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="iv-work-days" min="1" max="7" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted);flex-shrink:0">日</span>
+        </div>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>何時間くらい</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="iv-work-hours" min="1" max="24" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted);flex-shrink:0">時間</span>
+        </div>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>出勤時間帯の希望</label>
+      <input type="text" id="iv-preferred-time" placeholder="例：昼〜夕方" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+    </div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>不安なところ</label>
+      <textarea id="iv-anxiety" rows="2" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>質疑応答メモ</label>
+      <textarea id="iv-qa-memo" rows="3" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+    </div>
+
+    <!-- ステータス -->
+    <div class="form-group" style="margin-bottom:16px">
+      <label>ステータス</label>
+      <select id="iv-status" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface)">
+        <option value="scheduled">面接予定</option>
+        <option value="interviewed">面接済</option>
+        <option value="hired">採用</option>
+        <option value="training">講習中</option>
+        <option value="confirmed">源氏名確定（正式登録）</option>
+        <option value="rejected">不採用</option>
+      </select>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveInterview()">保存</button>
+      <button class="btn btn-secondary" onclick="_hideModal('interview-modal')">キャンセル</button>
     </div>
   </div>
 </div>
@@ -3613,6 +3784,66 @@ case 'sendReminderToOne': {
       return { ok: true };
     }
 
+    case 'getInterviews': {
+      const { data, error } = await _sb.from('interviews')
+        .select('*').eq('store_id', STORE_ID).order('interview_date', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
+
+    case 'saveInterview': {
+      const rec = {
+        store_id:        STORE_ID,
+        shift_id:        params.shift_id || null,
+        name:            params.name || '',
+        interview_date:  params.interview_date || null,
+        status:          params.status || 'scheduled',
+        age:             params.age || null,
+        height:          params.height || null,
+        cup:             params.cup || null,
+        has_experience:  params.has_experience || false,
+        experience_years:params.experience_years || null,
+        past_stores:     params.past_stores || null,
+        quit_reason:     params.quit_reason || null,
+        motivation:      params.motivation || null,
+        past_salary:     params.past_salary || null,
+        other_interviews:params.other_interviews || false,
+        work_days:       params.work_days || null,
+        work_hours:      params.work_hours || null,
+        preferred_time:  params.preferred_time || null,
+        anxiety:         params.anxiety || null,
+        qa_memo:         params.qa_memo || null,
+        updated_at:      new Date().toISOString()
+      };
+      let result;
+      if (params.id) {
+        result = await _sb.from('interviews').update(rec).eq('id', params.id);
+      } else {
+        result = await _sb.from('interviews').insert(rec).select('id').single();
+      }
+      if (result.error) throw new Error(result.error.message);
+      // 源氏名確定 → therapistsのnameを更新・is_interviewをfalseに
+      if (params.status === 'confirmed' && params.therapist_name_original) {
+        const { data: th } = await _sb.from('therapists').select('id')
+          .eq('store_id', STORE_ID).eq('name', params.therapist_name_original).eq('active', true).maybeSingle();
+        if (th) {
+          await _sb.from('therapists').update({ name: params.name, is_interview: false }).eq('id', th.id);
+        } else {
+          await _sb.from('therapists').insert({ store_id: STORE_ID, name: params.name, interval_min: 30, active: true, is_interview: false });
+        }
+      }
+      // 不採用 → therapists削除・シフト削除
+      if (params.status === 'rejected') {
+        if (params.therapist_name_original) {
+          const { data: th } = await _sb.from('therapists').select('id')
+            .eq('store_id', STORE_ID).eq('name', params.therapist_name_original).eq('active', true).maybeSingle();
+          if (th) await _sb.from('therapists').delete().eq('id', th.id);
+        }
+        if (params.shift_id) await _sb.from('shifts').delete().eq('id', params.shift_id);
+      }
+      return { ok: true, id: result.data?.id || params.id };
+    }
+
     // LINEからの源氏名重複チェック（GASから呼び出し用）
     case 'checkTherapistName': {
       const { data } = await _sb.from('therapists').select('id').eq('store_id', STORE_ID).eq('name', params.name || '').eq('active', true).maybeSingle();
@@ -4212,8 +4443,9 @@ function showPage(name) {
   if (name === 'master-mgmt')      initMasterMgmt();
   if (name === 'sales-input') initSalesInput();
   if (name === 'checkout')    loadCheckoutPage();
-  if (name === 'scout')       loadScoutSummary();
-  if (name === 'broadcast')   loadBroadcastTherapistList();
+  if (name === 'scout')          loadScoutSummary();
+  if (name === 'broadcast')      loadBroadcastTherapistList();
+  if (name === 'interview-mgmt') loadInterviewMgmt();
 }
 
 // ============================================================
@@ -4272,6 +4504,8 @@ function startAdminMode() {
   // 管理者専用タブを表示
   const broadcastTab = document.getElementById('tab-broadcast');
   if (broadcastTab) broadcastTab.style.display = '';
+  const interviewTab = document.getElementById('tab-interview-mgmt');
+  if (interviewTab) interviewTab.style.display = '';
   // 神栖店（Premium）のみスカウトタブを表示
   if (STORE_ID === '33333333-0000-0000-0000-000000000003') {
     const scoutTab = document.getElementById('tab-scout');
@@ -10238,6 +10472,7 @@ function _openCalShiftMenu(e, row, status, therapist, date, startTime, endTime, 
   const isApproved   = status === 'approved';
   const hasChgReq    = !!hasChangeRequest;
   const isInterview  = therapist.startsWith('[面接]');
+  document.getElementById('cal-menu-interview-info').style.display = isInterview ? '' : 'none';
   document.getElementById('cal-menu-hire').style.display           = isInterview ? '' : 'none';
   document.getElementById('cal-menu-reject-hire').style.display    = isInterview ? '' : 'none';
   document.getElementById('cal-menu-approve').style.display        = !isInterview && isPending  ? '' : 'none';
@@ -10263,6 +10498,183 @@ function _openCalShiftMenu(e, row, status, therapist, date, startTime, endTime, 
 function _closeCalMenu() {
   document.getElementById('cal-shift-menu').style.display = 'none';
   document.removeEventListener('click', _closeCalMenu);
+}
+
+// ============================================================
+// 面接管理
+// ============================================================
+const IV_STATUS_LABEL = {
+  scheduled:  '面接予定',
+  interviewed:'面接済',
+  hired:      '採用',
+  training:   '講習中',
+  confirmed:  '源氏名確定',
+  rejected:   '不採用'
+};
+const IV_STATUS_COLOR = {
+  scheduled:  '#64748b',
+  interviewed:'#7c3aed',
+  hired:      '#16a34a',
+  training:   '#d97706',
+  confirmed:  '#0369a1',
+  rejected:   '#dc2626'
+};
+
+let _ivCurrentId   = null;  // 編集中のinterview id
+let _ivShiftId     = null;  // 紐づくshift id
+let _ivOriginalName = null; // therapistsに登録されている元の名前
+
+async function loadInterviewMgmt() {
+  const el = document.getElementById('interview-list');
+  if (!el) return;
+  try {
+    let data = await apiGet('getInterviews');
+    const nameQ   = (document.getElementById('iv-search-name')?.value || '').trim();
+    const statusQ = document.getElementById('iv-search-status')?.value || '';
+    if (nameQ)   data = data.filter(d => d.name && d.name.includes(nameQ));
+    if (statusQ) data = data.filter(d => d.status === statusQ);
+
+    if (!data.length) {
+      el.innerHTML = '<p style="color:var(--muted);padding:12px 0">面接記録がありません</p>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>名前</th><th>面接日</th><th>状態</th><th>年齢</th><th>経験</th><th></th>
+          </tr></thead>
+          <tbody>
+            ${data.map(d => `
+              <tr>
+                <td><strong>${d.name}</strong></td>
+                <td style="font-size:12px">${d.interview_date ? d.interview_date.slice(5).replace('-','/') : '-'}</td>
+                <td><span style="font-size:11px;font-weight:700;color:${IV_STATUS_COLOR[d.status]||'var(--muted)'}">${IV_STATUS_LABEL[d.status]||d.status}</span></td>
+                <td style="font-size:12px">${d.age ? d.age + '歳' : '-'}</td>
+                <td style="font-size:12px">${d.has_experience ? 'あり' : 'なし'}</td>
+                <td><button class="btn btn-secondary btn-sm" onclick="openInterviewModal(${JSON.stringify(d)})">詳細</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch(e) { el.innerHTML = '<p style="color:var(--accent)">読み込みエラー: ' + e.message + '</p>'; }
+}
+
+function toggleIvExp() {
+  const yes = document.getElementById('iv-exp-yes')?.checked;
+  const sec = document.getElementById('iv-exp-section');
+  if (sec) sec.style.display = yes ? '' : 'none';
+}
+
+function addPastStoreInput(value) {
+  const wrap = document.getElementById('iv-past-stores-wrap');
+  if (!wrap) return;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;align-items:center;gap:6px';
+  div.innerHTML = `<input type="text" value="${value||''}" placeholder="店舗名" style="flex:1;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+    <button type="button" onclick="this.parentNode.remove()" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:16px">✕</button>`;
+  wrap.appendChild(div);
+}
+
+function openInterviewModal(data) {
+  _ivCurrentId    = data?.id    || null;
+  _ivShiftId      = data?.shift_id || null;
+  _ivOriginalName = data?.name  || null;
+
+  document.getElementById('iv-name').value          = data?.name  || '';
+  document.getElementById('iv-date').value          = data?.interview_date || '';
+  document.getElementById('iv-age').value           = data?.age    || '';
+  document.getElementById('iv-height').value        = data?.height || '';
+  document.getElementById('iv-cup').value           = data?.cup    || '';
+  document.getElementById('iv-exp-years').value     = data?.experience_years || '';
+  document.getElementById('iv-quit-reason').value   = data?.quit_reason  || '';
+  document.getElementById('iv-motivation').value    = data?.motivation   || '';
+  document.getElementById('iv-past-salary').value   = data?.past_salary  || '';
+  document.getElementById('iv-preferred-time').value= data?.preferred_time || '';
+  document.getElementById('iv-anxiety').value       = data?.anxiety   || '';
+  document.getElementById('iv-qa-memo').value       = data?.qa_memo   || '';
+  document.getElementById('iv-status').value        = data?.status    || 'scheduled';
+
+  const hasExp = data?.has_experience === true;
+  document.getElementById('iv-exp-yes').checked = hasExp;
+  document.getElementById('iv-exp-no').checked  = !hasExp;
+  document.getElementById('iv-exp-section').style.display = hasExp ? '' : 'none';
+
+  // 他面接中
+  const otherEls = document.querySelectorAll('input[name="iv-other"]');
+  otherEls.forEach(r => r.checked = (r.value === 'yes') === (data?.other_interviews === true));
+
+  // 過去店舗
+  const wrap = document.getElementById('iv-past-stores-wrap');
+  if (wrap) {
+    wrap.innerHTML = '';
+    (data?.past_stores || []).forEach(s => addPastStoreInput(s));
+  }
+
+  _showModal('interview-modal');
+}
+
+function _openInterviewModalFromShift(shiftId, therapistName, date) {
+  openInterviewModal({ shift_id: shiftId, name: therapistName, interview_date: date, status: 'scheduled' });
+}
+
+async function saveInterview() {
+  const name   = document.getElementById('iv-name').value.trim();
+  const status = document.getElementById('iv-status').value;
+  if (!name) { alert('名前を入力してください'); return; }
+
+  const hasExp = document.getElementById('iv-exp-yes').checked;
+  const pastStores = Array.from(document.querySelectorAll('#iv-past-stores-wrap input')).map(i => i.value.trim()).filter(Boolean);
+  const otherEl = document.querySelector('input[name="iv-other"]:checked');
+
+  const params = {
+    id:                   _ivCurrentId,
+    shift_id:             _ivShiftId,
+    therapist_name_original: _ivOriginalName,
+    name,
+    interview_date:       document.getElementById('iv-date').value || null,
+    status,
+    age:                  parseInt(document.getElementById('iv-age').value)    || null,
+    height:               parseInt(document.getElementById('iv-height').value) || null,
+    cup:                  document.getElementById('iv-cup').value || null,
+    has_experience:       hasExp,
+    experience_years:     hasExp ? (parseInt(document.getElementById('iv-exp-years').value) || null) : null,
+    past_stores:          hasExp && pastStores.length ? pastStores : null,
+    quit_reason:          hasExp ? document.getElementById('iv-quit-reason').value.trim() || null : null,
+    motivation:           hasExp ? document.getElementById('iv-motivation').value.trim()  || null : null,
+    past_salary:          hasExp ? (parseInt(document.getElementById('iv-past-salary').value) || null) : null,
+    other_interviews:     hasExp ? (otherEl?.value === 'yes') : false,
+    work_days:            parseInt(document.getElementById('iv-work-days').value)  || null,
+    work_hours:           parseInt(document.getElementById('iv-work-hours').value) || null,
+    preferred_time:       document.getElementById('iv-preferred-time').value.trim() || null,
+    anxiety:              document.getElementById('iv-anxiety').value.trim()  || null,
+    qa_memo:              document.getElementById('iv-qa-memo').value.trim()  || null,
+  };
+
+  try {
+    showOverlay();
+    await apiGet('saveInterview', params);
+    _hideModal('interview-modal');
+    therapists = await apiGet('getTherapists');
+    showToast('保存しました');
+    loadInterviewMgmt();
+    loadShiftCalendar();
+  } catch(e) { alert('エラー: ' + e.message); } finally { hideOverlay(); }
+}
+
+async function _calMenuInterviewInfo() {
+  _closeCalMenu();
+  const s = { ..._calMenuShift };
+  const name = s.therapist.replace(/^\[面接\]\s*/, '');
+  // 既存レコードを検索
+  const data = await apiGet('getInterviews');
+  const existing = data.find(d => d.shift_id === s.row || d.name === name);
+  if (existing) {
+    openInterviewModal(existing);
+  } else {
+    openInterviewModal({ shift_id: s.row, name, interview_date: s.date.replace(/\//g,'-'), status: 'scheduled' });
+  }
 }
 
 async function _calMenuHire() {
@@ -15029,6 +15441,7 @@ window.addEventListener('DOMContentLoaded', init);
 <!-- シフトカレンダー アクションメニュー -->
 <div id="cal-shift-menu" style="display:none;position:fixed;z-index:9300;background:var(--surface);border-radius:var(--radius);box-shadow:0 4px 24px rgba(0,0,0,0.18);min-width:220px;padding:8px 0">
   <div id="cal-shift-menu-info" style="padding:8px 14px 6px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);margin-bottom:4px"></div>
+  <button id="cal-menu-interview-info" onclick="_calMenuInterviewInfo()" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:#7c3aed;font-weight:600">📝 面接情報を入力</button>
   <button id="cal-menu-hire"           onclick="_calMenuHire()"          style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 採用</button>
   <button id="cal-menu-reject-hire"    onclick="_calMenuRejectHire()"    style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ 不採用</button>
   <button id="cal-menu-approve"        onclick="_calMenuApprove()"       style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 承認</button>
