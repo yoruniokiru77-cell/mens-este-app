@@ -867,7 +867,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         <button onclick="changeCalendarMonth(1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">▶</button>
       </div>
       <div style="display:flex;gap:6px">
-        <button class="btn btn-secondary btn-sm" onclick="loadShiftCalendar()">更新</button>
+        <button class="btn btn-secondary btn-sm" onclick="loadShiftCalendar(true)">更新</button>
         <button id="btn-site-sync" class="btn btn-sm" style="display:none;background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="openSiteSyncModal()">🌐 サイト連携</button>
       </div>
     </div>
@@ -9894,7 +9894,7 @@ function initShiftCalendar() {
   _calendarWeekOffset = 0;
   updateCalendarWeekLabel();
   loadCalUnsubmitted();
-  loadShiftCalendar();
+  loadShiftCalendar(true);
   // VPS設定済みかつ管理者の場合のみサイト連携ボタンを表示
   const syncBtn = document.getElementById('btn-site-sync');
   if (syncBtn) syncBtn.style.display = (VPS_BASE_URL && isAdminMode) ? '' : 'none';
@@ -10016,7 +10016,7 @@ async function executeSiteSync() {
 function changeCalendarWeek(delta) {
   _calendarWeekOffset += delta;
   updateCalendarWeekLabel();
-  loadShiftCalendar();
+  loadShiftCalendar(true);
 }
 
 function getWeekDates(offset) {
@@ -10134,7 +10134,8 @@ async function loadAttendanceSummary() {
   }
 }
 
-async function loadShiftCalendar() {
+async function loadShiftCalendar(resort) {
+  if (resort) _calTherapistOrder = null;
   loadAttendanceSummary();
   if (isAdminMode) loadDayoffPendingPanel();
   const el   = document.getElementById('shift-calendar-content');
@@ -10254,7 +10255,7 @@ function updateCalendarMonthLabel() {
 function changeCalendarMonth(delta) {
   _calendarMonthOffset += delta;
   updateCalendarMonthLabel();
-  loadShiftCalendar();
+  loadShiftCalendar(true);
 }
 
 function setDateRangeMode(mode) {
@@ -10273,11 +10274,12 @@ function setDateRangeMode(mode) {
     ? 'flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)'
     : 'flex:1;font-size:12px';
   if (isMonth) updateCalendarMonthLabel();
-  loadShiftCalendar();
+  loadShiftCalendar(true);
 }
 // loadShiftCalendar のデータキャッシュ
 let _calDaysCache  = null;
 let _calShiftsCache = null;
+let _calTherapistOrder = null; // 並び順キャッシュ（null=次回ロード時に再ソート）
 
 // ============================================================
 // シフトカレンダー アクションメニュー
@@ -11055,16 +11057,25 @@ function renderShiftCalendar(el, days, shifts) {
     const shiftOnlyNames = Object.keys(byThDate).filter(n => !masterNames.includes(n)).sort();
     const allTherapists = [...masterNames, ...shiftOnlyNames];
 
-    // シフト提出・承認ありを上に並べる
-    // 優先度: 1=承認済みあり, 2=提出済み(pending/rejected)あり, 3=シフトなし
-    const getPriority = name => {
-      const dateMap = byThDate[name] || {};
-      const allStatuses = Object.values(dateMap).flat().map(s => s.status);
-      if (allStatuses.includes('approved')) return 1;
-      if (allStatuses.some(s => s === 'pending' || s === 'rejected')) return 2;
-      return 3;
-    };
-    allTherapists.sort((a, b) => getPriority(a) - getPriority(b));
+    // 並び順キャッシュがあれば使用、なければソートしてキャッシュ
+    if (_calTherapistOrder) {
+      // キャッシュ順を維持しつつ新規セラピストを末尾に追加
+      const cached = _calTherapistOrder.filter(n => allTherapists.includes(n));
+      const added  = allTherapists.filter(n => !_calTherapistOrder.includes(n));
+      allTherapists.length = 0;
+      allTherapists.push(...cached, ...added);
+    } else {
+      // 優先度: 1=承認済みあり, 2=提出済み(pending)あり, 3=シフトなし・却下・欠勤のみ
+      const getPriority = name => {
+        const dateMap = byThDate[name] || {};
+        const allStatuses = Object.values(dateMap).flat().map(s => s.status);
+        if (allStatuses.includes('approved')) return 1;
+        if (allStatuses.includes('pending')) return 2;
+        return 3;
+      };
+      allTherapists.sort((a, b) => getPriority(a) - getPriority(b));
+      _calTherapistOrder = [...allTherapists];
+    }
 
     if (!allTherapists.length) {
       el.innerHTML = '<p style="color:var(--muted);text-align:center;padding:20px">セラピストが登録されていません</p>' + _calLegend();
