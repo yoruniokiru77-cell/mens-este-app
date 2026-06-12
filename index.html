@@ -11076,7 +11076,16 @@ function renderShiftCalendar(el, days, shifts) {
         if (allStatuses.includes('pending')) return 2;
         return 3;
       };
-      allTherapists.sort((a, b) => getPriority(a) - getPriority(b));
+      const getPendingCount = name => {
+        const dateMap = byThDate[name] || {};
+        return Object.values(dateMap).flat().filter(s => s.status === 'pending').length;
+      };
+      allTherapists.sort((a, b) => {
+        const pa = getPriority(a), pb = getPriority(b);
+        if (pa !== pb) return pa - pb;
+        // 同優先度内: pending件数が多い順
+        return getPendingCount(b) - getPendingCount(a);
+      });
       _calTherapistOrder = [...allTherapists];
     }
 
