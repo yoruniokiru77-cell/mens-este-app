@@ -10135,7 +10135,10 @@ async function loadAttendanceSummary() {
 }
 
 async function loadShiftCalendar(resort) {
-  if (resort) _calTherapistOrder = null;
+  if (resort) {
+    _calTherapistOrder = null;
+    therapists = []; // セラピストマスタを再取得してソート精度を保証
+  }
   loadAttendanceSummary();
   if (isAdminMode) loadDayoffPendingPanel();
   const el   = document.getElementById('shift-calendar-content');
