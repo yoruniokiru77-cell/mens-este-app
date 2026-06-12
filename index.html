@@ -3528,7 +3528,10 @@ case 'sendReminderToOne': {
           let q = _sb.from('customer_memos').select('*')
             .eq('customer_id', custData.id)
             .order('created_at', { ascending: false });
-          if (therapist) q = q.eq('therapist_name', therapist);
+          if (therapist) {
+            // セラピストモード: 自分のメモ かつ 管理者メモは除外
+            q = q.eq('therapist_name', therapist).eq('is_admin', false);
+          }
           return q;
         })()
       ]);
@@ -3621,7 +3624,8 @@ case 'sendReminderToOne': {
         customer_id:    custId,
         therapist_id:   therapistId,
         therapist_name: params.therapist,
-        memo:           params.memo
+        memo:           params.memo,
+        is_admin:       params.isAdmin === true
       });
       if (error) throw new Error(error.message);
       return { ok: true };
@@ -3687,6 +3691,7 @@ case 'sendReminderToOne': {
         const { data: memoData } = await _sb.from('customer_memos')
           .select('customer_id, memo')
           .eq('therapist_name', therapist)
+          .eq('is_admin', false)
           .in('customer_id', custIds)
           .order('created_at', { ascending: false });
         (memoData || []).forEach(m => {
@@ -8341,7 +8346,7 @@ async function openCustomerDetail(customerNo, tel, customerName, therapistName) 
       ? `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
            <div><span style="color:var(--muted)">名前</span> <strong>${c.name}様</strong></div>
            <div><span style="color:var(--muted)">電話</span> <strong>${c.tel ? '****-**-' + c.tel.slice(-4) : '未登録'}</strong></div>
-           ${c.status && c.status !== 'normal' ? '<div>' + stBadge(c.status) + '</div>' : ''}
+           ${isAdminMode && c.status && c.status !== 'normal' ? '<div>' + stBadge(c.status) + '</div>' : ''}
          </div>`
       : '<span style="color:var(--muted)">顧客情報なし</span>';
 
@@ -8850,7 +8855,7 @@ async function saveCustomerMemo() {
   const memo         = input.value.trim();
   if (!memo) { alert('メモを入力してください'); return; }
   try {
-    await apiGet('saveCustomerMemo', { customerId, customerNo, tel: customerTel, customerName, therapist: loggedInTherapist, memo });
+    await apiGet('saveCustomerMemo', { customerId, customerNo, tel: customerTel, customerName, therapist: loggedInTherapist, memo, isAdmin: isAdminMode });
     input.value = '';
     showToast('メモを保存しました');
     // 再読み込み
