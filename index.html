@@ -12281,8 +12281,8 @@ async function submitReservation() {
   const endDt   = new Date(dt.getTime() + mins * 60000);
   const endTimeStr = String(endDt.getHours()).padStart(2,'0') + ':' + String(endDt.getMinutes()).padStart(2,'0');
 
-  // 出禁・NGチェック
-  if (customerNo || tel) {
+  // 出禁・NGチェック（管理者のみ）
+  if (isAdminMode && (customerNo || tel)) {
     try {
       const check = await apiGet('checkCustomerStatus', { customerNo, tel, customerName, therapist: therapistName });
       if (!check.allowed) { alert('⛔ 予約できません\n' + check.reason); return; }
@@ -12579,7 +12579,7 @@ async function saveAndSendLine() {
   const customerNo2 = document.getElementById('resv-customer-no').value;
   const tel2 = document.getElementById('resv-customer-tel-full').value || document.getElementById('resv-customer-tel').value;
   const therapistName2 = document.getElementById('resv-therapist').value;
-  if (customerNo2 || tel2) {
+  if (isAdminMode && (customerNo2 || tel2)) {
     try {
       const check = await apiGet('checkCustomerStatus', { customerNo: customerNo2, tel: tel2, therapist: therapistName2 });
       if (!check.allowed) { alert('⛔ 予約できません\n' + check.reason); return; }
