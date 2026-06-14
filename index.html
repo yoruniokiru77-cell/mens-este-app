@@ -10503,28 +10503,33 @@ async function confirmCalAddShift() {
   }
 }
 
-function _openCalShiftMenu(e, row, status, therapist, date, startTime, endTime, roomName, attendanceType, hasChangeRequest, changeReqStart, changeReqEnd, changeReqMemo) {
+function _openCalShiftMenu(e, row, status, therapist, date, startTime, endTime, roomName, attendanceType, hasChangeRequest, changeReqStart, changeReqEnd, changeReqMemo, isDayoffReq) {
   e.stopPropagation();
-  _calMenuShift = { row, status, therapist, date, startTime, endTime, roomName, attendanceType, hasChangeRequest, changeReqStart, changeReqEnd, changeReqMemo };
+  _calMenuShift = { row, status, therapist, date, startTime, endTime, roomName, attendanceType, hasChangeRequest, changeReqStart, changeReqEnd, changeReqMemo, isDayoffReq: !!isDayoffReq };
 
   const menu = document.getElementById('cal-shift-menu');
   const info = document.getElementById('cal-shift-menu-info');
-  info.textContent = therapist + ' ' + date.slice(5).replace('/','/') + ' ' + startTime + '〜' + endTime;
+  info.textContent = therapist + ' ' + date.slice(5).replace('/','/') + (isDayoffReq ? ' 🛌 お休み申請' : ' ' + startTime + '〜' + endTime);
 
   // ステータスによってボタン表示切替
   const isPending    = status === 'pending';
   const isApproved   = status === 'approved';
   const hasChgReq    = !!hasChangeRequest;
   const isInterview  = therapist.startsWith('[面接]');
-  document.getElementById('cal-menu-interview-info').style.display = isInterview ? '' : 'none';
-  document.getElementById('cal-menu-hire').style.display           = isInterview ? '' : 'none';
-  document.getElementById('cal-menu-reject-hire').style.display    = isInterview ? '' : 'none';
-  document.getElementById('cal-menu-approve').style.display        = !isInterview && isPending  ? '' : 'none';
-  document.getElementById('cal-menu-reject').style.display         = !isInterview && isPending  ? '' : 'none';
-  document.getElementById('cal-menu-room').style.display           = !isInterview && isPending  ? '' : 'none';
-  document.getElementById('cal-menu-change-approve').style.display = !isInterview && hasChgReq  ? '' : 'none';
-  document.getElementById('cal-menu-change-reject').style.display  = !isInterview && hasChgReq  ? '' : 'none';
-  document.getElementById('cal-menu-att').style.display            = !isInterview && isApproved ? '' : 'none';
+  const isDayoff     = !!isDayoffReq;
+  document.getElementById('cal-menu-interview-info').style.display  = isInterview ? '' : 'none';
+  document.getElementById('cal-menu-hire').style.display            = isInterview ? '' : 'none';
+  document.getElementById('cal-menu-reject-hire').style.display     = isInterview ? '' : 'none';
+  document.getElementById('cal-menu-dayoff-approve').style.display  = isDayoff && isPending && isAdminMode ? '' : 'none';
+  document.getElementById('cal-menu-dayoff-reject').style.display   = isDayoff && isPending && isAdminMode ? '' : 'none';
+  document.getElementById('cal-menu-approve').style.display         = !isInterview && !isDayoff && isPending  ? '' : 'none';
+  document.getElementById('cal-menu-reject').style.display          = !isInterview && !isDayoff && isPending  ? '' : 'none';
+  document.getElementById('cal-menu-room').style.display            = !isInterview && !isDayoff && isPending  ? '' : 'none';
+  document.getElementById('cal-menu-change-approve').style.display  = !isInterview && !isDayoff && hasChgReq  ? '' : 'none';
+  document.getElementById('cal-menu-change-reject').style.display   = !isInterview && !isDayoff && hasChgReq  ? '' : 'none';
+  document.getElementById('cal-menu-att').style.display             = !isInterview && !isDayoff && isApproved ? '' : 'none';
+  document.getElementById('cal-menu-edit').style.display            = !isInterview && !isDayoff ? '' : 'none';
+  document.getElementById('cal-menu-delete').style.display          = !isDayoff ? '' : 'none';
 
   // 位置調整
   const x = Math.min(e.clientX, window.innerWidth  - 220);
@@ -10841,6 +10846,32 @@ async function _calMenuReject() {
   finally { hideOverlay(); }
 }
 
+async function _calMenuDayoffApprove() {
+  _closeCalMenu();
+  const s = _calMenuShift;
+  if (!await _confirm(s.therapist + ' さんの ' + s.date.slice(5).replace('/','/') + ' のお休み申請を承認しますか？')) return;
+  try {
+    showOverlay();
+    await apiGet('approveDayoffRequest', { row: s.row, therapist: s.therapist, date: s.date });
+    showToast('お休みを承認しました');
+    loadShiftCalendar();
+  } catch(e) { alert('エラー: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
+async function _calMenuDayoffReject() {
+  _closeCalMenu();
+  const s = _calMenuShift;
+  if (!await _confirm(s.therapist + ' さんの ' + s.date.slice(5).replace('/','/') + ' のお休み申請を却下しますか？')) return;
+  try {
+    showOverlay();
+    await apiGet('rejectShift', { row: s.row, reason: '' });
+    showToast('お休み申請を却下しました');
+    loadShiftCalendar();
+  } catch(e) { alert('エラー: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
 function _calMenuAtt() {
   _closeCalMenu();
   const s = _calMenuShift;
@@ -10986,7 +11017,7 @@ function _calDateCard(s) {
   const safeEnd   = (s.endTime||'').replace(/'/g,"'");
   const safeRoom  = (s.roomName||'').replace(/'/g,"'");
   return `<div style="background:${bgFinal};color:${textColor};border-radius:6px;padding:4px 6px;margin-bottom:4px;font-size:11px;line-height:1.4;${wrapOpacity}${border}cursor:pointer"
-    onclick="_openCalShiftMenu(event,'${s.row}','${s.status}','${safeTherapist}','${safeDate}','${safeStart}','${safeEnd}','${safeRoom}','${s.attendanceType||'normal'}',${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','')">
+    onclick="_openCalShiftMenu(event,'${s.row}','${s.status}','${safeTherapist}','${safeDate}','${safeStart}','${safeEnd}','${safeRoom}','${s.attendanceType||'normal'}',${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','',${s.isDayoffRequest||false})">
     ${isIvShift ? '<div style="font-size:9px;font-weight:800;color:#d97706">🤝 面接</div>' : ''}
     ${isRejected ? '<div style="font-size:9px;font-weight:800">❌ 却下</div>' : ''}
     ${isDayoff && isPending ? '<div style="font-size:9px;font-weight:800">🛌 お休み申請中</div>' : ''}
@@ -11027,7 +11058,7 @@ function _calShiftBadge(s) {
     data-row="${s.row}" data-status="${s.status}" data-therapist="${s.therapist}"
     data-date="${s.date}" data-start="${s.startTime}" data-end="${s.endTime}"
     data-room="${s.roomName||''}" data-att="${s.attendanceType||'normal'}"
-    onclick="_openCalShiftMenu(event,this.dataset.row,this.dataset.status,this.dataset.therapist,this.dataset.date,this.dataset.start,this.dataset.end,this.dataset.room,this.dataset.att,${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','')"${memoAttr}>
+    onclick="_openCalShiftMenu(event,this.dataset.row,this.dataset.status,this.dataset.therapist,this.dataset.date,this.dataset.start,this.dataset.end,this.dataset.room,this.dataset.att,${s.hasChangeRequest||false},'${s.changeRequestStart||''}','${s.changeRequestEnd||''}','',${s.isDayoffRequest||false})"${memoAttr}>
     ${isIvShift ? '<div style="font-size:9px;font-weight:800;color:#d97706;letter-spacing:0.3px">🤝 面接</div>' : ''}
     ${isRejected ? '<div style="font-size:9px;font-weight:800">❌ 却下</div>' : ''}
     ${isDayoff && isPending ? '<div style="font-size:9px;font-weight:800">🛌 申請中</div>' : ''}
@@ -11050,17 +11081,17 @@ function renderShiftCalendar(el, days, shifts) {
 
   if (_calViewMode === 'therapist') {
     // ======== 縦軸セラピスト・横軸日付 ========
-    // お休み承認済みがある セラピスト×日付 を収集
-    const approvedDayoffKeys = new Set();
+    // お休み申請中・承認済みがある セラピスト×日付 を収集
+    const dayoffKeys = new Set();
     shifts.forEach(s => {
-      if (s.isDayoffRequest && s.status === 'approved') {
-        approvedDayoffKeys.add(s.therapist + '|' + s.date);
+      if (s.isDayoffRequest && s.status !== 'rejected') {
+        dayoffKeys.add(s.therapist + '|' + s.date);
       }
     });
-    // シフトをセラピスト×日付でマップ（お休み承認済みの日の通常シフトは除外）
+    // シフトをセラピスト×日付でマップ（お休み申請中・承認済みの日の通常シフトは除外）
     const byThDate = {};
     shifts.forEach(s => {
-      if (!s.isDayoffRequest && approvedDayoffKeys.has(s.therapist + '|' + s.date)) return;
+      if (!s.isDayoffRequest && dayoffKeys.has(s.therapist + '|' + s.date)) return;
       if (!byThDate[s.therapist]) byThDate[s.therapist] = {};
       if (!byThDate[s.therapist][s.date]) byThDate[s.therapist][s.date] = [];
       byThDate[s.therapist][s.date].push(s);
@@ -11151,16 +11182,16 @@ function renderShiftCalendar(el, days, shifts) {
 
   } else {
     // ======== 日付順 ========
-    // お休み承認済みがある セラピスト×日付 を収集
-    const approvedDayoffKeys2 = new Set();
+    // お休み申請中・承認済みがある セラピスト×日付 を収集
+    const dayoffKeys2 = new Set();
     shifts.forEach(s => {
-      if (s.isDayoffRequest && s.status === 'approved') {
-        approvedDayoffKeys2.add(s.therapist + '|' + s.date);
+      if (s.isDayoffRequest && s.status !== 'rejected') {
+        dayoffKeys2.add(s.therapist + '|' + s.date);
       }
     });
     const byDate = {};
     shifts.forEach(s => {
-      if (!s.isDayoffRequest && approvedDayoffKeys2.has(s.therapist + '|' + s.date)) return;
+      if (!s.isDayoffRequest && dayoffKeys2.has(s.therapist + '|' + s.date)) return;
       if (!byDate[s.date]) byDate[s.date] = [];
       byDate[s.date].push(s);
     });
@@ -15582,6 +15613,8 @@ window.addEventListener('DOMContentLoaded', init);
   <button id="cal-menu-interview-info" onclick="_calMenuInterviewInfo()" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:#7c3aed;font-weight:600">📝 面接情報を入力</button>
   <button id="cal-menu-hire"           onclick="_calMenuHire()"          style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 採用</button>
   <button id="cal-menu-reject-hire"    onclick="_calMenuRejectHire()"    style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ 不採用</button>
+  <button id="cal-menu-dayoff-approve" onclick="_calMenuDayoffApprove()" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ お休み承認</button>
+  <button id="cal-menu-dayoff-reject"  onclick="_calMenuDayoffReject()"  style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ お休み却下</button>
   <button id="cal-menu-approve"        onclick="_calMenuApprove()"       style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 承認</button>
   <button id="cal-menu-reject"         onclick="_calMenuReject()"        style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ 却下</button>
   <button id="cal-menu-room"           onclick="_calMenuRoom()"          style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px">🚪 ルーム変更・承認</button>
