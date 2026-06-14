@@ -2304,9 +2304,11 @@ function _timeToMin27(t) {
 //   opts: {
 //     miscFee:     雑費（給料から減算・店落ちは影響なし）
 //     accomFee:    宿泊費（同上）
-//     optItems:    [{menuId, amount}] オプション別内訳（sale_optionsまたはUI選択）
+//     optItems:    [{menuId, name, amount}] オプション別内訳（sale_optionsまたはUI選択）
 //     menuBackMap: {therapistId+'_'+menuId → {other, honshimei}} 固定バックマスタ
 //     therapistId: セラピストUUID
+//     extensionBack:    延長固定バック額（それ以外）
+//     extensionBackHon: 延長固定バック額（本指名）
 //   }
 // ======================================================
 function _calcPayroll(row, storeSettings, opts = {}) {
@@ -2358,8 +2360,18 @@ function _calcPayroll(row, storeSettings, opts = {}) {
   if (optItems && optItems.length > 0 && mbMap && therapistId) {
     const isHon = (row.nomination === 'honshimei');
     actualOptPrice = 0;
+    const extBack    = opts.extensionBack    != null ? Number(opts.extensionBack)    : null;
+    const extBackHon = opts.extensionBackHon != null ? Number(opts.extensionBackHon) : null;
     optItems.forEach(opt => {
       actualOptPrice += opt.amount;
+      // 延長固定バック
+      const isExt = !opt.menuId && (opt.name || '').includes('延長');
+      if (isExt) {
+        const extFixed = isHon
+          ? (extBackHon != null ? extBackHon : extBack)
+          : (extBack    != null ? extBack    : extBackHon);
+        if (extFixed != null) { therapistOptPay += Number(extFixed); return; }
+      }
       const mb = opt.menuId ? (mbMap[therapistId + '_' + opt.menuId] || null) : null;
       if (mb) {
         const prim = isHon ? mb.honshimei : mb.other;
@@ -2412,8 +2424,10 @@ async function apiGet(action, params = {}) {
         dailyGuarantee: t.daily_guarantee !== null && t.daily_guarantee !== undefined ? Number(t.daily_guarantee) : null,
         sendPayrollLine: t.send_payroll_line !== false,
         sendStoreLine:   t.send_store_line   !== false,
-        discountMode:    t.discount_mode || null,
-        parkingFee:      t.parking_fee !== null && t.parking_fee !== undefined ? Number(t.parking_fee) : null,
+        discountMode:       t.discount_mode || null,
+        parkingFee:         t.parking_fee !== null && t.parking_fee !== undefined ? Number(t.parking_fee) : null,
+        extensionBack:      t.extension_back !== null && t.extension_back !== undefined ? Number(t.extension_back) : null,
+        extensionBackHon:   t.extension_back_honshimei !== null && t.extension_back_honshimei !== undefined ? Number(t.extension_back_honshimei) : null,
       }));
     }
 
@@ -2437,9 +2451,11 @@ async function apiGet(action, params = {}) {
         dailyGuarantee: t.daily_guarantee !== null && t.daily_guarantee !== undefined ? Number(t.daily_guarantee) : null,
         sendPayrollLine: t.send_payroll_line !== false,
         sendStoreLine:   t.send_store_line   !== false,
-        discountMode:    t.discount_mode || null,
-        parkingFee:      t.parking_fee !== null && t.parking_fee !== undefined ? Number(t.parking_fee) : null,
-        isInterview:     t.is_interview === true,
+        discountMode:       t.discount_mode || null,
+        parkingFee:         t.parking_fee !== null && t.parking_fee !== undefined ? Number(t.parking_fee) : null,
+        extensionBack:      t.extension_back !== null && t.extension_back !== undefined ? Number(t.extension_back) : null,
+        extensionBackHon:   t.extension_back_honshimei !== null && t.extension_back_honshimei !== undefined ? Number(t.extension_back_honshimei) : null,
+        isInterview:        t.is_interview === true,
       }));
     }
 
@@ -2775,7 +2791,7 @@ async function apiGet(action, params = {}) {
             .lte('date', endDt.toISOString())
             .order('date');
         })(),
-        _sb.from('therapists').select('id,name,course_back,option_back,has_guarantee,hourly_rate,daily_guarantee,discount_mode,parking_fee').eq('store_id', STORE_ID).eq('active', true),
+        _sb.from('therapists').select('id,name,course_back,option_back,has_guarantee,hourly_rate,daily_guarantee,discount_mode,parking_fee,extension_back,extension_back_honshimei').eq('store_id', STORE_ID).eq('active', true),
         _sb.from('store_settings').select('*').eq('store_id', STORE_ID).single()
       ]);
       const tMap = {};
@@ -2821,6 +2837,7 @@ async function apiGet(action, params = {}) {
           if (!saleOptMap[o.reservation_id]) saleOptMap[o.reservation_id] = [];
           saleOptMap[o.reservation_id].push({
             menuId: menuByName[o.menu_name] || null,
+            name:   o.menu_name || '',
             amount: Number(o.amount)
           });
         });
@@ -2893,9 +2910,11 @@ async function apiGet(action, params = {}) {
         };
         const { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack }
           = _calcPayroll(rowWithBack, ss, {
-              optItems:    r.reservation_id ? (saleOptMap[r.reservation_id] || null) : null,
-              menuBackMap: menuBackMap,
-              therapistId: tInfo.id || null,
+              optItems:        r.reservation_id ? (saleOptMap[r.reservation_id] || null) : null,
+              menuBackMap:     menuBackMap,
+              therapistId:     tInfo.id || null,
+              extensionBack:    tInfo.extension_back    != null ? Number(tInfo.extension_back)    : null,
+              extensionBackHon: tInfo.extension_back_honshimei != null ? Number(tInfo.extension_back_honshimei) : null,
             });
         const key = dateLabel + '_' + r.therapist_name;
         if (!result[key]) {
@@ -3752,6 +3771,8 @@ case 'sendReminderToOne': {
       if (params.sendStoreLine   !== undefined) upd.send_store_line   = params.sendStoreLine;
       if (params.discountMode    !== undefined) upd.discount_mode     = params.discountMode || null;
       if (params.parkingFee      !== undefined) upd.parking_fee       = params.parkingFee === '' || params.parkingFee === null ? null : Number(params.parkingFee);
+      if (params.extensionBack   !== undefined) upd.extension_back             = params.extensionBack   === '' || params.extensionBack   === null ? null : Number(params.extensionBack);
+      if (params.extensionBackHon !== undefined) upd.extension_back_honshimei  = params.extensionBackHon === '' || params.extensionBackHon === null ? null : Number(params.extensionBackHon);
       const { error } = await _sb.from('therapists').update(upd).eq('store_id', STORE_ID).eq('line_user_id', params.userId);
       if (error) throw new Error(error.message);
       return { ok: true };
@@ -7976,7 +7997,9 @@ function calcSalesEditTotal() {
     {
       optItems:    selOptItems.length > 0 ? selOptItems : null,
       menuBackMap: window._payrollMenuBackMap || null,
-      therapistId: th ? th.id : null,
+      therapistId:      th ? th.id : null,
+      extensionBack:    th && th.extensionBack    != null ? Number(th.extensionBack)    : null,
+      extensionBackHon: th && th.extensionBackHon != null ? Number(th.extensionBackHon) : null,
     }
   );
   document.getElementById('se-pay-display').textContent  = '¥' + Math.max(0, therapistPay).toLocaleString();
@@ -14620,7 +14643,8 @@ async function openMenuBackModal(userId, name, therapistId) {
         </div>
       </div>`;
 
-    const parkingVal = therapists.find(t => t.id === therapistId)?.parkingFee ?? '';
+    const tCached    = therapists.find(t => t.id === therapistId);
+    const parkingVal = tCached?.parkingFee ?? '';
     let html = `<div style="padding:10px 0 14px;border-bottom:2px solid var(--border);margin-bottom:12px">
       <div style="font-size:13px;font-weight:700;margin-bottom:8px">🚗 パーキング代</div>
       <div style="display:flex;align-items:center;gap:8px">
@@ -14630,6 +14654,31 @@ async function openMenuBackModal(userId, name, therapistId) {
           oninput="_menuBackDirty=true"
           style="width:140px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
         <span style="font-size:12px;color:var(--muted)">円 / 日（給料に加算・店落ちから減算）</span>
+      </div>
+    </div>`;
+    const extBackVal    = tCached?.extensionBack    ?? '';
+    const extBackHonVal = tCached?.extensionBackHon ?? '';
+    html += `<div style="padding:10px 0 14px;border-bottom:2px solid var(--border);margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:8px">⏱ 延長固定バック（1回あたり）</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:11px;color:var(--muted);width:48px">本指名</span>
+          <input type="number" id="menuback-extension-hon" min="0" step="100"
+            value="${extBackHonVal}"
+            placeholder="バック率で計算"
+            oninput="_menuBackDirty=true"
+            style="width:104px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted)">円</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:11px;color:var(--muted);width:48px">それ以外</span>
+          <input type="number" id="menuback-extension-other" min="0" step="100"
+            value="${extBackVal}"
+            placeholder="バック率で計算"
+            oninput="_menuBackDirty=true"
+            style="width:104px;padding:6px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted)">円</span>
+        </div>
       </div>
     </div>`;
     html += '<div style="font-size:11px;color:var(--muted);margin-bottom:6px">※「本指名」と「それ以外（フリー・指名）」で固定バック額を分けて設定できます。片方だけ入力した場合はもう片方も入力してください。</div>';
@@ -14687,15 +14736,21 @@ async function saveMenuBacks() {
   // パーキング代
   const parkingEl = document.getElementById('menuback-parking-fee');
   const parkingFee = parkingEl && parkingEl.value !== '' ? Number(parkingEl.value) : null;
+  // 延長固定バック
+  const extOtherEl  = document.getElementById('menuback-extension-other');
+  const extHonEl    = document.getElementById('menuback-extension-hon');
+  const extensionBack    = extOtherEl && extOtherEl.value !== '' ? Number(extOtherEl.value) : null;
+  const extensionBackHon = extHonEl   && extHonEl.value   !== '' ? Number(extHonEl.value)   : null;
   try {
     showOverlay();
     await Promise.all([
       apiGet('saveMenuBacks', { therapistId: _menuBackTherapistId, backs }),
-      _menuBackUserId ? apiGet('updateLineUser', { userId: _menuBackUserId, parkingFee }) : Promise.resolve()
+      _menuBackUserId ? apiGet('updateLineUser', { userId: _menuBackUserId, parkingFee, extensionBack, extensionBackHon }) : Promise.resolve()
     ]);
-    // therapistsキャッシュのparkingFeeを更新
+    // therapistsキャッシュを更新
     const cached = therapists.find(t => t.id === _menuBackTherapistId);
     if (cached) cached.parkingFee = parkingFee;
+    if (cached) { cached.extensionBack = extensionBack; cached.extensionBackHon = extensionBackHon; }
     hideOverlay();
     _menuBackDirty = false;
     showToast('固定バックを保存しました');
