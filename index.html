@@ -8017,7 +8017,14 @@ function getEditSelectedOptionsData() {
   const otherAmt = Number(document.getElementById('se-opt-other-amount')?.value) || 0;
   if (otherEl && otherEl.checked && otherAmt > 0)
     items.push({ menuId: null, name: 'その他', amount: otherAmt });
-  return items; // 延長はcourse_priceに含まれるため除外
+  // 延長もsale_optionsに含める（固定バック計算でoptionBackを適用するため）
+  const seExtEl  = document.getElementById('se-opt-extension');
+  const seExtOn  = seExtEl ? seExtEl.checked : false;
+  const seExtCnt = parseInt((document.getElementById('se-opt-extension-count') || {}).value) || 1;
+  const seExtMin = EXTENSION_MIN * seExtCnt;
+  const seExtAmt = seExtOn ? seExtCnt * _editExtensionPrice : 0;
+  if (seExtAmt > 0) items.push({ menuId: null, name: '延長' + seExtMin + '分', amount: seExtAmt });
+  return items;
 }
 
 function closeSalesEditModal() {
@@ -8045,12 +8052,12 @@ async function saveSalesEdit() {
   // オプション計算
   const { optTotal, optParts } = calcSalesEditTotal();
 
-  // 延長はcourse_priceに加算、option_priceから除外
+  // 延長はoption_priceに含める（course_priceはベースのみ）
   const extOn    = document.getElementById('se-opt-extension').checked;
   const extCount = parseInt(document.getElementById('se-opt-extension-count').value) || 1;
   const extPrice = extOn ? extCount * _editExtensionPrice : 0;
-  const coursePrice  = baseCoursePrice + extPrice;
-  const optOnlyTotal = optTotal - extPrice;
+  const coursePrice  = baseCoursePrice;
+  const optOnlyTotal = optTotal;
 
   // メモ自動生成
   const optMemoStr = optParts.length > 0 ? optParts.join('、') : '';
@@ -13431,7 +13438,13 @@ function getSelectedOptionsData() {
   const otherAmt = Number(document.getElementById('opt-other-amount')?.value) || 0;
   if (otherChk && otherChk.checked && otherAmt > 0)
     items.push({ menuId: null, name: 'その他', amount: otherAmt });
-  return items; // 延長はcourse_priceに含まれるため除外
+  // 延長もsale_optionsに含める（固定バック計算でoptionBackを適用するため）
+  const extChk2  = document.getElementById('opt-extension-check');
+  const extCnt2  = parseInt((document.getElementById('opt-extension-count') || {}).value) || 1;
+  const extMin2  = EXTENSION_MIN * extCnt2;
+  const extAmt2  = (extChk2 && extChk2.checked) ? extCnt2 * _currentExtensionPrice : 0;
+  if (extAmt2 > 0) items.push({ menuId: null, name: '延長' + extMin2 + '分', amount: extAmt2 });
+  return items;
 }
 
 function getOptionsLabel() {
@@ -13570,12 +13583,12 @@ async function submitSalesEntry() {
   const dateVal     = document.getElementById('sales-date').value;
   const customerName = document.getElementById('sales-customer-name').value;
 
-  // 延長金額をcourse_priceに加算、option_priceからは除外
+  // 延長はoption_priceに含める（course_priceはベースのみ）
   const extCheck     = document.getElementById('opt-extension-check').checked;
   const extCount     = parseInt(document.getElementById('opt-extension-count').value) || 1;
   const extPrice     = extCheck ? extCount * _currentExtensionPrice : 0;
-  const coursePrice  = baseCoursePrice + extPrice;       // 延長込みコース料金
-  const optOnlyTotal = optTotal - extPrice;              // 延長を除いたオプション合計
+  const coursePrice  = baseCoursePrice;                  // ベースコース料金のみ
+  const optOnlyTotal = optTotal;                         // 延長を含むオプション合計
   const totalPrice   = coursePrice + nomFee + optOnlyTotal;
 
   const params = {
