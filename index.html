@@ -13003,6 +13003,13 @@ function renderMyReservations(el, data) {
     return;
   }
 
+  // まとめて確認ボタン（未確認が2件以上のとき表示）
+  const unconfirmed = data.filter(r => !r.therapistConfirmed && r.status !== 'cancelled' && !(r.isHime && !r.isHimeApproved));
+  const batchBtn = unconfirmed.length >= 2
+    ? `<button class="btn btn-secondary btn-sm" style="width:100%;margin-bottom:12px;font-weight:700"
+         onclick="confirmAllReservations()">✅ まとめて確認（${unconfirmed.length}件）</button>`
+    : '';
+
   // 日付でグループ化
   const byDate = {};
   data.forEach(r => {
@@ -13011,7 +13018,7 @@ function renderMyReservations(el, data) {
     byDate[d].push(r);
   });
 
-  el.innerHTML = Object.keys(byDate).sort().map(dateKey => {
+  el.innerHTML = batchBtn + Object.keys(byDate).sort().map(dateKey => {
     const list    = byDate[dateKey];
     const dateISO = dateKey.replace(/\//g, '-');
     const dt      = new Date(dateISO + 'T00:00:00');
@@ -13085,6 +13092,45 @@ function renderMyReservations(el, data) {
       </div>
     </div>`;
   }).join('');
+}
+
+async function confirmAllReservations() {
+  const targets = (window._myResvData || []).filter(r =>
+    !r.therapistConfirmed && r.status !== 'cancelled' && !(r.isHime && !r.isHimeApproved)
+  );
+  if (!targets.length) return;
+  if (!confirm(targets.length + '件の予約をまとめて確認しますか？')) return;
+  try {
+    showOverlay();
+    // 全件DB更新
+    await Promise.all(targets.map(r =>
+      _sb.from('reservations').update({ therapist_confirmed: true })
+        .eq('id', r.row).eq('store_id', STORE_ID)
+    ));
+    // 店舗LINEに1通でまとめて通知
+    try {
+      const settings  = await apiGet('getStoreSettings');
+      const storeName = settings.store_line_name || '';
+      if (storeName) {
+        const tAll   = await apiGet('getTherapists');
+        const storeT = tAll.find(t => t.name === storeName);
+        if (storeT && storeT.userId) {
+          const lines = targets.map(r => `・${r.date} ${r.course}分 ${r.customer ? r.customer + '様' : ''}`).join('\n');
+          const msg = `【✅ 予約確認済み】\n${loggedInTherapist} が${targets.length}件の予約を確認しました。\n${lines}`;
+          await apiGet('sendLineMessage', { userId: storeT.userId, message: msg });
+        }
+      }
+    } catch(le) { console.warn('確認LINE送信エラー:', le); }
+    // キャッシュ更新 & UI再描画
+    targets.forEach(r => { r.therapistConfirmed = true; });
+    const el = document.getElementById('my-reservations-list');
+    renderMyReservations(el, window._myResvData);
+    showToast('✅ ' + targets.length + '件の予約を確認しました');
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
 }
 
 async function confirmReservation(resvId) {
