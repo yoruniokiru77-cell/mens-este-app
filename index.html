@@ -2356,6 +2356,7 @@ function _calcPayroll(row, storeSettings, opts = {}) {
   // ── オプション給料（therapistOptPay）──
   // optItemsがあれば1件ずつ固定バックを参照、なければ合計×バック率
   let therapistOptPay = 0;
+  let therapistExtPay = 0; // 延長バック（表示分離用）
   let actualOptPrice  = optPrice; // 実際のオプション合計（invariant計算に使用）
   if (optItems && optItems.length > 0 && mbMap && therapistId) {
     const isHon = (row.nomination === 'honshimei');
@@ -2370,7 +2371,10 @@ function _calcPayroll(row, storeSettings, opts = {}) {
         const extFixed = isHon
           ? (extBackHon != null ? extBackHon : extBack)
           : (extBack    != null ? extBack    : extBackHon);
-        if (extFixed != null) { therapistOptPay += Number(extFixed); return; }
+        const extPay = extFixed != null ? Number(extFixed) : Math.round(opt.amount * optionBack);
+        therapistExtPay += extPay;
+        therapistOptPay += extPay;
+        return;
       }
       const mb = opt.menuId ? (mbMap[therapistId + '_' + opt.menuId] || null) : null;
       if (mb) {
@@ -2396,7 +2400,7 @@ function _calcPayroll(row, storeSettings, opts = {}) {
   // ── 給料合計（miscFee/accomFee を差し引いた実際の受取額）──
   const therapistPay = baseTherapistPay - miscFee - accomFee;
 
-  return { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack, fixedBack };
+  return { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, therapistExtPay, courseBack, optionBack, fixedBack };
 }
 
 // -------- Supabaseクエリ → 旧GASレスポンス形式に変換 --------
@@ -2909,7 +2913,7 @@ async function apiGet(action, params = {}) {
           fixed_back_amount:       fixedBackAmount,
           therapist_discount_mode: tInfo.discount_mode || null,
         };
-        const { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, courseBack, optionBack }
+        const { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, therapistExtPay, courseBack, optionBack }
           = _calcPayroll(rowWithBack, ss, {
               optItems:        r.reservation_id ? (saleOptMap[r.reservation_id] || null) : null,
               menuBackMap:     menuBackMap,
@@ -2947,7 +2951,7 @@ async function apiGet(action, params = {}) {
           nominationFee:   Number(r.nomination_fee || 0),
           discount:        Number(r.discount || 0),
           therapistPay, storeDrop,
-          therapistCoursePay, therapistOptPay,
+          therapistCoursePay, therapistOptPay, therapistExtPay,
           courseBack, optionBack,
           isGuarantee:     r.is_guarantee || false,
           isNewCustomer:   isNewCustomer || false,
@@ -5001,7 +5005,7 @@ function renderPayrollCards(data) {
             <div id="detail-${uid}" style="display:none;margin-top:12px">
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>時間</th><th>コース</th><th>お客様</th><th>合計</th><th>コース給料</th><th>OPT給料</th><th>店落ち</th></tr></thead>
+                  <thead><tr><th>時間</th><th>コース</th><th>お客様</th><th>合計</th><th>コース給料</th><th>OPT給料</th><th>延長給料</th><th>店落ち</th></tr></thead>
                   <tbody>
                     ${t.details.map(d => `
                     <tr${d.isGuarantee ? ' style="background:#fef9c3"' : ''}>
@@ -5010,7 +5014,8 @@ function renderPayrollCards(data) {
                       <td>${d.customer || '-'}</td>
                       <td>¥${d.price.toLocaleString()}</td>
                       <td style="color:var(--success)">¥${(d.therapistCoursePay||0).toLocaleString()}</td>
-                      <td style="color:var(--success)">¥${(d.therapistOptPay||0).toLocaleString()}</td>
+                      <td style="color:var(--success)">¥${((d.therapistOptPay||0)-(d.therapistExtPay||0)).toLocaleString()}</td>
+                      <td style="color:var(--success)">${d.therapistExtPay ? '¥'+(d.therapistExtPay).toLocaleString() : '-'}</td>
                       <td style="color:var(--accent2)">¥${d.storeDrop.toLocaleString()}</td>
                     </tr>`).join('')}
                   </tbody>
