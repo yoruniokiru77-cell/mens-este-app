@@ -12235,11 +12235,28 @@ function cancelResvLine(idx) {
   // 予約情報を表示
   document.getElementById('cancel-resv-info').textContent =
     r.date + '　' + r.therapist + '　' + formatCustomer(r.customerNo, r.customer) + '　' + r.course + '分';
-  // ラジオをリセット（お客様都合をデフォルト選択）
-  const radios = document.querySelectorAll('input[name="cancel-reason-radio"]');
-  radios.forEach(rb => { rb.checked = rb.value === 'customer'; });
+  // 理由選択をリセット（お客様都合をデフォルト選択）
+  _selectCancelReason('customer');
   document.getElementById('cancel-resv-memo').value = '';
   _showModal('cancel-resv-modal');
+}
+
+function _selectCancelReason(val) {
+  ['customer','therapist','other'].forEach(v => {
+    const btn = document.getElementById('cancel-reason-btn-' + v);
+    const rb  = document.getElementById('cancel-reason-' + v);
+    if (!btn) return;
+    if (v === val) {
+      btn.style.border = '2px solid var(--accent)';
+      btn.style.background = '#fff1f2';
+      btn.style.color = 'var(--accent)';
+      if (rb) rb.checked = true;
+    } else {
+      btn.style.border = '2px solid var(--border)';
+      btn.style.background = 'var(--surface)';
+      btn.style.color = '';
+    }
+  });
 }
 
 // キャンセル実行
@@ -16369,16 +16386,25 @@ window.addEventListener('DOMContentLoaded', init);
     <!-- 理由選択 -->
     <div style="margin-bottom:12px">
       <div style="font-size:13px;font-weight:600;margin-bottom:8px">キャンセル理由</div>
+      <input type="radio" name="cancel-reason-radio" id="cancel-reason-customer"  value="customer"  style="display:none">
+      <input type="radio" name="cancel-reason-radio" id="cancel-reason-therapist" value="therapist" style="display:none">
+      <input type="radio" name="cancel-reason-radio" id="cancel-reason-other"     value="other"     style="display:none">
       <div style="display:flex;flex-direction:column;gap:8px">
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px" id="cancel-reason-lbl-customer">
-          <input type="radio" name="cancel-reason-radio" value="customer" style="accent-color:var(--accent)"> お客様都合
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px" id="cancel-reason-lbl-therapist">
-          <input type="radio" name="cancel-reason-radio" value="therapist" style="accent-color:var(--accent)"> セラピスト都合
-        </label>
-        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px" id="cancel-reason-lbl-other">
-          <input type="radio" name="cancel-reason-radio" value="other" style="accent-color:var(--accent)"> その他
-        </label>
+        <button type="button" id="cancel-reason-btn-customer"
+          onclick="_selectCancelReason('customer')"
+          style="padding:12px;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-size:14px;font-weight:600;cursor:pointer;text-align:left">
+          お客様都合
+        </button>
+        <button type="button" id="cancel-reason-btn-therapist"
+          onclick="_selectCancelReason('therapist')"
+          style="padding:12px;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-size:14px;font-weight:600;cursor:pointer;text-align:left">
+          セラピスト都合
+        </button>
+        <button type="button" id="cancel-reason-btn-other"
+          onclick="_selectCancelReason('other')"
+          style="padding:12px;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-size:14px;font-weight:600;cursor:pointer;text-align:left">
+          その他
+        </button>
       </div>
     </div>
     <!-- 自由記述メモ -->
