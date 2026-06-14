@@ -8106,6 +8106,12 @@ async function saveSalesEdit() {
         memo:           fullMemo || null
       }).eq('id', _editSalesRow);
       if (error) throw new Error(error.message);
+      // reservations.course_min を同期
+      if (_editSalesResvId) {
+        try {
+          await _sb.from('reservations').update({ course_min: courseMin }).eq('id', _editSalesResvId).eq('store_id', STORE_ID);
+        } catch(e2) { console.warn('reservations course_min sync error:', e2); }
+      }
       // sale_optionsを保存
       if (_editSalesResvId) {
         try { await apiGet('saveSaleOptions', { reservationId: _editSalesResvId, options: getEditSelectedOptionsData() }); }
