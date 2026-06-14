@@ -6760,50 +6760,65 @@ async function confirmAttendance() {
   }
 }
 
-async function checkRoomConflict(date, startTime, endTime, excludeRow, warningElId, roomNameOverride) {
+async function checkRoomConflict(date, startTime, endTime, excludeRow, warningElId, roomNameOverride, roomIdOverride) {
   const warnEl = document.getElementById(warningElId);
   warnEl.style.display = 'none';
   warnEl.textContent   = '';
 
   let roomName = roomNameOverride || '';
-  if (!roomName) {
+  let roomId   = roomIdOverride   || '';
+  if (!roomName && !roomId) {
     const selEl  = document.getElementById(warningElId === 'room-approve-warning' ? 'room-approve-select' : 'shift-edit-room');
     const selVal = selEl ? selEl.value : '';
     if (!selVal) return false;
-    roomName = selVal.split('|')[1] || '';
+    const parts = selVal.split('|');
+    roomId   = parts[0] || '';
+    roomName = parts[1] || '';
   }
-  if (!roomName) return false;
+  if (!roomName && !roomId) return false;
 
   try {
     // ルームのインターバルを取得
     const rooms = await apiGetCached('getRoomMaster', {});
-    const roomData = rooms.find(r => r.name === roomName);
+    const roomData = roomId ? rooms.find(r => r.id === roomId) : rooms.find(r => r.name === roomName);
     const intervalMin = roomData ? (roomData.intervalMin || 0) : 0;
+    // どちらか欠けていれば roomData から補完
+    if (roomData) {
+      if (!roomId)   roomId   = roomData.id   || '';
+      if (!roomName) roomName = roomData.name  || '';
+    }
 
-    // 同じ月のシフトを取得してルーム重複チェック（インターバル込み）
-    const month = date.slice(0,7).replace(/\//g,'-');
-    const data  = await apiGet('getShifts', { month });
+    // 同じ月のシフトを直接DBから取得してルーム重複チェック（インターバル込み）
+    const checkDate = (date||'').replace(/\//g,'-');
+    const month = checkDate.slice(0,7);
+    const [y, m] = month.split('-');
+    const from = y + '-' + m + '-01';
+    const toD  = new Date(Number(y), Number(m), 0);
+    const to   = y + '-' + m + '-' + String(toD.getDate()).padStart(2,'0');
 
-    // インターバルを考慮した時間比較用ヘルパー（27時ルール対応・深夜またぎ対応）
-    const toMin = t => { if (!t) return 0; const [h,m] = t.split(':').map(Number); return h*60+(m||0); };
-    // 深夜またぎ対応：終了が開始より小さければ +1440（翌日扱い）
-    const normalizeEnd = (start, end) => end < start ? end + 1440 : end;
+    let q = _sb.from('shifts').select('id,therapist_name,date,start_time,end_time,room_id,room_name,status,attendance_type')
+      .eq('store_id', STORE_ID).eq('status', 'approved')
+      .gte('date', from).lte('date', to);
+    if (excludeRow) q = q.neq('id', excludeRow);
+    // roomId があれば room_id で絞り込み（高精度）、なければ room_name で絞り込み
+    if (roomId) q = q.eq('room_id', roomId);
+    else        q = q.eq('room_name', roomName);
+    const { data, error } = await q;
+    if (error) { console.warn('checkRoomConflict DB error:', error); return false; }
+
+    // インターバルを考慮した時間比較用ヘルパー（深夜またぎ対応）
+    const toMin = t => { if (!t) return 0; const [h,m2] = (t||'').substring(0,5).split(':').map(Number); return h*60+(m2||0); };
+    const normalizeEnd = (s, e) => e < s ? e + 1440 : e;
 
     const startMin = toMin(startTime);
     const endMin   = normalizeEnd(startMin, toMin(endTime));
 
-    // チェック対象日の前後1日も含めて取得（深夜またぎ対応）
-    const checkDate = (date||'').replace(/\//g,'-');
-
-    const conflicts = data.filter(s => {
-      if (s.status !== 'approved') return false;
-      if (s.row === excludeRow)    return false;
-      if (s.roomName !== roomName) return false;
-      if (s.attendanceType === 'absent' || s.attendanceType === 'noshow') return false;
+    const conflicts = (data || []).filter(s => {
+      if (s.attendance_type === 'absent' || s.attendance_type === 'noshow') return false;
 
       const sDate = (s.date||'').replace(/\//g,'-');
-      const sStart = toMin(s.startTime);
-      const sEndRaw = toMin(s.endTime);
+      const sStart = toMin(s.start_time);
+      const sEndRaw = toMin(s.end_time);
       const sEnd   = normalizeEnd(sStart, sEndRaw) + intervalMin;
 
       // 同日チェック
@@ -6816,14 +6831,12 @@ async function checkRoomConflict(date, startTime, endTime, excludeRow, warningEl
       prevDate.setDate(prevDate.getDate() - 1);
       const prevStr = prevDate.toISOString().slice(0,10);
       if (sDate === prevStr && sEndRaw < sStart) {
-        // 前日から続くシフト：時刻を+1440してオフセット比較
-        const sStartOffset = sStart;
-        const sEndOffset   = sEndRaw + 1440 + intervalMin; // 前日の02:00 → 1560
-        return startMin + 1440 < sEndOffset && endMin + 1440 > sStartOffset;
+        const sEndOffset = sEndRaw + 1440 + intervalMin;
+        return startMin + 1440 < sEndOffset && endMin + 1440 > sStart;
       }
 
       // 新シフトが深夜またぎで翌日にはみ出す場合
-      if (endMin > 1440 && sDate !== checkDate) {
+      if (endMin > 1440) {
         const nextDate = new Date(checkDate + 'T12:00:00');
         nextDate.setDate(nextDate.getDate() + 1);
         const nextStr = nextDate.toISOString().slice(0,10);
@@ -6838,11 +6851,11 @@ async function checkRoomConflict(date, startTime, endTime, excludeRow, warningEl
       const intervalNote = intervalMin > 0 ? `（インターバル${intervalMin}分含む）` : '';
       warnEl.style.display = '';
       warnEl.innerHTML = `⚠ <strong>${roomName}</strong> に時間帯の重複があります${intervalNote}：` +
-        conflicts.map(c => c.therapist + ' ' + c.startTime + '〜' + c.endTime).join('、');
+        conflicts.map(c => (c.therapist_name||'') + ' ' + (c.start_time||'').substring(0,5) + '〜' + (c.end_time||'').substring(0,5)).join('、');
       return true; // 重複あり
     }
     return false; // 重複なし
-  } catch(e) { return false; }
+  } catch(e) { console.warn('checkRoomConflict error:', e); return false; }
 }
 
 async function confirmApproveShift() {
@@ -6865,7 +6878,7 @@ async function confirmApproveShift() {
   const newDateSlash = (newDate||'').replace(/-/g,'/');
 
   // ルーム重複チェック（変更後の日時で）
-  const hasConflict = await checkRoomConflict(newDateSlash, newStart, newEnd, row, 'room-approve-warning', roomName);
+  const hasConflict = await checkRoomConflict(newDateSlash, newStart, newEnd, row, 'room-approve-warning', roomName, roomId);
   if (hasConflict) {
     alert('⚠ このルームは同じ時間帯（インターバル含む）にすでに使用されています。\n承認できません。別のルームを選択してください。');
     return;
@@ -6946,7 +6959,7 @@ async function confirmEditShift() {
   if (!date || !start || !end) { alert('日付・時間を入力してください'); return; }
 
   // ルーム重複チェック
-  await checkRoomConflict(date.replace(/-/g,'/'), start, end, row, 'shift-edit-warning');
+  await checkRoomConflict(date.replace(/-/g,'/'), start, end, row, 'shift-edit-warning', roomName, roomId);
   const warn = document.getElementById('shift-edit-warning');
   if (warn.style.display !== 'none') {
     if (!confirm('ルームが重複しています。このまま保存しますか？')) return;
