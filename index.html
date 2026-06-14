@@ -4985,10 +4985,9 @@ function renderPayrollCards(data) {
 
             <!-- ボタン -->
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-              <button class="btn btn-secondary btn-sm" onclick="toggleDetail('detail-${uid}')">明細</button>
               <button class="btn btn-secondary btn-sm" onclick="copyPayroll('${uid}','${t.name}','${dateLabel}','pay')">💴 給料</button>
               <button class="btn btn-secondary btn-sm" onclick="copyPayroll('${uid}','${t.name}','${dateLabel}','store')">🏪 店落ち</button>
-              <button class="btn btn-secondary btn-sm" onclick="openPayrollPreviewModal('${uid}','${t.name}','${dateLabel}')">📊 確認</button>
+              <button class="btn btn-secondary btn-sm" onclick="openPayrollPreviewModal('${uid}','${t.name}','${dateLabel}')">📊 明細</button>
               <button class="btn btn-line btn-sm" onclick="sendPayrollLine('${uid}','${t.name}','${dateLabel}')">LINE送信</button>
               <span id="payconf-${uid}">${(() => {
                 const conf = _payrollConfirmations[t.name];
@@ -5001,27 +5000,6 @@ function renderPayrollCards(data) {
               })()}</span>
             </div>
 
-            <!-- 明細 -->
-            <div id="detail-${uid}" style="display:none;margin-top:12px">
-              <div class="table-wrap">
-                <table>
-                  <thead><tr><th>時間</th><th>コース</th><th>お客様</th><th>合計</th><th>コース給料</th><th>OPT給料</th><th>延長給料</th><th>店落ち</th></tr></thead>
-                  <tbody>
-                    ${t.details.map(d => `
-                    <tr${d.isGuarantee ? ' style="background:#fef9c3"' : ''}>
-                      <td>${d.date}${d.isGuarantee ? ' <span style="font-size:10px;color:#92400e">保証</span>' : ''}</td>
-                      <td>${d.course ? d.course+'分' : '-'}</td>
-                      <td>${d.customer || '-'}</td>
-                      <td>¥${d.price.toLocaleString()}</td>
-                      <td style="color:var(--success)">¥${(d.therapistCoursePay||0).toLocaleString()}</td>
-                      <td style="color:var(--success)">¥${((d.therapistOptPay||0)-(d.therapistExtPay||0)).toLocaleString()}</td>
-                      <td style="color:var(--success)">${d.therapistExtPay ? '¥'+(d.therapistExtPay).toLocaleString() : '-'}</td>
-                      <td style="color:var(--accent2)">¥${d.storeDrop.toLocaleString()}</td>
-                    </tr>`).join('')}
-                  </tbody>
-                </table>
-              </div>
-            </div>
           </div>`;
         }).join('')}
       </div>
@@ -5175,21 +5153,26 @@ function openPayrollPreviewModal(uid, name, dateLabel) {
   const totCBack = details.reduce((s, d) => s + (d.therapistCoursePay || 0), 0);
   const totStore = details.reduce((s, d) => s + d.storeDrop, 0);
 
+  const totExt  = details.reduce((s, d) => s + (d.therapistExtPay || 0), 0);
+  const totOptOnly = details.reduce((s, d) => s + ((d.therapistOptPay || 0) - (d.therapistExtPay || 0)), 0);
+
   const rows = details.map(d => {
     const nomLabel  = d.nomination === 'honshimei' ? '本指名' : d.nomination === 'nomination' ? '指名' : 'フリー';
     const discStr   = d.discount > 0 ? `<span style="color:#dc2626;font-size:10px"> -¥${d.discount.toLocaleString()}</span>` : '';
     const nomStr    = d.nominationFee > 0 ? `<span style="font-size:10px;color:var(--muted)"> +指名¥${d.nominationFee.toLocaleString()}</span>` : '';
     const fixedBack = _isFixedBack(d.course, d.nomination);
-    // 固定バック→青太字、バック率→グレー＋%(率)ラベル付き
     const backColor = fixedBack ? '#0f3460' : 'var(--muted)';
     const backLabel = fixedBack ? '' : `<br><span style="font-size:9px">(率)</span>`;
+    const optOnly   = (d.therapistOptPay || 0) - (d.therapistExtPay || 0);
     return `
       <tr style="border-top:1px solid var(--border)">
         <td style="padding:7px 6px;font-size:13px;white-space:nowrap">${d.date}</td>
         <td style="padding:7px 6px;font-size:13px">${d.course}分<br><span style="font-size:10px;color:var(--muted)">${nomLabel}</span></td>
+        <td style="padding:7px 6px;font-size:13px">${d.customer || '-'}</td>
         <td style="padding:7px 6px;font-size:13px;text-align:right">¥${d.price.toLocaleString()}${discStr}${nomStr}</td>
         <td style="padding:7px 6px;font-size:13px;text-align:right;color:${backColor};font-weight:${fixedBack ? '600' : '400'}">¥${(d.therapistCoursePay || 0).toLocaleString()}${backLabel}</td>
-        <td style="padding:7px 6px;font-size:13px;text-align:right;color:var(--accent2)">${d.optionPrice > 0 ? '¥' + d.optionPrice.toLocaleString() : '-'}</td>
+        <td style="padding:7px 6px;font-size:13px;text-align:right;color:var(--success)">${optOnly > 0 ? '¥' + optOnly.toLocaleString() : '-'}</td>
+        <td style="padding:7px 6px;font-size:13px;text-align:right;color:var(--success)">${d.therapistExtPay ? '¥' + d.therapistExtPay.toLocaleString() : '-'}</td>
         <td style="padding:7px 6px;font-size:13px;text-align:right;font-weight:600">¥${d.storeDrop.toLocaleString()}</td>
       </tr>`;
   }).join('');
@@ -5214,19 +5197,22 @@ function openPayrollPreviewModal(uid, name, dateLabel) {
           <tr style="background:var(--bg)">
             <th style="padding:7px 6px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;white-space:nowrap">時刻</th>
             <th style="padding:7px 6px;text-align:left;font-size:11px;color:var(--muted);font-weight:600">コース</th>
+            <th style="padding:7px 6px;text-align:left;font-size:11px;color:var(--muted);font-weight:600">お客様</th>
             <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">合計金額</th>
-            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">バック</th>
-            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">オプション</th>
+            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">コースバック</th>
+            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">OPT給料</th>
+            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">延長給料</th>
             <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">店落ち</th>
           </tr>
         </thead>
         <tbody>${rows || '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--muted)">明細なし</td></tr>'}</tbody>
         <tfoot>
           <tr style="border-top:2px solid var(--border);background:var(--bg)">
-            <td colspan="2" style="padding:8px 6px;font-size:12px;font-weight:700;color:var(--muted)">${details.length}件合計</td>
+            <td colspan="3" style="padding:8px 6px;font-size:12px;font-weight:700;color:var(--muted)">${details.length}件合計</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700">¥${totPrice.toLocaleString()}</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--muted)">¥${totCBack.toLocaleString()}</td>
-            <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--accent2)">${totOpt > 0 ? '¥' + totOpt.toLocaleString() : '-'}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--success)">${totOptOnly > 0 ? '¥' + totOptOnly.toLocaleString() : '-'}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--success)">${totExt > 0 ? '¥' + totExt.toLocaleString() : '-'}</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700">¥${totStore.toLocaleString()}</td>
           </tr>
         </tfoot>
