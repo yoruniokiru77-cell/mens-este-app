@@ -12793,8 +12793,16 @@ async function saveAndSendLine() {
     const isNewCustomer = resvResult && resvResult.isNewCustomer;
 
     // LINE送信
-    const t = therapists.find(t => t.name === therapistName);
-    if (t && t.userId) {
+    let tLine = therapists.find(t => t.name === therapistName);
+    // キャッシュ未ロードの場合はDB直接取得
+    if (!tLine) {
+      try {
+        const fresh = await apiGet('getTherapists');
+        if (fresh && fresh.length) { therapists = fresh; }
+        tLine = (fresh || []).find(t => t.name === therapistName);
+      } catch(e2) { console.warn('therapists再取得エラー:', e2); }
+    }
+    if (tLine && tLine.userId) {
       const dateStr = _fmtLocalDatetimeJp(dateVal);
       const customerLabel = formatCustomer(params.customerNo, params.customer);
       const nomLabel = NOMINATION_LABEL[params.nomination] || '';
@@ -12807,12 +12815,14 @@ async function saveAndSendLine() {
         msg += `\n割引: -¥${discount.toLocaleString()}\n適用後金額: ¥${finalPrice.toLocaleString()}`;
       }
       try {
-        await apiGet('sendLineMessage', { userId: t.userId, message: msg });
+        await apiGet('sendLineMessage', { userId: tLine.userId, message: msg });
         showBanner('✅ LINE送信完了しました', 'success');
       } catch(lineErr) {
         console.warn('LINE送信エラー:', lineErr);
         showBanner('❌ LINE送信エラー：' + (lineErr.message || '送信に失敗しました'), 'error');
       }
+    } else {
+      showBanner('⚠️ LINE未送信：' + therapistName + ' のLINE IDが未登録またはキャッシュ未ロードです', 'error');
     }
 
     // ── お客様案内テキスト自動生成 & クリップボードコピー ──
