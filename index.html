@@ -10976,7 +10976,7 @@ function _calDateCard(s) {
   const border      = isIvShift    ? 'border:2px dashed #d97706;'
                     : hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
   const wrapOpacity = (isRejected || isAbsent) ? 'opacity:.7;' : '';
-  const attLabel = isAbnormal
+  const attLabel = isAbnormal && !isDayoff
     ? `<div style="font-size:9px;font-weight:800;margin-top:2px">${isAbsent ? '❌' : '⚠'} ${ATTENDANCE_LABEL[s.attendanceType]?.label || s.attendanceType}</div>`
     : '';
   const nameStyle = (isAbsent || isRejected) ? 'font-weight:700;text-decoration:line-through;opacity:.75' : 'font-weight:700';
@@ -11016,7 +11016,7 @@ function _calShiftBadge(s) {
           : isPending           ? { bg: 'rgba(107,114,128,0.6)',  text: '#fff' }
           : hasChangeReq        ? { bg: '#f97316',                text: '#fff' }
           : getRoomColor(s.roomName);
-  const att = isAbnormal
+  const att = isAbnormal && !isDayoff
     ? `<div style="font-size:9px;font-weight:800;margin-top:1px">${isAbsent ? '❌' : '⚠'} ${ATTENDANCE_LABEL[s.attendanceType]?.label||s.attendanceType}</div>` : '';
   const border      = isIvShift    ? 'border:2px dashed #d97706;'
                     : hasChangeReq ? 'outline:2px solid #dc2626;outline-offset:1px;' : '';
@@ -11050,9 +11050,17 @@ function renderShiftCalendar(el, days, shifts) {
 
   if (_calViewMode === 'therapist') {
     // ======== 縦軸セラピスト・横軸日付 ========
-    // シフトをセラピスト×日付でマップ
+    // お休み承認済みがある セラピスト×日付 を収集
+    const approvedDayoffKeys = new Set();
+    shifts.forEach(s => {
+      if (s.isDayoffRequest && s.status === 'approved') {
+        approvedDayoffKeys.add(s.therapist + '|' + s.date);
+      }
+    });
+    // シフトをセラピスト×日付でマップ（お休み承認済みの日の通常シフトは除外）
     const byThDate = {};
     shifts.forEach(s => {
+      if (!s.isDayoffRequest && approvedDayoffKeys.has(s.therapist + '|' + s.date)) return;
       if (!byThDate[s.therapist]) byThDate[s.therapist] = {};
       if (!byThDate[s.therapist][s.date]) byThDate[s.therapist][s.date] = [];
       byThDate[s.therapist][s.date].push(s);
@@ -11143,8 +11151,16 @@ function renderShiftCalendar(el, days, shifts) {
 
   } else {
     // ======== 日付順 ========
+    // お休み承認済みがある セラピスト×日付 を収集
+    const approvedDayoffKeys2 = new Set();
+    shifts.forEach(s => {
+      if (s.isDayoffRequest && s.status === 'approved') {
+        approvedDayoffKeys2.add(s.therapist + '|' + s.date);
+      }
+    });
     const byDate = {};
     shifts.forEach(s => {
+      if (!s.isDayoffRequest && approvedDayoffKeys2.has(s.therapist + '|' + s.date)) return;
       if (!byDate[s.date]) byDate[s.date] = [];
       byDate[s.date].push(s);
     });
