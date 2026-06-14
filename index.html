@@ -2709,12 +2709,20 @@ async function apiGet(action, params = {}) {
           // 既存売上を更新
           const { error } = await _sb.from('sales').update(salesData).eq('id', existing.id);
           if (error) throw new Error(error.message);
+          // 予約テーブルのcourse_minも同期（セラピストがコース変更した場合に管理者側も反映）
+          await _sb.from('reservations').update({ course_min: salesData.course_min })
+            .eq('id', params.reservationId).eq('store_id', STORE_ID);
           return { ok: true, updated: true };
         }
       }
       // 新規登録
       const { error } = await _sb.from('sales').insert(salesData);
       if (error) throw new Error(error.message);
+      // 予約テーブルのcourse_minも同期
+      if (params.reservationId) {
+        await _sb.from('reservations').update({ course_min: salesData.course_min })
+          .eq('id', params.reservationId).eq('store_id', STORE_ID);
+      }
       return { ok: true, updated: false };
     }
 
