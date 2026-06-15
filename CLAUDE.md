@@ -412,6 +412,60 @@ storeDrop = 会計金額 - baseTherapistPay
 
 ---
 
+## セッション22（2026/6/16）で実施した主な修正
+
+| # | 内容 |
+|---|---|
+| 1 | 固定バックモーダルに延長固定バック入力欄追加（本指名/それ以外）→ `therapists.extension_back` / `extension_back_honshimei` に保存 |
+| 2 | `_calcPayroll`に`therapistExtPay`（延長バック）を独立変数として追加（`therapistOptPay`とは別集計） |
+| 3 | 給料明細モーダルに「延長給料」列を独立表示（OPT列と分離） |
+| 4 | 「明細」「確認」ボタンを「📊 明細」1ボタンに統合（両機能を1モーダルに集約） |
+| 5 | 管理者側売上編集後に予約一覧のコース・金額が更新されないバグ修正（`reservations`テーブルも同期） |
+| 6 | LINE通知がセラピストキャッシュ未ロード時に無音で失敗するバグ修正（DB再取得フォールバック+エラーバナー追加） |
+| 7 | セラピスト予約確認ボタン追加（`confirmReservation`）→ DB更新 + 店舗LINEに通知 |
+| 8 | 「まとめて確認」ボタン追加（`confirmAllReservations`）→ 未確認全件を1通のLINEでまとめて通知 |
+| 9 | 管理者予約一覧に「✅ 確認済」バッジ表示（`therapist_confirmed=true`の場合） |
+| 10 | キャンセル理由選択をボタン式に変更（ラジオボタン廃止・hidden radioパターンに統一） |
+| 11 | 売上確認（売上レポート）の日付デフォルトを今日〜今日に変更 |
+
+### セッション22 追加仕様・注意事項
+
+#### ラジオボタン禁止（重要）
+**ユーザー指示: 今後一切ラジオボタンを使用しないこと。**  
+選択UIは必ず `hidden radio + 見た目ボタン` パターン（`_selectCancelReason`等の実装参照）。
+
+#### 延長固定バックの仕様
+- `therapists.extension_back`（円/回・それ以外）/ `extension_back_honshimei`（円/回・本指名）
+- `_calcPayroll`内: `sale_options`の`menuId=null`かつ`name.includes('延長')`の項目がextとして計算
+- 固定バック設定時: `extFixed`（本指名なら`extensionBackHon`、それ以外なら`extensionBack`）を使用
+- 未設定時: `option_back`率で計算（既存動作と同じ）
+
+#### `therapist_confirmed` カラム
+```sql
+ALTER TABLE reservations ADD COLUMN IF NOT EXISTS therapist_confirmed boolean DEFAULT false;
+```
+**✅ 実行済み（2026/6/16）**
+
+#### sendPayrollLine の送信内容
+```
+【給与明細】（店舗名）
+日付
+
+給料：¥XX,XXX          ← send_payroll_line=true
+店落ち：¥XX,XXX         ← send_store_line=true
+（パーキング代含む）      ← parkingFee設定時
+前回XX円不足/過払い       ← 繰越あり時
+合計請求：¥XX,XXX        ← 繰越あり時
+
+--- 経費内訳 ---         ← send_expense_line=true かつ経費あり
+--- 明細 ---            ← 明細トグルON時
+HH:MM XX分 給料¥XX,XXX 店落¥XX,XXX
+
+確認したらLINEで「確認」と返信してください。
+```
+
+---
+
 ## 過去の作業ログ（参照先）
 
 詳細な作業履歴はdocsフォルダを参照してください。

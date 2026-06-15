@@ -536,6 +536,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
 
 
     <button onclick="showPage('shift-calendar')" id="tab-shift-calendar">📅 シフト表</button>
+    <button onclick="showPage('therapist-profile')" id="tab-therapist-profile" style="display:none">👩 セラピスト情報</button>
     <button onclick="showPage('customer-master')" id="tab-customer-master">👥 顧客マスタ</button>
     <button onclick="showPage('master-mgmt')" id="tab-master-mgmt">⚙ マスタ管理</button>
     <button onclick="showPage('interview-mgmt')" id="tab-interview-mgmt" style="display:none">🤝 面接管理</button>
@@ -903,6 +904,47 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         <button class="btn btn-secondary btn-sm" onclick="loadAttendanceSummary()">更新</button>
       </div>
       <div id="attendance-summary">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- ===== セラピスト情報ページ ===== -->
+  <div id="page-therapist-profile" class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="sec-title">👩 セラピスト情報</div>
+      <button class="btn btn-secondary btn-sm" onclick="initTherapistProfile()">更新</button>
+    </div>
+    <div id="therapist-profile-list">
+      <div style="text-align:center;padding:32px;color:var(--muted)">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- セラピスト情報編集モーダル -->
+  <div id="therapist-profile-modal" class="modal-overlay" onclick="if(event.target===this)_hideModal('therapist-profile-modal')">
+    <div class="modal-box" style="max-width:420px">
+      <div class="sec-title" style="margin-bottom:16px">👩 <span id="tp-modal-name"></span> の情報編集</div>
+      <input type="hidden" id="tp-modal-id">
+      <div class="form-group">
+        <label>年齢</label>
+        <input type="number" id="tp-modal-age" placeholder="例: 24" min="18" max="60" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)">
+      </div>
+      <div class="form-group">
+        <label>カップ数</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px" id="tp-cup-btns">
+          <input type="hidden" id="tp-modal-cup">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>本名</label>
+        <input type="text" id="tp-modal-real-name" placeholder="本名（非公開）" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)">
+      </div>
+      <div class="form-group">
+        <label>備考</label>
+        <textarea id="tp-modal-notes" rows="4" placeholder="その他メモ" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);resize:vertical"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-secondary" style="flex:1" onclick="_hideModal('therapist-profile-modal')">キャンセル</button>
+        <button class="btn btn-primary" style="flex:1" onclick="saveTherapistProfile()">保存</button>
+      </div>
     </div>
   </div>
 
@@ -2433,6 +2475,21 @@ async function apiGet(action, params = {}) {
         extensionBack:      t.extension_back !== null && t.extension_back !== undefined ? Number(t.extension_back) : null,
         extensionBackHon:   t.extension_back_honshimei !== null && t.extension_back_honshimei !== undefined ? Number(t.extension_back_honshimei) : null,
       }));
+    }
+
+    case 'getTherapistProfiles': {
+      const { data, error } = await _sb.from('therapists')
+        .select('id,name,age,cup,real_name,profile_notes')
+        .eq('store_id', STORE_ID).eq('active', true).eq('is_interview', false).order('registered_at');
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
+
+    case 'saveTherapistProfile': {
+      const { id, age, cup, real_name, profile_notes } = params;
+      const { error } = await _sb.from('therapists').update({ age, cup, real_name, profile_notes }).eq('id', id);
+      if (error) throw new Error(error.message);
+      return { ok: true };
     }
 
     case 'getLineUsers': {
@@ -4502,6 +4559,7 @@ function showPage(name) {
   if (name === 'sales-input') initSalesInput();
   if (name === 'checkout')    loadCheckoutPage();
   if (name === 'scout')          loadScoutSummary();
+  if (name === 'therapist-profile') initTherapistProfile();
   if (name === 'broadcast')      loadBroadcastTherapistList();
   if (name === 'interview-mgmt') loadInterviewMgmt();
 }
@@ -4560,6 +4618,8 @@ async function init() {
 function startAdminMode() {
   showMainApp();
   // 管理者専用タブを表示
+  const tpTab = document.getElementById('tab-therapist-profile');
+  if (tpTab) tpTab.style.display = '';
   const broadcastTab = document.getElementById('tab-broadcast');
   if (broadcastTab) broadcastTab.style.display = '';
   const interviewTab = document.getElementById('tab-interview-mgmt');
@@ -9181,6 +9241,98 @@ async function importCustomersFromSheet() {
   }
 }
 
+
+// ============================================================
+// セラピスト情報
+// ============================================================
+const CUP_OPTIONS = ['A','B','C','D','E','F','G','H','I','J','K'];
+
+async function initTherapistProfile() {
+  const el = document.getElementById('therapist-profile-list');
+  el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">読み込み中...</div>';
+  let list;
+  try { list = await apiGet('getTherapistProfiles'); } catch(e) {
+    el.innerHTML = '<div style="color:red;padding:16px">読み込み失敗: ' + e.message + '</div>';
+    return;
+  }
+  if (!list.length) {
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--muted)">セラピストがいません</div>';
+    return;
+  }
+  el.innerHTML = list.map(t => `
+    <div class="card" style="margin-bottom:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:15px;font-weight:700">${t.name}</div>
+        <button class="btn btn-secondary btn-sm" onclick="openTherapistProfileModal(${JSON.stringify(t).replace(/"/g,'&quot;')})">✏️ 編集</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:13px">
+        <div><span style="color:var(--muted)">年齢：</span>${t.age != null ? t.age + '歳' : '未設定'}</div>
+        <div><span style="color:var(--muted)">カップ：</span>${t.cup || '未設定'}</div>
+        <div><span style="color:var(--muted)">本名：</span>${t.real_name || '未設定'}</div>
+        ${t.profile_notes ? `<div style="grid-column:1/-1"><span style="color:var(--muted)">備考：</span>${t.profile_notes.replace(/\n/g,'<br>')}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function openTherapistProfileModal(t) {
+  document.getElementById('tp-modal-id').value   = t.id;
+  document.getElementById('tp-modal-name').textContent = t.name;
+  document.getElementById('tp-modal-age').value  = t.age != null ? t.age : '';
+  document.getElementById('tp-modal-real-name').value = t.real_name || '';
+  document.getElementById('tp-modal-notes').value = t.profile_notes || '';
+  document.getElementById('tp-modal-cup').value  = t.cup || '';
+  // カップボタン生成
+  const wrap = document.getElementById('tp-cup-btns');
+  const currentCup = t.cup || '';
+  wrap.innerHTML = '<input type="hidden" id="tp-modal-cup" value="' + currentCup + '">' +
+    CUP_OPTIONS.map(c => {
+      const sel = c === currentCup;
+      return `<button type="button" onclick="selectTpCup('${c}')" id="tp-cup-${c}"
+        style="padding:6px 10px;border-radius:8px;border:1.5px solid ${sel ? 'var(--primary)' : 'var(--border)'};background:${sel ? 'var(--primary)' : 'var(--surface)'};color:${sel ? '#fff' : 'var(--text)'};cursor:pointer;font-size:13px;font-weight:600">
+        ${c}
+      </button>`;
+    }).join('') +
+    `<button type="button" onclick="selectTpCup('')" id="tp-cup-"
+      style="padding:6px 10px;border-radius:8px;border:1.5px solid ${!currentCup ? 'var(--primary)' : 'var(--border)'};background:${!currentCup ? 'var(--primary)' : 'var(--surface)'};color:${!currentCup ? '#fff' : 'var(--text)'};cursor:pointer;font-size:13px">
+      未設定
+    </button>`;
+  _showModal('therapist-profile-modal');
+}
+
+function selectTpCup(cup) {
+  document.getElementById('tp-modal-cup').value = cup;
+  const all = [...CUP_OPTIONS, ''];
+  all.forEach(c => {
+    const btn = document.getElementById('tp-cup-' + c);
+    if (!btn) return;
+    const sel = c === cup;
+    btn.style.border     = '1.5px solid ' + (sel ? 'var(--primary)' : 'var(--border)');
+    btn.style.background = sel ? 'var(--primary)' : 'var(--surface)';
+    btn.style.color      = sel ? '#fff' : 'var(--text)';
+  });
+}
+
+async function saveTherapistProfile() {
+  const id    = document.getElementById('tp-modal-id').value;
+  const age   = document.getElementById('tp-modal-age').value;
+  const cup   = document.getElementById('tp-modal-cup').value;
+  const real_name     = document.getElementById('tp-modal-real-name').value.trim();
+  const profile_notes = document.getElementById('tp-modal-notes').value.trim();
+  try {
+    await apiGet('saveTherapistProfile', {
+      id,
+      age:          age !== '' ? Number(age) : null,
+      cup:          cup || null,
+      real_name:    real_name || null,
+      profile_notes: profile_notes || null,
+    });
+    _hideModal('therapist-profile-modal');
+    initTherapistProfile();
+  } catch(e) {
+    alert('保存失敗: ' + e.message);
+  }
+}
 
 // ============================================================
 // マスタ管理
