@@ -7341,17 +7341,16 @@ function renderCustomerList(el, data) {
 // 売上確認（管理者）
 // ============================================================
 function initSalesReport() {
-  // 日付の初期値：今月の1日〜今日
+  // 日付の初期値：今日〜今日
   const now   = new Date();
   const y     = now.getFullYear();
   const m     = String(now.getMonth()+1).padStart(2,'0');
   const d     = String(now.getDate()).padStart(2,'0');
-  const first = y + '-' + m + '-01';
   const today = y + '-' + m + '-' + d;
 
   const startEl = document.getElementById('report-start');
   const endEl   = document.getElementById('report-end');
-  if (!startEl.value) startEl.value = first;
+  if (!startEl.value) startEl.value = today;
   if (!endEl.value)   endEl.value   = today;
 
   // セラピスト選択肢
