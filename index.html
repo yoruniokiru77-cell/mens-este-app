@@ -2452,7 +2452,7 @@ async function apiGet(action, params = {}) {
     // ===== セラピスト =====
     case 'getTherapists': {
       const { data, error } = await _sb.from('therapists')
-        .select('*').eq('store_id', STORE_ID).eq('active', true).eq('is_interview', false).order('registered_at');
+        .select('*').eq('store_id', STORE_ID).eq('active', true).eq('is_interview', false).eq('is_admin', false).order('registered_at');
       if (error) throw new Error(error.message);
       return (data || []).map(t => ({
         name:        t.name,
@@ -2480,7 +2480,7 @@ async function apiGet(action, params = {}) {
     case 'getTherapistProfiles': {
       const { data, error } = await _sb.from('therapists')
         .select('id,name,age,cup,real_name,profile_notes')
-        .eq('store_id', STORE_ID).eq('active', true).eq('is_interview', false).order('registered_at');
+        .eq('store_id', STORE_ID).eq('active', true).eq('is_interview', false).eq('is_admin', false).order('registered_at');
       if (error) throw new Error(error.message);
       return data || [];
     }
@@ -2522,7 +2522,7 @@ async function apiGet(action, params = {}) {
 
     case 'getInitialData': {
       const [tRes, rRes, mRes] = await Promise.all([
-        _sb.from('therapists').select('*').eq('store_id', STORE_ID).eq('active', true).order('registered_at'),
+        _sb.from('therapists').select('*').eq('store_id', STORE_ID).eq('active', true).eq('is_admin', false).order('registered_at'),
         _sb.from('rooms').select('*').eq('store_id', STORE_ID).eq('active', true).order('display_order'),
         _sb.from('menus').select('*').eq('store_id', STORE_ID).eq('active', true).order('display_order')
       ]);
@@ -4636,6 +4636,10 @@ function startAdminMode() {
       if (el && data) el.textContent = '🏪 ' + data.name;
     });
   Promise.resolve().then(async () => {
+    try {
+      const adminData = await _sb.from('therapists').select('name').eq('store_id', STORE_ID).eq('active', true).eq('is_admin', true);
+      window._adminThNames = new Set((adminData.data || []).map(t => t.name));
+    } catch(e) { console.warn(e); }
     try { therapists = await apiGet('getTherapists'); } catch(e) { console.warn(e); }
     _initHourSelect();
   try { await populateCourseSelect(); } catch(e) { console.warn(e); }
@@ -11310,7 +11314,7 @@ function renderShiftCalendar(el, days, shifts) {
     const masterNames = Array.isArray(therapists) && therapists.length
       ? therapists.map(t => t.name)
       : [];
-    const shiftOnlyNames = Object.keys(byThDate).filter(n => !masterNames.includes(n)).sort();
+    const shiftOnlyNames = Object.keys(byThDate).filter(n => !masterNames.includes(n) && !window._adminThNames?.has(n)).sort();
     const allTherapists = [...masterNames, ...shiftOnlyNames];
 
     // 並び順キャッシュがあれば使用、なければソートしてキャッシュ
