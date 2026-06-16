@@ -7727,36 +7727,50 @@ let _editSalesMenus = []; // コースマスタキャッシュ
 let _editDynamicOptions = []; // 管理者売上編集モーダル用オプションマスタ
 
 // 給料計算キャッシュが未設定の場合にDBから取得する（給料計算ページを開かなくても固定バックが反映される）
+// 成功時 true / 失敗時 false を返す（呼び出し側で警告表示できるようにする）
 async function _ensurePayrollCache() {
-  if (window._cachedStoreSettings && window._payrollMenuByMin && window._payrollMenuBackMap) return;
-  const [settingsRes, therapistRes, menuRes] = await Promise.all([
-    _sb.from('store_settings').select('*').eq('store_id', STORE_ID).single(),
-    _sb.from('therapists').select('id,name,course_back,option_back,discount_mode,parking_fee').eq('store_id', STORE_ID).eq('active', true),
-    _sb.from('menus').select('id,name,duration_min,type').eq('store_id', STORE_ID).eq('active', true)
-  ]);
-  window._cachedStoreSettings = settingsRes.data || {};
-  const menuByMin = {};
-  (menuRes.data || []).forEach(m => {
-    if (m.type === 'course' && m.duration_min) menuByMin[m.duration_min] = m.id;
-  });
-  window._payrollMenuByMin = menuByMin;
-  const therapistIds = (therapistRes.data || []).map(t => t.id).filter(Boolean);
-  let menuBackMap = {};
-  if (therapistIds.length) {
-    const { data: backs } = await _sb.from('therapist_menu_backs')
-      .select('*').eq('store_id', STORE_ID).in('therapist_id', therapistIds);
-    (backs || []).forEach(b => {
-      menuBackMap[b.therapist_id + '_' + b.menu_id] = {
-        other:     b.back_amount,
-        honshimei: b.back_amount_honshimei
-      };
+  if (window._cachedStoreSettings && window._payrollMenuByMin && window._payrollMenuBackMap) return true;
+  try {
+    const [settingsRes, therapistRes, menuRes] = await Promise.all([
+      _sb.from('store_settings').select('*').eq('store_id', STORE_ID).single(),
+      _sb.from('therapists').select('id,name,course_back,option_back,discount_mode,parking_fee').eq('store_id', STORE_ID).eq('active', true),
+      _sb.from('menus').select('id,name,duration_min,type').eq('store_id', STORE_ID).eq('active', true)
+    ]);
+    if (settingsRes.error || therapistRes.error || menuRes.error) {
+      throw new Error((settingsRes.error || therapistRes.error || menuRes.error).message);
+    }
+    const menuByMin = {};
+    (menuRes.data || []).forEach(m => {
+      if (m.type === 'course' && m.duration_min) menuByMin[m.duration_min] = m.id;
     });
+    const therapistIds = (therapistRes.data || []).map(t => t.id).filter(Boolean);
+    let menuBackMap = {};
+    if (therapistIds.length) {
+      const { data: backs, error: backsErr } = await _sb.from('therapist_menu_backs')
+        .select('*').eq('store_id', STORE_ID).in('therapist_id', therapistIds);
+      if (backsErr) throw new Error(backsErr.message);
+      (backs || []).forEach(b => {
+        menuBackMap[b.therapist_id + '_' + b.menu_id] = {
+          other:     b.back_amount,
+          honshimei: b.back_amount_honshimei
+        };
+      });
+    }
+    // 全件成功した場合のみグローバルへ反映（部分的な不整合キャッシュを残さない）
+    window._cachedStoreSettings = settingsRes.data || {};
+    window._payrollMenuByMin    = menuByMin;
+    window._payrollMenuBackMap  = menuBackMap;
+    return true;
+  } catch(e) {
+    console.warn('[_ensurePayrollCache] 給料計算キャッシュの取得に失敗:', e);
+    return false;
   }
-  window._payrollMenuBackMap = menuBackMap;
 }
 
 async function openSalesEditModal(rowId, customer, datetime, course, price, discount, nomination, optionPrice, memo) {
-  await _ensurePayrollCache();
+  const cacheOk = await _ensurePayrollCache();
+  const warnEl = document.getElementById('sales-edit-cache-warning');
+  if (warnEl) warnEl.style.display = cacheOk ? 'none' : '';
   _editSalesRow = rowId;
   document.getElementById('sales-edit-customer').textContent = customer + '様　' + datetime;
   document.getElementById('sales-edit-nomination').value = nomination;
@@ -12417,6 +12431,42 @@ function _selectCancelReason(val) {
 
 // キャンセル実行
 async function confirmCancelResv() {
+  // セラピスト側 姫予約承認前キャンセルパス
+  if (window._cancelHimePendingData) {
+    const hd = window._cancelHimePendingData;
+    window._cancelHimePendingData = null;
+    const radio = document.querySelector('input[name="cancel-reason-radio"]:checked');
+    if (!radio) { alert('キャンセル理由を選択してください'); return; }
+    const reason = radio.value;
+    const memo   = (document.getElementById('cancel-resv-memo').value || '').trim();
+    const reasonLabel = { customer: 'お客様都合', therapist: 'セラピスト都合', other: 'その他' }[reason];
+    _hideModal('cancel-resv-modal');
+    try {
+      showOverlay();
+      await apiGet('cancelReservation', { row: hd.row, reason });
+      if (reason === 'customer' && (hd.customerNo || hd.tel)) {
+        await apiGet('recordCancellation', { customerNo: hd.customerNo, tel: hd.tel || '' });
+      }
+      const settings = await apiGet('getStoreSettings');
+      const storeName = settings.store_line_name || '';
+      if (storeName) {
+        const tAll = await apiGet('getTherapists');
+        const storeT = tAll.find(t => t.name === storeName);
+        if (storeT && storeT.userId) {
+          const msg = '【姫予約キャンセル】\n' + hd.date +
+            '\nコース: ' + hd.course + '分\nお客様: ' + (hd.customer || '') +
+            '\n担当: ' + (hd.therapist || '') + '\n理由: ' + reasonLabel +
+            (memo ? '\nメモ: ' + memo : '') + '\nのご予約がキャンセルになりました。';
+          await apiGet('sendLineMessage', { userId: storeT.userId, message: msg });
+        }
+      }
+      showToast('キャンセルしました');
+      initMyReservations();
+    } catch(e) { alert('エラー: ' + e.message); }
+    finally { hideOverlay(); }
+    return;
+  }
+
   const idx = window._cancelResvIdx;
   const r = (window._resvTableData || [])[idx];
   if (!r) return;
@@ -12456,6 +12506,126 @@ async function confirmCancelResv() {
     }
     showToast('キャンセルしました');
     loadReservations();
+  } catch(e) { alert('エラー: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
+function cancelMyHimePending(resvId) {
+  const r = (window._myResvData || []).find(x => x.row === resvId);
+  if (!r) return;
+  window._cancelHimePendingData = r;
+  document.getElementById('cancel-resv-info').textContent =
+    r.date + '　' + r.therapist + '　' + r.customer + '　' + r.course + '分';
+  _selectCancelReason('customer');
+  document.getElementById('cancel-resv-memo').value = '';
+  _showModal('cancel-resv-modal');
+}
+
+async function openEditMyHimePending(resvId) {
+  try {
+    showOverlay();
+    const { data: resv, error } = await _sb.from('reservations').select('*').eq('id', resvId).single();
+    hideOverlay();
+    if (error || !resv) { alert('予約データの取得に失敗しました'); return; }
+    window._editHimePendingData = resv;
+    const fmtResult = _fmtDatetimeJp(resv.date);
+    const fmtParts  = fmtResult.split(' ');
+    const datePart  = (fmtParts[0] || '').replace(/\//g, '-');
+    const timePart  = fmtParts[1] || '10:00';
+    document.getElementById('hpe-info').textContent = (resv.therapist_name || '') + '　' + (resv.customer_name || '');
+    document.getElementById('hpe-date').value = datePart;
+    const hpTimeSel = document.getElementById('hpe-time');
+    if (hpTimeSel && !hpTimeSel.dataset.init) {
+      const opts = [];
+      for (let h = 9; h <= 27; h++) {
+        for (let m = 0; m < 60; m += 5) {
+          opts.push('<option value="' + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + '">'
+            + String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + '</option>');
+        }
+      }
+      hpTimeSel.innerHTML = opts.join('');
+      hpTimeSel.dataset.init = '1';
+    }
+    if (hpTimeSel) {
+      const [hStr, mStr] = timePart.split(':');
+      const hNum = parseInt(hStr);
+      const mNum = Math.round(parseInt(mStr) / 5) * 5 % 60;
+      hpTimeSel.value = String(hNum).padStart(2,'0') + ':' + String(mNum).padStart(2,'0');
+    }
+    const courseSel = document.getElementById('hpe-course');
+    const courseVal = String(resv.course_min || 60);
+    if (['60','90','120','150','180'].includes(courseVal)) {
+      courseSel.value = courseVal;
+      document.getElementById('hpe-custom-min').style.display = 'none';
+    } else {
+      courseSel.value = 'custom';
+      document.getElementById('hpe-custom-min').style.display = '';
+      document.getElementById('hpe-custom-min').value = courseVal;
+    }
+    document.getElementById('hpe-discount').value = resv.discount || 0;
+    _showModal('modal-hime-pending-edit');
+  } catch(e) { hideOverlay(); alert('エラー: ' + e.message); }
+}
+
+async function submitHimePendingEdit() {
+  const resv = window._editHimePendingData;
+  if (!resv) return;
+  const datePart = document.getElementById('hpe-date').value;
+  const timeVal  = document.getElementById('hpe-time').value;
+  if (!datePart || !timeVal) { alert('日付・時刻を入力してください'); return; }
+  const [hStr, mStr] = timeVal.split(':');
+  const h = parseInt(hStr);
+  const m = parseInt(mStr);
+  const p = n => String(n).padStart(2,'0');
+  let dateVal;
+  if (h >= 24) {
+    const base = new Date(datePart + 'T00:00:00');
+    base.setDate(base.getDate() + 1);
+    base.setHours(h - 24, m, 0, 0);
+    dateVal = base.getFullYear() + '-' + p(base.getMonth()+1) + '-' + p(base.getDate()) + 'T' + p(base.getHours()) + ':' + p(base.getMinutes());
+  } else {
+    dateVal = datePart + 'T' + timeVal;
+  }
+  const courseSel = document.getElementById('hpe-course');
+  const mins = courseSel.value === 'custom'
+    ? parseInt(document.getElementById('hpe-custom-min').value) || 0
+    : parseInt(courseSel.value) || 60;
+  if (!mins) { alert('コースを選択してください'); return; }
+  const discount = parseInt(document.getElementById('hpe-discount').value) || 0;
+  _hideModal('modal-hime-pending-edit');
+  try {
+    showOverlay();
+    await apiGet('updateReservation', {
+      row:           resv.id,
+      date:          dateVal,
+      therapist:     resv.therapist_name || '',
+      course:        String(mins),
+      customer:      resv.customer_name || '',
+      customerNo:    resv.customer_no || '',
+      tel:           resv.customer_tel || '',
+      price:         Number(resv.price || 0),
+      coursePrice:   Number(resv.course_price || resv.price || 0),
+      optionPrice:   Number(resv.option_price || 0),
+      nominationFee: Number(resv.nomination_fee || 0),
+      discount,
+      nomination:    resv.nomination || 'free',
+      memo:          resv.memo || ''
+    });
+    const settings = await apiGet('getStoreSettings');
+    const storeName = settings.store_line_name || '';
+    if (storeName) {
+      const tAll = await apiGet('getTherapists');
+      const storeT = tAll.find(t => t.name === storeName);
+      if (storeT && storeT.userId) {
+        const fmtDate = _fmtLocalDatetimeJp(dateVal);
+        const msg = '【姫予約変更】\n担当: ' + (resv.therapist_name || '') +
+          '\nお客様: ' + (resv.customer_name || '') +
+          '\n変更後日時: ' + fmtDate + '\nコース: ' + mins + '分';
+        await apiGet('sendLineMessage', { userId: storeT.userId, message: msg });
+      }
+    }
+    showToast('予約を変更しました');
+    initMyReservations();
   } catch(e) { alert('エラー: ' + e.message); }
   finally { hideOverlay(); }
 }
@@ -13258,7 +13428,11 @@ function renderMyReservations(el, data) {
               ${r.therapistConfirmed ? 'disabled' : ''}>
               ${r.therapistConfirmed ? '✅ 確認済み' : '✅ 予約を確認しました'}
             </button>
-            ` : `<div style="font-size:12px;color:#db2777;text-align:center;width:100%;padding:4px 0">管理者の承認後に確定されます</div>`}
+            ` : `<div style="font-size:12px;color:#db2777;text-align:center;width:100%;padding:4px 0;margin-bottom:6px">管理者の承認後に確定されます</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-secondary btn-sm" style="flex:1" data-row="${r.row}" onclick="event.stopPropagation();openEditMyHimePending(this.dataset.row)">✏️ 変更</button>
+              <button class="btn btn-danger btn-sm" style="flex:1" data-row="${r.row}" onclick="event.stopPropagation();cancelMyHimePending(this.dataset.row)">キャンセル</button>
+            </div>`}
           </div>
         </div>`;
         }).join('')}
@@ -13272,7 +13446,7 @@ async function confirmAllReservations() {
     !r.therapistConfirmed && r.status !== 'cancelled' && !(r.isHime && !r.isHimeApproved)
   );
   if (!targets.length) return;
-  if (!confirm(targets.length + '件の予約をまとめて確認しますか？')) return;
+  if (!await _confirm(targets.length + '件の予約をまとめて確認しますか？', '確認する', 'やめる')) return;
   try {
     showOverlay();
     // 全件DB更新
@@ -14180,6 +14354,51 @@ async function submitHimeReservation() {
     // 申請セラピスト情報
     const therapistName = loggedInTherapist;
 
+    // 重複チェック（27時ルール対応・承認待ち姫予約や既存予約との衝突を申請時点で検出）
+    {
+      const dtH = new Date(dateVal);
+      const npH = n => String(n).padStart(2,'0');
+      const dateStrH = dtH.getFullYear() + '-' + npH(dtH.getMonth()+1) + '-' + npH(dtH.getDate());
+      const nextDtH = new Date(dtH); nextDtH.setDate(nextDtH.getDate() + 1);
+      const nextStrH = nextDtH.getFullYear() + '-' + npH(nextDtH.getMonth()+1) + '-' + npH(nextDtH.getDate());
+      const [resvTodayH, resvNextH] = await Promise.all([
+        apiGet('getReservations', { date: dateStrH }),
+        apiGet('getReservations', { date: nextStrH })
+      ]);
+      let intervalH = (therapists.find(t => t.name === therapistName) || {}).interval;
+      if (intervalH === undefined || intervalH === null) {
+        try { intervalH = await apiGet('getTherapistInterval', { name: therapistName }); }
+        catch(eIv) { intervalH = 30; }
+      }
+      if (intervalH === undefined || intervalH === null) intervalH = 30;
+      const dtMsH    = dtH.getTime();
+      const newEndMsH = dtMsH + (mins + intervalH) * 60000;
+      const conflictH = [...resvTodayH, ...resvNextH].find(r => {
+        if (r.therapist !== therapistName) return false;
+        if (r.status === 'cancelled') return false;
+        const rParts = (r.date || '').split(' ');
+        const rDP = (rParts[0] || '').replace(/\//g, '-');
+        const [rH, rM] = (rParts[1] || '00:00').split(':').map(Number);
+        let rDt;
+        if (rH >= 24) {
+          rDt = new Date(rDP + 'T00:00:00'); rDt.setDate(rDt.getDate() + 1); rDt.setHours(rH - 24, rM, 0, 0);
+        } else {
+          rDt = new Date(rDP + 'T' + npH(rH) + ':' + npH(rM) + ':00');
+        }
+        const rEndMs = rDt.getTime() + (Number(r.course) + intervalH) * 60000;
+        return dtMsH < rEndMs && newEndMsH > rDt.getTime();
+      });
+      if (conflictH) {
+        hideOverlay();
+        const proceed = await _confirm(
+          '⚠ ' + therapistName + ' さんの予約と時間が重複しています。\n既存: ' + conflictH.date + ' ' + conflictH.course + '分コース\n（インターバル' + intervalH + '分含む）\n\nこのまま申請しますか？',
+          '申請する', 'やめる'
+        );
+        if (!proceed) return;
+        showOverlay();
+      }
+    }
+
     // コース料金をメニューマスタのdata-priceから取得
     const nomFee = getNominationFee(therapistName, nomination);
     const himeCourseEl = document.getElementById('hime-course');
@@ -14369,7 +14588,7 @@ async function confirmHimeApprove() {
       const newEndMs3 = dtMs3 + mins3 * 60000;
       let interval3 = (therapists.find(t => t.name === resvFull.therapist_name) || {}).interval;
       if (interval3 === undefined || interval3 === null) {
-        try { const iv3 = await apiGet('getTherapistInterval', { therapist: resvFull.therapist_name }); interval3 = iv3 ?? 30; }
+        try { const iv3 = await apiGet('getTherapistInterval', { name: resvFull.therapist_name }); interval3 = iv3 ?? 30; }
         catch(e3iv) { interval3 = 30; }
       }
       // 姫予約の占有終了（コース＋インターバル）
@@ -16350,6 +16569,7 @@ window.addEventListener('DOMContentLoaded', init);
   <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:460px;padding:20px;max-height:92vh;overflow-y:auto">
     <div style="font-size:16px;font-weight:700;margin-bottom:4px">✏️ 売上編集</div>
     <div id="sales-edit-customer" style="font-size:13px;color:var(--muted);margin-bottom:14px"></div>
+    <div id="sales-edit-cache-warning" style="display:none;font-size:12px;color:#92400e;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:8px 10px;margin-bottom:12px">⚠ 固定バック・店舗設定の読み込みに失敗しました。給料プレビューが不正確な可能性があります。保存前に給料計算ページを開いて再確認してください。</div>
 
     <!-- コース選択（マスタから） -->
     <div class="grid2">
@@ -16571,6 +16791,42 @@ window.addEventListener('DOMContentLoaded', init);
     <div style="display:flex;gap:8px">
       <button class="btn btn-danger" style="flex:1" onclick="confirmCancelResv()">キャンセルを実行</button>
       <button class="btn btn-secondary" onclick="_hideModal('cancel-resv-modal')">戻る</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 姫予約変更モーダル（セラピスト用・承認前） ===== -->
+<div id="modal-hime-pending-edit" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.55);z-index:9700;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:420px;padding:20px;margin:auto">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">✏️ 姫予約変更</div>
+    <div id="hpe-info" style="font-size:13px;color:var(--muted);margin-bottom:16px"></div>
+    <div class="form-group">
+      <label>日付</label>
+      <input type="date" id="hpe-date" style="width:100%">
+    </div>
+    <div class="form-group">
+      <label>時刻</label>
+      <select id="hpe-time" style="width:100%"></select>
+    </div>
+    <div class="form-group">
+      <label>コース</label>
+      <select id="hpe-course" style="width:100%" onchange="document.getElementById('hpe-custom-min').style.display=this.value==='custom'?'':'none'">
+        <option value="60">60分</option>
+        <option value="90">90分</option>
+        <option value="120">120分</option>
+        <option value="150">150分</option>
+        <option value="180">180分</option>
+        <option value="custom">カスタム</option>
+      </select>
+      <input type="number" id="hpe-custom-min" placeholder="分数を入力" style="width:100%;margin-top:6px;display:none">
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>割引（円）</label>
+      <input type="number" id="hpe-discount" value="0" min="0" style="width:100%">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="submitHimePendingEdit()">変更を保存</button>
+      <button class="btn btn-secondary" onclick="_hideModal('modal-hime-pending-edit')">戻る</button>
     </div>
   </div>
 </div>

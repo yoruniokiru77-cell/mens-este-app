@@ -483,6 +483,28 @@ HH:MM XX分 給料¥XX,XXX 店落¥XX,XXX
 | 11 | cash.html 売上・給料表示を廃止し店落ちのみ表示に統一 |
 | 12 | payroll_confirmations の period フォーマット不一致バグ修正（`"M/D"` → `"YYYY/MM/DD"`） |
 | 13 | `store_drop: storeNum \|\| null` を `store_drop: storeNum` に修正（¥0を正常保存） |
+| 14 | 姫予約承認前にセラピスト側でキャンセル・変更できる機能追加（`cancelMyHimePending` / `openEditMyHimePending` / `submitHimePendingEdit`） |
+| 15 | `confirmAllReservations` の `confirm()` を `_confirm()` に置換（LINE WebViewで「まとめて確認」が動かないバグ修正） |
+| 16 | `_ensurePayrollCache` 堅牢化（DB失敗時に例外を投げず `false` を返す・全件成功時のみグローバル反映）＋ 売上編集モーダルにキャッシュ取得失敗の警告バナー追加 |
+| 17 | 姫予約承認時のinterval取得バグ修正（`getTherapistInterval` の引数 `{therapist}` → `{name}`・従来は常に30フォールバック） |
+| 18 | 姫予約申請時（`submitHimeReservation`）に重複チェックを追加（承認待ち姫予約・既存予約との衝突を `_confirm` で警告） |
+
+### セッション23 追加修正の重要メモ
+
+#### LINE WebView での `confirm()` 禁止（再確認）
+セラピスト側（LINE WebViewで動く）の関数では `confirm()` は常に false を返すため**必ず `await _confirm(msg, okLabel, cancelLabel)` を使う**。管理者側（通常ブラウザ）は `confirm()` のままで可。
+
+#### `getTherapistInterval` の引数は `{ name }`
+APIケースは `params.name` を読む。`{ therapist: ... }` を渡すと undefined になり**常にデフォルト30分にフォールバック**する。`submitReservation` / `updateResvRow` は `{ name }` で正しい。
+
+#### 姫予約の重複チェック3経路（不変条件）
+- 申請時（`submitHimeReservation`・セラピスト）: `_confirm` で警告（セッション23で追加）
+- 承認時（`confirmHimeApprove`・管理者）: `confirm` で警告（既存）
+- 通常予約登録時（`submitReservation`）: 承認待ち姫予約（status='active'）を**含めて**チェック済み
+- いずれも除外条件は `status === 'cancelled'` のみ。承認待ち姫予約は除外しないこと。
+
+#### 売上編集の給料キャッシュ
+`openSalesEditModal` は `_ensurePayrollCache()` を `await` し、戻り値が `false`（DB取得失敗）の場合は `sales-edit-cache-warning` バナーを表示する。`_calcPayroll` のプレビューが不正確になりうるため、管理者に再確認を促す。
 
 ### セッション23 重要仕様
 
