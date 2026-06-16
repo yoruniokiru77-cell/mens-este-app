@@ -207,13 +207,13 @@ tr:last-child td { border-bottom: none; }
         </div>
       </div>
 
-      <!-- 本日の売上・給料（自動取込） -->
-      <div class="summary-grid" id="closing-summary">
-        <div class="summary-card" id="cs-sales-card">
+      <!-- 店落ち -->
+      <div class="summary-grid" id="closing-summary" style="grid-template-columns:1fr">
+        <div class="summary-card" id="cs-sales-card" style="display:none">
           <div class="lbl">本日の売上</div>
           <div class="val" id="cs-sales" style="color:var(--accent2)">-</div>
         </div>
-        <div class="summary-card" id="cs-pay-card">
+        <div class="summary-card" id="cs-pay-card" style="display:none">
           <div class="lbl">給料</div>
           <div class="val" id="cs-pay" style="color:var(--success)">-</div>
         </div>
@@ -226,11 +226,11 @@ tr:last-child td { border-bottom: none; }
       <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px">
         <div style="margin-bottom:6px;color:var(--muted)">計算式</div>
         <div>出勤時残高 <strong id="calc-opening">-</strong></div>
-        <div id="calc-sales-row"><span id="calc-sales-label">＋ 売上 </span><strong id="calc-sales">-</strong></div>
-        <div id="calc-total-row" style="border-top:1px solid var(--border);margin:6px 0;padding-top:6px">
+        <div id="calc-sales-row"><span id="calc-sales-label">＋ 店落ち </span><strong id="calc-sales">-</strong></div>
+        <div id="calc-total-row" style="display:none;border-top:1px solid var(--border);margin:6px 0;padding-top:6px">
           ＝ 合計 <strong id="calc-total" style="color:var(--accent2)">-</strong>
         </div>
-        <div id="calc-pay-row">− 給料 <strong id="calc-pay">-</strong></div>
+        <div id="calc-pay-row" style="display:none">− 給料 <strong id="calc-pay">-</strong></div>
         <div style="border-top:1px solid var(--border);margin:6px 0;padding-top:6px">
           ＝ <span id="calc-expected-label">残すべき金額</span> <strong id="calc-expected" style="color:var(--accent)">-</strong>
         </div>
@@ -751,9 +751,7 @@ async function loadClosingData(log) {
       totalDrop  += saleTotal - pay;
     });
 
-    document.getElementById('cs-sales').textContent = '¥' + totalSales.toLocaleString();
-    document.getElementById('cs-pay').textContent   = '¥' + totalPay.toLocaleString();
-    document.getElementById('cs-drop').textContent  = '¥' + totalDrop.toLocaleString();
+    document.getElementById('cs-drop').textContent = '¥' + Math.round(totalDrop).toLocaleString();
 
     // Supabaseに売上・給料を更新
     await _sb.from('cash_logs').update({
@@ -762,15 +760,12 @@ async function loadClosingData(log) {
       store_drop:     Math.round(totalDrop)
     }).eq('id', _currentLogId);
 
-    // 計算式表示
-    const opening = log.opening_balance;
-    const total   = opening + Math.round(totalSales);
-    const expected = total - Math.round(totalPay);
+    // 計算式表示（店落ちのみ）
+    const opening  = log.opening_balance;
+    const expected = opening + Math.round(totalDrop);
 
     document.getElementById('calc-opening').textContent  = '¥' + opening.toLocaleString();
-    document.getElementById('calc-sales').textContent    = '¥' + Math.round(totalSales).toLocaleString();
-    document.getElementById('calc-total').textContent    = '¥' + total.toLocaleString();
-    document.getElementById('calc-pay').textContent      = '¥' + Math.round(totalPay).toLocaleString();
+    document.getElementById('calc-sales').textContent    = '¥' + Math.round(totalDrop).toLocaleString();
     document.getElementById('calc-expected').textContent = '¥' + expected.toLocaleString();
 
   } catch(e) {
@@ -894,7 +889,7 @@ async function loadDashboard() {
     }
 
     el.innerHTML = data.map(log => {
-      const expected  = log.opening_balance + log.sales_amount - log.therapist_pay;
+      const expected  = log.opening_balance + (log.store_drop || 0);
       const diff      = log.status === 'closed' ? log.closing_balance - expected : null;
       const diffClass = diff === 0 ? 'diff-ok' : 'diff-ng';
       const diffSign  = diff !== null && diff > 0 ? '+' : '';
@@ -913,18 +908,14 @@ async function loadDashboard() {
             <button class="btn btn-secondary btn-sm" style="font-size:10px;padding:3px 8px;min-height:0" onclick="openReplenishModal('${log.id}','${log.room_name}')">💴 釣銭補充</button>
           </div>
         </div>
-        <div class="summary-grid" style="margin-bottom:10px">
+        <div class="summary-grid" style="margin-bottom:10px;grid-template-columns:1fr 1fr">
           <div class="summary-card">
             <div class="lbl">出勤時残高</div>
             <div class="val">¥${log.opening_balance.toLocaleString()}</div>
           </div>
           <div class="summary-card">
-            <div class="lbl">売上</div>
-            <div class="val" style="color:var(--accent2)">¥${log.sales_amount.toLocaleString()}</div>
-          </div>
-          <div class="summary-card">
-            <div class="lbl">給料</div>
-            <div class="val" style="color:var(--success)">¥${log.therapist_pay.toLocaleString()}</div>
+            <div class="lbl">店落ち</div>
+            <div class="val" style="color:var(--muted)">¥${(log.store_drop||0).toLocaleString()}</div>
           </div>
         </div>
         ${log.status === 'closed' ? `
@@ -977,19 +968,18 @@ async function loadAdminHistory() {
 
     el.innerHTML = `<div class="table-wrap"><table>
       <thead><tr>
-        <th>日付</th><th>ルーム</th><th>担当</th><th>売上</th><th>給料</th><th>差異</th><th>繰越</th><th>状態</th>
+        <th>日付</th><th>ルーム</th><th>担当</th><th>店落ち</th><th>差異</th><th>繰越</th><th>状態</th>
       </tr></thead>
       <tbody>
         ${data.map(log => {
-          const expected = log.opening_balance + log.sales_amount - log.therapist_pay;
+          const expected = log.opening_balance + (log.store_drop || 0);
           const diff = log.status === 'closed' ? log.closing_balance - expected : null;
           const diffStr = diff === null ? '-' : (diff === 0 ? '<span class="diff-ok">±0</span>' : `<span class="diff-ng">${diff > 0 ? '+' : ''}¥${diff.toLocaleString()}</span>`);
           return `<tr>
             <td style="white-space:nowrap">${log.work_date}</td>
             <td>${log.room_name}</td>
             <td style="font-size:12px">${log.therapist_name || '-'}</td>
-            <td>¥${log.sales_amount.toLocaleString()}</td>
-            <td style="color:var(--success)">¥${log.therapist_pay.toLocaleString()}</td>
+            <td>¥${(log.store_drop||0).toLocaleString()}</td>
             <td>${diffStr}</td>
             <td style="color:var(--success)">¥${log.carry_over.toLocaleString()}</td>
             <td>${log.status === 'closed' ? '<span class="badge badge-closed">精算済</span>' : '<span class="badge badge-open">出勤中</span>'}</td>
