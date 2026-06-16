@@ -1291,8 +1291,8 @@ const _STORE_ID_TO_CODE = {
 };
 
 function goBackToAdmin() {
-  const code = _STORE_ID_TO_CODE[STORE_ID];
-  const url = code ? '/?store=' + code : '/';
+  const DEFAULT_ID = '11111111-0000-0000-0000-000000000001';
+  const url = STORE_ID === DEFAULT_ID ? '/' : '/?store=' + STORE_ID;
   location.href = url;
 }
 
