@@ -655,7 +655,7 @@ async function loadClosingData(log) {
     document.getElementById('calc-expected-label').textContent = '残すべき釣銭';
     try {
       const [y, m, d] = today.split('-');
-      const period = Number(m) + '/' + Number(d);
+      const period = y + '/' + m + '/' + d;
       const { data: conf } = await _sb.from('payroll_confirmations')
         .select('store_drop')
         .eq('store_id', STORE_ID)
