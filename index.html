@@ -2074,13 +2074,30 @@ const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 const DEFAULT_STORE_ID = '11111111-0000-0000-0000-000000000001';
 
 // 店舗コード → store_id 対応表
+// ブランド名・地名・番号のいずれでもアクセス可能（後方互換のためUUID直指定も維持）
 const STORE_CODE_MAP = {
+  // ブランド名（既存）
   'herroom':   '11111111-0000-0000-0000-000000000001',
   'remens':    '22222222-0000-0000-0000-000000000002',
   'premium':   '33333333-0000-0000-0000-000000000003',
-  'neverland': '44444444-0000-0000-0000-000000000004'
+  'neverland': '44444444-0000-0000-0000-000000000004',
+  // 地名エイリアス
+  'iwaki':     '11111111-0000-0000-0000-000000000001',
+  'mito':      '22222222-0000-0000-0000-000000000002',
+  'kamisu':    '33333333-0000-0000-0000-000000000003',
+  // 番号エイリアス（?store=4 / ?s=4 でも可）
+  '1':         '11111111-0000-0000-0000-000000000001',
+  '2':         '22222222-0000-0000-0000-000000000002',
+  '3':         '33333333-0000-0000-0000-000000000003',
+  '4':         '44444444-0000-0000-0000-000000000004'
 };
-const STORE_ID_TO_CODE = Object.fromEntries(Object.entries(STORE_CODE_MAP).map(([k,v]) => [v,k]));
+// store_id → 代表コード（地名を優先・UUID重複は後勝ちを避けるため明示マップ）
+const STORE_ID_TO_CODE = {
+  '11111111-0000-0000-0000-000000000001': 'iwaki',
+  '22222222-0000-0000-0000-000000000002': 'mito',
+  '33333333-0000-0000-0000-000000000003': 'kamisu',
+  '44444444-0000-0000-0000-000000000004': 'neverland'
+};
 
 // ============================================================
 // シフト自動連携 VPS 設定
@@ -2111,6 +2128,29 @@ const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 // 現在の店舗ID（URLパラメータで上書き）
 const _storeParam = new URLSearchParams(location.search).get('store') || new URLSearchParams(location.search).get('s') || '';
 let STORE_ID = STORE_CODE_MAP[_storeParam] || _storeParam || DEFAULT_STORE_ID;
+
+// ============================================================
+// 操作ログ記録（operation_logs テーブルへ保存・閲覧UIは後日）
+// 記録失敗は本処理を絶対に止めない（必ずtry/catchで握りつぶす）
+//   action     : 'reservation_update' | 'reservation_cancel' | 'hime_approve' | 'hime_cancel' | 'hime_edit' | 'reservation_create' 等
+//   targetId   : 対象の reservation id
+//   detail     : 任意の詳細オブジェクト（変更内容・理由など）
+// ============================================================
+async function _logOperation(action, targetId, detail) {
+  try {
+    await _sb.from('operation_logs').insert({
+      store_id:    STORE_ID,
+      actor:       (typeof isAdminMode !== 'undefined' && isAdminMode) ? '管理者' : (loggedInTherapist || ''),
+      actor_role:  (typeof isAdminMode !== 'undefined' && isAdminMode) ? 'admin' : 'therapist',
+      action:      action,
+      target_type: 'reservation',
+      target_id:   targetId ? String(targetId) : null,
+      detail:      detail || null
+    });
+  } catch(e) {
+    console.warn('[_logOperation] 記録失敗（本処理には影響なし）:', action, e);
+  }
+}
 
 // ============================================================
 // 定数（Supabaseのstore_settingsで上書きされる）
@@ -12214,6 +12254,10 @@ async function updateResvRow() {
   try {
     showOverlay();
     await apiGet('updateReservation', params);
+    _logOperation('reservation_update', row, {
+      therapist: therapistName, date: dateVal, course: mins,
+      customer: customerName, discount, nomination
+    });
 
     // LINE通知
     if (sendNotify && t && t.userId) {
@@ -12444,6 +12488,7 @@ async function confirmCancelResv() {
     try {
       showOverlay();
       await apiGet('cancelReservation', { row: hd.row, reason });
+      _logOperation('hime_cancel', hd.row, { reason, memo, therapist: hd.therapist, customer: hd.customer, date: hd.date });
       if (reason === 'customer' && (hd.customerNo || hd.tel)) {
         await apiGet('recordCancellation', { customerNo: hd.customerNo, tel: hd.tel || '' });
       }
@@ -12487,6 +12532,7 @@ async function confirmCancelResv() {
 
     // ステータスをキャンセルに更新（理由付き）
     await apiGet('cancelReservation', { row: r.row, reason });
+    _logOperation('reservation_cancel', r.row, { reason, memo, therapist: r.therapist, customer: r.customer, date: r.date });
 
     // 顧客マスタのキャンセル回数を更新（お客様都合のみ）
     if (reason === 'customer' && (r.customerNo || r.tel)) {
@@ -12611,6 +12657,7 @@ async function submitHimePendingEdit() {
       nomination:    resv.nomination || 'free',
       memo:          resv.memo || ''
     });
+    _logOperation('hime_edit', resv.id, { therapist: resv.therapist_name, customer: resv.customer_name, date: dateVal, course: mins, discount });
     const settings = await apiGet('getStoreSettings');
     const storeName = settings.store_line_name || '';
     if (storeName) {
@@ -12835,7 +12882,7 @@ async function submitReservation() {
     }
 
     await saveCustomerIfNeeded();
-    await apiGet('addReservation', {
+    const addedResv = await apiGet('addReservation', {
       date:         dateVal,
       therapist:    therapistName,
       course:       String(mins),
@@ -12849,6 +12896,7 @@ async function submitReservation() {
       nomination,
       memo
     });
+    _logOperation('reservation_create', null, { therapist: therapistName, date: dateVal, course: mins, customer: customerName, nomination });
 
     // 予約完了モーダル表示
     await showResvCompleteModal({ therapistName, dateVal, mins, coursePrice, nomFee, nomination, customerName, customerNo, myShift });
@@ -14429,6 +14477,7 @@ async function submitHimeReservation() {
     const { data: inserted, error } = await _sb.from('reservations').insert(insertData).select().single();
 
     if (error) throw new Error(error.message);
+    _logOperation('hime_create', inserted ? inserted.id : null, { therapist: therapistName, customer: custName, date: dateVal, course: mins });
 
     // 店舗LINEに通知
     await _sendHimeRequestLine(therapistName, dateVal, mins, custName, custTel, memo);
@@ -14701,6 +14750,7 @@ async function confirmHimeApprove() {
 
     const { error } = await _sb.from('reservations').update(updateData).eq('id', resvId);
     if (error) throw new Error(error.message);
+    _logOperation('hime_approve', resvId, { therapist: therapistName, customer: approvedCustName, nomination });
 
     // セラピストにLINE通知
     await _sendHimeApproveLineToTherapist(resvId);
