@@ -5357,8 +5357,8 @@ async function sendPayrollLine(uid, name, dateLabel) {
   }
 
   // 店落ち・繰越・合計請求
+  const storeNum = parseInt(store.replace(/[^0-9-]/g,'')) || 0;
   if (sendStore) {
-    const storeNum = parseInt(store.replace(/[^0-9-]/g,'')) || 0;
     const bal      = _storeDropBalances[name] || 0;
     const tInfoLine = therapists.find(th => th.name === name);
     message += '\n店落ち：' + store;
@@ -5426,7 +5426,8 @@ async function sendPayrollLine(uid, name, dateLabel) {
       therapist_name: name,
       period: dateLabel,
       sent_at: new Date().toISOString(),
-      confirmed_at: null
+      confirmed_at: null,
+      store_drop: storeNum || null
     });
 
     // 雑費・宿泊費・その他をDBに保存（LINE送信時にupsert）

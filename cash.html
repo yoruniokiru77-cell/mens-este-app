@@ -208,16 +208,16 @@ tr:last-child td { border-bottom: none; }
 
       <!-- 本日の売上・給料（自動取込） -->
       <div class="summary-grid" id="closing-summary">
-        <div class="summary-card">
+        <div class="summary-card" id="cs-sales-card">
           <div class="lbl">本日の売上</div>
           <div class="val" id="cs-sales" style="color:var(--accent2)">-</div>
         </div>
-        <div class="summary-card">
+        <div class="summary-card" id="cs-pay-card">
           <div class="lbl">給料</div>
           <div class="val" id="cs-pay" style="color:var(--success)">-</div>
         </div>
         <div class="summary-card">
-          <div class="lbl">店落ち</div>
+          <div class="lbl" id="lbl-cs-drop">店落ち</div>
           <div class="val" id="cs-drop" style="color:var(--muted)">-</div>
         </div>
       </div>
@@ -225,18 +225,18 @@ tr:last-child td { border-bottom: none; }
       <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px">
         <div style="margin-bottom:6px;color:var(--muted)">計算式</div>
         <div>出勤時残高 <strong id="calc-opening">-</strong></div>
-        <div>＋ 売上 <strong id="calc-sales">-</strong></div>
-        <div style="border-top:1px solid var(--border);margin:6px 0;padding-top:6px">
+        <div id="calc-sales-row"><span id="calc-sales-label">＋ 売上 </span><strong id="calc-sales">-</strong></div>
+        <div id="calc-total-row" style="border-top:1px solid var(--border);margin:6px 0;padding-top:6px">
           ＝ 合計 <strong id="calc-total" style="color:var(--accent2)">-</strong>
         </div>
-        <div>− 給料 <strong id="calc-pay">-</strong></div>
+        <div id="calc-pay-row">− 給料 <strong id="calc-pay">-</strong></div>
         <div style="border-top:1px solid var(--border);margin:6px 0;padding-top:6px">
-          ＝ 残すべき金額 <strong id="calc-expected" style="color:var(--accent)">-</strong>
+          ＝ <span id="calc-expected-label">残すべき金額</span> <strong id="calc-expected" style="color:var(--accent)">-</strong>
         </div>
       </div>
 
       <div class="form-group">
-        <label>退勤時の金庫残高（円）</label>
+        <label id="label-closing-balance">退勤時の金庫残高（円）</label>
         <input type="text" inputmode="numeric" id="closing-balance" placeholder="例: 43000"
           oninput="checkClosingDiff()">
       </div>
@@ -245,7 +245,7 @@ tr:last-child td { border-bottom: none; }
       <div id="closing-diff-wrap" style="display:none;border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:13px"></div>
 
       <div class="form-group">
-        <label>万札投函金額（円）</label>
+        <label id="label-deposit">万札投函金額（円）</label>
         <input type="text" inputmode="numeric" id="ten-thousand-deposit" placeholder="例: 30000"
           oninput="calcCarryOver()">
       </div>
@@ -595,11 +595,53 @@ async function submitOpening() {
 // ============================================================
 // 退勤時データ読み込み（売上・給料を自動取込）
 // ============================================================
+const NEVERLAND_STORE_ID_CASH = '44444444-0000-0000-0000-000000000004';
+
 async function loadClosingData(log) {
   document.getElementById('panel-opening').style.display = 'none';
   document.getElementById('panel-closing').style.display = '';
 
   const today = todayStr();
+
+  // NEVERLANDモード: payroll_confirmationsから店落ちを取得
+  if (STORE_ID === NEVERLAND_STORE_ID_CASH) {
+    document.getElementById('cs-sales-card').style.display = 'none';
+    document.getElementById('cs-pay-card').style.display = 'none';
+    document.getElementById('lbl-cs-drop').textContent = '店落ち（LINE送信額）';
+    document.getElementById('label-closing-balance').textContent = '退勤時の釣銭残高（円）';
+    document.getElementById('label-deposit').textContent = '投函額（回収される金額）（円）';
+    document.getElementById('calc-sales-label').textContent = '＋ 店落ち ';
+    document.getElementById('calc-total-row').style.display = 'none';
+    document.getElementById('calc-pay-row').style.display = 'none';
+    document.getElementById('calc-expected-label').textContent = '残すべき釣銭';
+    try {
+      const [y, m, d] = today.split('-');
+      const period = Number(m) + '/' + Number(d);
+      const { data: conf } = await _sb.from('payroll_confirmations')
+        .select('store_drop')
+        .eq('store_id', STORE_ID)
+        .eq('therapist_name', log.therapist_name)
+        .eq('period', period)
+        .maybeSingle();
+      const storeDrop = (conf && conf.store_drop != null) ? conf.store_drop : null;
+      const opening = log.opening_balance;
+      document.getElementById('cs-drop').textContent = storeDrop !== null ? '¥' + storeDrop.toLocaleString() : '未送信';
+      document.getElementById('calc-opening').textContent = '¥' + opening.toLocaleString();
+      if (storeDrop !== null) {
+        const expected = opening + storeDrop;
+        document.getElementById('calc-sales').textContent = '¥' + storeDrop.toLocaleString();
+        document.getElementById('calc-expected').textContent = '¥' + expected.toLocaleString();
+        await _sb.from('cash_logs').update({ store_drop: storeDrop }).eq('id', _currentLogId);
+      } else {
+        document.getElementById('calc-sales').textContent = '未送信';
+        document.getElementById('calc-expected').textContent = '-';
+      }
+    } catch(e) {
+      console.warn('店落ち取得エラー:', e);
+      document.getElementById('cs-drop').textContent = '取得エラー';
+    }
+    return;
+  }
 
   // index.htmlのsalesテーブルから本日の売上・給料を取込（27時ルール：当日03:00〜翌日02:59）
   try {
