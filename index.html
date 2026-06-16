@@ -552,11 +552,13 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
   <!-- ===== 給料計算ページ ===== -->
   <div id="page-payroll" class="page">
     <!-- サブタブ -->
-    <div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid var(--border)">
+    <div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid var(--border);align-items:flex-end">
       <button id="ptab-payroll" onclick="switchPayrollTab('payroll')"
         style="padding:8px 18px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-2px">💰 給料計算</button>
       <button id="ptab-collection" onclick="switchPayrollTab('collection')"
         style="padding:8px 18px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px">💵 回収管理</button>
+      <div style="flex:1"></div>
+      <button onclick="openCashManagement()" class="btn btn-secondary btn-sm" style="margin-bottom:4px;font-size:12px">🏦 金庫</button>
     </div>
 
     <!-- 給料計算エリア -->
@@ -2073,10 +2075,12 @@ const DEFAULT_STORE_ID = '11111111-0000-0000-0000-000000000001';
 
 // 店舗コード → store_id 対応表
 const STORE_CODE_MAP = {
-  'herroom': '11111111-0000-0000-0000-000000000001',
-  'remens':  '22222222-0000-0000-0000-000000000002',
-  'premium': '33333333-0000-0000-0000-000000000003'
+  'herroom':   '11111111-0000-0000-0000-000000000001',
+  'remens':    '22222222-0000-0000-0000-000000000002',
+  'premium':   '33333333-0000-0000-0000-000000000003',
+  'neverland': '44444444-0000-0000-0000-000000000004'
 };
+const STORE_ID_TO_CODE = Object.fromEntries(Object.entries(STORE_CODE_MAP).map(([k,v]) => [v,k]));
 
 // ============================================================
 // シフト自動連携 VPS 設定
@@ -8668,6 +8672,11 @@ function toggleHistDetail(idx) {
 // ============================================================
 // 給料ページ サブタブ切り替え
 // ============================================================
+function openCashManagement() {
+  const code = STORE_ID_TO_CODE[STORE_ID] || STORE_ID;
+  window.open('cash.html?store=' + code, '_blank');
+}
+
 function switchPayrollTab(tab) {
   const payrollArea    = document.getElementById('payroll-area');
   const collectionArea = document.getElementById('collection-area');
