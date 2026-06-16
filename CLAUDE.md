@@ -466,6 +466,59 @@ HH:MM XX分 給料¥XX,XXX 店落¥XX,XXX
 
 ---
 
+## セッション23（2026/6/17）で実施した主な修正
+
+| # | 内容 |
+|---|---|
+| 1 | `therapists.is_admin` カラム追加 → シフト表・セラピスト情報・予約登録のセラピスト選択から管理者を除外 |
+| 2 | シフト表タブ隣に「👩 セラピスト情報」タブを追加（年齢・カップ数・本名・備考を編集可能） |
+| 3 | セラピスト情報の備考テキストエリアを rows=10 に拡大 |
+| 4 | 給料画面に「🏦 金庫」ボタンを追加 → 店舗別 cash.html を開く（`openCashManagement`） |
+| 5 | cash.html に NEVERLAND を STORE_CODE_MAP 追加 |
+| 6 | line-webhook に「釣銭」コマンド追加（NEVERLAND向け）・reservedWords に追加 |
+| 7 | NEVERLAND釣銭管理実装: payroll_confirmations に store_drop を保存し cash.html が取得する設計 |
+| 8 | cash.html の店落ち取得を **全店舗 payroll_confirmations から取得** に統一（簡易計算を廃止） |
+| 9 | cash.html ダッシュボードに「← 管理者画面」ボタン追加（管理者モードのみ・UUID形式URLで遷移） |
+| 10 | cash.html ダッシュボードに日付非依存の釣銭補充フォームを追加（ルーム選択＋金額入力） |
+| 11 | cash.html 売上・給料表示を廃止し店落ちのみ表示に統一 |
+| 12 | payroll_confirmations の period フォーマット不一致バグ修正（`"M/D"` → `"YYYY/MM/DD"`） |
+| 13 | `store_drop: storeNum \|\| null` を `store_drop: storeNum` に修正（¥0を正常保存） |
+
+### セッション23 重要仕様
+
+#### is_admin カラム（SQL実行済み）
+```sql
+ALTER TABLE therapists ADD COLUMN IF NOT EXISTS is_admin boolean DEFAULT false;
+```
+管理者として設定したセラピストはシフト表・セラピスト情報・予約登録に表示されない。
+`window._adminThNames` (Set) に管理者名をロードしてシフトカレンダーのフィルタにも適用。
+
+#### セラピスト情報タブの追加カラム（SQL実行済み）
+```sql
+ALTER TABLE therapists
+  ADD COLUMN IF NOT EXISTS age integer,
+  ADD COLUMN IF NOT EXISTS cup text,
+  ADD COLUMN IF NOT EXISTS real_name text,
+  ADD COLUMN IF NOT EXISTS profile_notes text;
+```
+
+#### 金庫管理（cash.html）の全店舗共通フロー
+1. セラピストがLINEで「金庫」（いわき）または「釣銭」（NEVERLAND）→ cash.html を開く
+2. 出勤時残高を入力
+3. 管理者が給料画面でLINE送信 → `payroll_confirmations.store_drop` に正確な店落ちを保存
+4. セラピストが再度 cash.html を開く → 店落ち表示・退勤入力
+5. 退勤時残高・投函額を入力
+
+**cash.html を使用しているのはいわきとNEVERLANDのみ**（水戸・神栖はLINEウェブフック未対応）
+
+#### payroll_confirmations.period フォーマット
+`"YYYY/MM/DD"` 形式（例: `"2026/06/17"`）= index.html の `dateLabel` と同一形式
+
+#### NEVERLAND釣銭ラベル
+NEVERLAND は cash.html で「退勤時の釣銭残高」「投函額」「残すべき釣銭」と表示を変更（`NEVERLAND_STORE_ID_CASH` で判定）
+
+---
+
 ## 過去の作業ログ（参照先）
 
 詳細な作業履歴はdocsフォルダを参照してください。
