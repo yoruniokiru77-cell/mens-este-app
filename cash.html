@@ -317,6 +317,22 @@ tr:last-child td { border-bottom: none; }
         </div>
       </div>
 
+      <!-- 釣銭補充（日付に依存しない） -->
+      <div style="background:#f0f9ff;border-left:4px solid var(--accent2);border-radius:8px;padding:12px;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--accent2)">💴 釣銭補充（残高を直接更新）</div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <div style="flex:1">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">ルーム</label>
+            <select id="replenish-room-select"></select>
+          </div>
+          <div style="flex:1">
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">補充後の釣銭残高（円）</label>
+            <input type="text" inputmode="numeric" id="replenish-amount-direct" placeholder="例: 34000">
+          </div>
+          <button class="btn btn-primary btn-sm" style="white-space:nowrap;flex-shrink:0" onclick="submitReplenishDirect()">更新</button>
+        </div>
+      </div>
+
       <div class="form-group" style="margin-bottom:14px">
         <label>確認日付</label>
         <input type="date" id="dashboard-date" onchange="loadDashboard()">
@@ -428,8 +444,9 @@ async function initAdmin() {
   document.getElementById('btn-back-admin').style.display = '';
   document.getElementById('bottom-nav').classList.remove('show');
 
-  // 管理者用ルームをhistフィルタに追加
+  // 管理者用ルームをhistフィルタ・釣銭補充に追加
   await loadRoomsToSelect('hist-room', true);
+  await loadRoomsToSelect('replenish-room-select', false);
 
   // 今日の日付をデフォルトに
   const today = todayStr();
@@ -1242,6 +1259,51 @@ async function notifyStoreLine(message) {
     if (!th || !th.line_user_id) return;
     await fetch(GAS_URL + '?action=sendLineMessage&userId=' + encodeURIComponent(th.line_user_id) + '&message=' + encodeURIComponent(message));
   } catch(e) { console.warn('LINE通知エラー:', e); }
+}
+
+// ============================================================
+// 釣銭補充（直接更新）
+// ============================================================
+async function submitReplenishDirect() {
+  const room = document.getElementById('replenish-room-select').value;
+  const amount = _yenVal('replenish-amount-direct');
+  if (!room) { alert('ルームを選択してください'); return; }
+  if (isNaN(amount) || amount < 0) { alert('金額を入力してください'); return; }
+
+  try {
+    showOverlay();
+    // 対象ルームの最新closedログを取得
+    const { data: log } = await _sb.from('cash_logs')
+      .select('id')
+      .eq('store_id', STORE_ID)
+      .eq('room_name', room)
+      .eq('status', 'closed')
+      .order('work_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!log) {
+      // 記録がない場合は初期レコードを挿入
+      const today = todayStr();
+      const { error } = await _sb.from('cash_logs').insert({
+        store_id: STORE_ID, room_name: room, therapist_name: '管理者',
+        work_date: today, opening_balance: amount, closing_balance: amount,
+        ten_thousand_deposited: 0, carry_over: amount,
+        sales_amount: 0, therapist_pay: 0, store_drop: 0, status: 'closed'
+      });
+      if (error) throw error;
+    } else {
+      const { error } = await _sb.from('cash_logs').update({ carry_over: amount }).eq('id', log.id);
+      if (error) throw error;
+    }
+    document.getElementById('replenish-amount-direct').value = '';
+    showToast('釣銭残高を ¥' + amount.toLocaleString() + ' に更新しました（' + room + '）');
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
 }
 
 // ============================================================
