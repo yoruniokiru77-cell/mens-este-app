@@ -632,7 +632,7 @@ async function submitOpening() {
 }
 
 // ============================================================
-// 退勤時データ読み込み（売上・給料を自動取込）
+// 退勤時データ読み込み（全店舗共通: payroll_confirmationsから店落ちを取得）
 // ============================================================
 const NEVERLAND_STORE_ID_CASH = '44444444-0000-0000-0000-000000000004';
 
@@ -640,137 +640,46 @@ async function loadClosingData(log) {
   document.getElementById('panel-opening').style.display = 'none';
   document.getElementById('panel-closing').style.display = '';
 
-  const today = todayStr();
-
-  // NEVERLANDモード: payroll_confirmationsから店落ちを取得
+  // NEVERLANDはラベルを釣銭用に変更
   if (STORE_ID === NEVERLAND_STORE_ID_CASH) {
-    document.getElementById('cs-sales-card').style.display = 'none';
-    document.getElementById('cs-pay-card').style.display = 'none';
     document.getElementById('lbl-cs-drop').textContent = '店落ち（LINE送信額）';
     document.getElementById('label-closing-balance').textContent = '退勤時の釣銭残高（円）';
     document.getElementById('label-deposit').textContent = '投函額（回収される金額）（円）';
-    document.getElementById('calc-sales-label').textContent = '＋ 店落ち ';
-    document.getElementById('calc-total-row').style.display = 'none';
-    document.getElementById('calc-pay-row').style.display = 'none';
     document.getElementById('calc-expected-label').textContent = '残すべき釣銭';
-    try {
-      const [y, m, d] = today.split('-');
-      const period = y + '/' + m + '/' + d;
-      const { data: conf } = await _sb.from('payroll_confirmations')
-        .select('store_drop')
-        .eq('store_id', STORE_ID)
-        .eq('therapist_name', log.therapist_name)
-        .eq('period', period)
-        .maybeSingle();
-      const storeDrop = (conf && conf.store_drop != null) ? conf.store_drop : null;
-      const opening = log.opening_balance;
-      document.getElementById('cs-drop').textContent = storeDrop !== null ? '¥' + storeDrop.toLocaleString() : '未送信';
-      document.getElementById('calc-opening').textContent = '¥' + opening.toLocaleString();
-      if (storeDrop !== null) {
-        const expected = opening + storeDrop;
-        document.getElementById('calc-sales').textContent = '¥' + storeDrop.toLocaleString();
-        document.getElementById('calc-expected').textContent = '¥' + expected.toLocaleString();
-        await _sb.from('cash_logs').update({ store_drop: storeDrop }).eq('id', _currentLogId);
-      } else {
-        document.getElementById('calc-sales').textContent = '未送信';
-        document.getElementById('calc-expected').textContent = '-';
-      }
-    } catch(e) {
-      console.warn('店落ち取得エラー:', e);
-      document.getElementById('cs-drop').textContent = '取得エラー';
-    }
-    return;
   }
 
-  // index.htmlのsalesテーブルから本日の売上・給料を取込（27時ルール：当日03:00〜翌日02:59）
-  try {
-    const todayParts = today.split('-');
-    const todayObj   = new Date(Number(todayParts[0]), Number(todayParts[1])-1, Number(todayParts[2]));
-    const nextDayObj = new Date(todayObj); nextDayObj.setDate(todayObj.getDate() + 1);
-    const _pad = n => String(n).padStart(2,'0');
-    const todayStart = today + 'T03:00:00+09:00';
-    const todayEnd   = nextDayObj.getFullYear() + '-' + _pad(nextDayObj.getMonth()+1) + '-' + _pad(nextDayObj.getDate()) + 'T02:59:59+09:00';
+  const today = todayStr();
+  const [y, m, d] = today.split('-');
+  const period = y + '/' + m + '/' + d;
 
-    const { data: sales } = await _sb.from('sales')
-      .select('price, discount, course_price, option_price, nomination_fee, course_min, therapist_name')
+  try {
+    const { data: conf } = await _sb.from('payroll_confirmations')
+      .select('store_drop')
       .eq('store_id', STORE_ID)
       .eq('therapist_name', log.therapist_name)
-      .gte('date', todayStart)
-      .lte('date', todayEnd)
-      .neq('is_guarantee', true);
-
-    // セラピストのバック率を取得
-    const { data: th } = await _sb.from('therapists')
-      .select('course_back, option_back')
-      .eq('store_id', STORE_ID)
-      .eq('name', log.therapist_name)
-      .eq('active', true)
+      .eq('period', period)
       .maybeSingle();
 
-    // 店舗設定の割引モード・デフォルトバック率を取得
-    const { data: storeSettings } = await _sb.from('store_settings')
-      .select('discount_mode, default_course_back, default_option_back')
-      .eq('store_id', STORE_ID)
-      .maybeSingle();
-    const discountMode = (storeSettings && storeSettings.discount_mode) || 'deduct_then_back';
+    const storeDrop = (conf && conf.store_drop != null) ? conf.store_drop : null;
+    const opening = log.opening_balance;
 
-    const courseBack  = (th && th.course_back !== null && th.course_back !== undefined)
-      ? Number(th.course_back)
-      : (storeSettings && storeSettings.default_course_back !== null && storeSettings.default_course_back !== undefined)
-        ? Number(storeSettings.default_course_back)
-        : 0.5;
-    const optionBack = (th && th.option_back !== null && th.option_back !== undefined)
-      ? Number(th.option_back)
-      : (storeSettings && storeSettings.default_option_back !== null && storeSettings.default_option_back !== undefined)
-        ? Number(storeSettings.default_option_back)
-        : 1.0;
+    document.getElementById('cs-drop').textContent = storeDrop !== null
+      ? '¥' + storeDrop.toLocaleString()
+      : '未送信（管理者がLINE送信後に表示）';
+    document.getElementById('calc-opening').textContent = '¥' + opening.toLocaleString();
 
-    let totalSales = 0, totalPay = 0, totalDrop = 0;
-    (sales || []).forEach(s => {
-      const _price = Number(s.price || 0);
-      const coursePrice = Number(s.course_price || _price);
-      const optPrice   = Number(s.option_price || 0);
-      const nomFee     = Number(s.nomination_fee || 0);
-      const discount   = Number(s.discount || 0);
-
-      let therapistCoursePay, storeDrop;
-      if (discountMode === 'store_bears') {
-        therapistCoursePay = Math.round(coursePrice * courseBack);
-        storeDrop = Math.round(coursePrice * (1 - courseBack)) - discount;
-      } else {
-        const courseNet = coursePrice - discount;
-        therapistCoursePay = Math.round(courseNet * courseBack);
-        storeDrop = Math.round(courseNet * (1 - courseBack));
-      }
-      const therapistOptPay = Math.round(optPrice * optionBack);
-      const pay = therapistCoursePay + therapistOptPay + nomFee;
-
-      const saleTotal = coursePrice + optPrice + nomFee - discount;
-      totalSales += saleTotal;
-      totalPay   += pay;
-      totalDrop  += saleTotal - pay;
-    });
-
-    document.getElementById('cs-drop').textContent = '¥' + Math.round(totalDrop).toLocaleString();
-
-    // Supabaseに売上・給料を更新
-    await _sb.from('cash_logs').update({
-      sales_amount:   Math.round(totalSales),
-      therapist_pay:  Math.round(totalPay),
-      store_drop:     Math.round(totalDrop)
-    }).eq('id', _currentLogId);
-
-    // 計算式表示（店落ちのみ）
-    const opening  = log.opening_balance;
-    const expected = opening + Math.round(totalDrop);
-
-    document.getElementById('calc-opening').textContent  = '¥' + opening.toLocaleString();
-    document.getElementById('calc-sales').textContent    = '¥' + Math.round(totalDrop).toLocaleString();
-    document.getElementById('calc-expected').textContent = '¥' + expected.toLocaleString();
-
+    if (storeDrop !== null) {
+      const expected = opening + storeDrop;
+      document.getElementById('calc-sales').textContent    = '¥' + storeDrop.toLocaleString();
+      document.getElementById('calc-expected').textContent = '¥' + expected.toLocaleString();
+      await _sb.from('cash_logs').update({ store_drop: storeDrop }).eq('id', _currentLogId);
+    } else {
+      document.getElementById('calc-sales').textContent    = '未送信';
+      document.getElementById('calc-expected').textContent = '-';
+    }
   } catch(e) {
-    console.warn('売上取込エラー:', e);
-    document.getElementById('cs-sales').textContent = '取込エラー';
+    console.warn('店落ち取得エラー:', e);
+    document.getElementById('cs-drop').textContent = '取得エラー';
   }
 }
 

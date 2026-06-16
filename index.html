@@ -5427,7 +5427,7 @@ async function sendPayrollLine(uid, name, dateLabel) {
       period: dateLabel,
       sent_at: new Date().toISOString(),
       confirmed_at: null,
-      store_drop: storeNum || null
+      store_drop: storeNum
     });
 
     // 雑費・宿泊費・その他をDBに保存（LINE送信時にupsert）
