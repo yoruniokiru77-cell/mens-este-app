@@ -719,50 +719,70 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <div id="report-table">日付を選択して「表示」を押してください</div>
     </div>
 
-    <!-- 店舗経費セクション -->
+    <!-- 店舗経費セクション（タブ） -->
     <div id="store-expense-section" class="card">
-      <div class="sec-header" style="margin-bottom:12px">
-        <div class="sec-title">🏪 店舗経費</div>
+      <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:14px">
+        <button id="se-tab-adhoc" onclick="switchSeTab('adhoc')"
+          style="flex:1;padding:9px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--accent);margin-bottom:-2px;color:var(--accent);cursor:pointer">
+          📝 都度経費
+        </button>
+        <button id="se-tab-fixed" onclick="switchSeTab('fixed')"
+          style="flex:1;padding:9px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer">
+          💴 固定費
+        </button>
       </div>
-      <!-- 入力フォーム -->
-      <div style="background:var(--bg2);border-radius:8px;padding:12px;margin-bottom:14px">
-        <div class="grid2" style="gap:8px;margin-bottom:8px">
-          <div class="form-group" style="margin-bottom:0">
-            <label>日付</label>
-            <input type="date" id="se-date">
+
+      <!-- 都度経費タブ -->
+      <div id="se-panel-adhoc">
+        <div style="background:var(--bg2);border-radius:8px;padding:12px;margin-bottom:14px">
+          <div class="grid2" style="gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>日付</label>
+              <input type="date" id="se-date">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>カテゴリ</label>
+              <select id="se-category-preset" onchange="onSePresetChange(this.value)" class="ts">
+                <option value="消耗品">消耗品</option>
+                <option value="広告費">広告費</option>
+                <option value="交通費">交通費</option>
+                <option value="その他">その他</option>
+                <option value="__custom">カスタム入力...</option>
+              </select>
+            </div>
           </div>
-          <div class="form-group" style="margin-bottom:0">
-            <label>カテゴリ</label>
-            <select id="se-category-preset" onchange="onSePresetChange(this.value)" class="ts">
-              <option value="家賃">家賃</option>
-              <option value="光熱費">光熱費</option>
-              <option value="消耗品">消耗品</option>
-              <option value="広告費">広告費</option>
-              <option value="その他">その他</option>
-              <option value="__custom">カスタム入力...</option>
-            </select>
+          <div id="se-custom-wrap" style="display:none;margin-bottom:8px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>カテゴリ名</label>
+              <input type="text" id="se-category-custom" placeholder="カテゴリ名を入力" class="ti">
+            </div>
           </div>
+          <div class="grid2" style="gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>金額（円）</label>
+              <input type="number" id="se-amount" min="0" placeholder="0" class="ti">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>メモ</label>
+              <input type="text" id="se-memo" placeholder="任意" class="ti">
+            </div>
+          </div>
+          <button class="btn btn-primary" style="width:100%" onclick="saveStoreExpenseRow()">＋ 追加</button>
         </div>
-        <div id="se-custom-wrap" style="display:none;margin-bottom:8px">
-          <div class="form-group" style="margin-bottom:0">
-            <label>カテゴリ名</label>
-            <input type="text" id="se-category-custom" placeholder="カテゴリ名を入力" class="ti">
-          </div>
-        </div>
-        <div class="grid2" style="gap:8px;margin-bottom:8px">
-          <div class="form-group" style="margin-bottom:0">
-            <label>金額（円）</label>
-            <input type="number" id="se-amount" min="0" placeholder="0" class="ti">
-          </div>
-          <div class="form-group" style="margin-bottom:0">
-            <label>メモ</label>
-            <input type="text" id="se-memo" placeholder="任意" class="ti">
-          </div>
-        </div>
-        <button class="btn btn-primary" style="width:100%" onclick="saveStoreExpenseRow()">＋ 追加</button>
+        <div id="store-expense-list"></div>
       </div>
-      <!-- 一覧 -->
-      <div id="store-expense-list"></div>
+
+      <!-- 固定費タブ -->
+      <div id="se-panel-fixed" style="display:none">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <div class="form-group" style="margin-bottom:0;flex:1">
+            <label>対象月</label>
+            <input type="month" id="se-fixed-month" onchange="loadFixedCostPayments()">
+          </div>
+          <button class="btn btn-secondary btn-sm" style="margin-top:20px" onclick="loadFixedCostPayments()">更新</button>
+        </div>
+        <div id="fixed-cost-payment-list">マスタ管理 → 固定費 で費用を登録してください</div>
+      </div>
     </div>
   </div>
 
@@ -1242,6 +1262,10 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <button id="master-tab-checklist" onclick="switchMasterTab('checklist')"
         style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
         ✅ チェックリスト
+      </button>
+      <button id="master-tab-fixedcost" onclick="switchMasterTab('fixedcost')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        💴 固定費
       </button>
     </div>
 
@@ -1743,6 +1767,56 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
             <button class="btn btn-primary btn-sm" onclick="saveChecklistItem()">保存</button>
             <button class="btn btn-secondary btn-sm" onclick="closeChecklistForm()">キャンセル</button>
           </div>
+        </div>
+      </div>
+    </div>
+    <!-- 固定費マスタ -->
+    <div id="master-panel-fixedcost" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title">💴 固定費マスタ</div>
+          <button class="btn btn-primary btn-sm" onclick="openFixedCostForm()">＋ 追加</button>
+        </div>
+        <div id="fixed-cost-master-list">読み込み中...</div>
+      </div>
+      <!-- 追加・編集フォーム -->
+      <div id="fixed-cost-form-card" class="card" style="display:none">
+        <div class="sec-title" style="margin-bottom:12px" id="fixed-cost-form-title">固定費を追加</div>
+        <input type="hidden" id="fc-edit-id">
+        <div class="form-group">
+          <label>費用名 <span style="color:red">*</span></label>
+          <input type="text" id="fc-name" placeholder="例: アパートメント家賃" class="ti">
+        </div>
+        <div class="grid2" style="gap:8px">
+          <div class="form-group">
+            <label>カテゴリ <span style="color:red">*</span></label>
+            <select id="fc-category" class="ts">
+              <option value="家賃">家賃</option>
+              <option value="光熱費">光熱費</option>
+              <option value="インターネット">インターネット</option>
+              <option value="消耗品">消耗品</option>
+              <option value="保険">保険</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>ルーム（任意）</label>
+            <select id="fc-room" class="ts">
+              <option value="">店舗全体</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>金額（円）― 変動費は空欄</label>
+          <input type="number" id="fc-amount" min="0" placeholder="変動の場合は空欄" class="ti">
+        </div>
+        <div class="form-group">
+          <label>支払日（毎月何日）</label>
+          <input type="number" id="fc-due-day" min="1" max="31" placeholder="例: 25" class="ti">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1" onclick="saveFixedCostMasterRow()">保存</button>
+          <button class="btn btn-secondary" onclick="closeFixedCostForm()">キャンセル</button>
         </div>
       </div>
     </div>
@@ -3205,6 +3279,73 @@ async function apiGet(action, params = {}) {
     case 'deleteExpense': {
       const { error } = await _sb.from('expenses').delete().eq('id', params.row);
       if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    // ===== 固定費マスタ =====
+    case 'getFixedCostMasters': {
+      const { data, error } = await _sb.from('store_fixed_costs')
+        .select('*').eq('store_id', STORE_ID).eq('active', true)
+        .order('category').order('name');
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
+
+    case 'saveFixedCostMaster': {
+      const row = {
+        store_id:      STORE_ID,
+        name:          params.name,
+        category:      params.category,
+        room_id:       params.roomId   || null,
+        room_name:     params.roomName || null,
+        default_amount: params.amount != null && params.amount !== '' ? Number(params.amount) : null,
+        is_variable:   !params.amount,
+        due_day:       params.dueDay ? Number(params.dueDay) : null,
+        active:        true
+      };
+      if (params.id) {
+        const { error } = await _sb.from('store_fixed_costs').update(row).eq('id', params.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await _sb.from('store_fixed_costs').insert(row);
+        if (error) throw new Error(error.message);
+      }
+      return { ok: true };
+    }
+
+    case 'deleteFixedCostMaster': {
+      const { error } = await _sb.from('store_fixed_costs')
+        .update({ active: false }).eq('id', params.id);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'getFixedCostPayments': {
+      const { data, error } = await _sb.from('fixed_cost_payments')
+        .select('*').eq('store_id', STORE_ID).eq('period', params.period);
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
+
+    case 'saveFixedCostPayment': {
+      const { data: existing } = await _sb.from('fixed_cost_payments')
+        .select('id').eq('fixed_cost_id', params.fixedCostId).eq('period', params.period).maybeSingle();
+      const row = {
+        store_id:      STORE_ID,
+        fixed_cost_id: params.fixedCostId,
+        period:        params.period,
+        amount:        Number(params.amount),
+        paid:          params.paid === true,
+        paid_at:       params.paid ? new Date().toISOString() : null,
+        memo:          params.memo || null
+      };
+      if (existing) {
+        const { error } = await _sb.from('fixed_cost_payments').update(row).eq('id', existing.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await _sb.from('fixed_cost_payments').insert(row);
+        if (error) throw new Error(error.message);
+      }
       return { ok: true };
     }
 
@@ -7834,6 +7975,279 @@ async function deleteStoreExpenseRow(id) {
 }
 
 // ============================================================
+// ============================================================
+// 店舗経費タブ切替
+// ============================================================
+function switchSeTab(tab) {
+  ['adhoc','fixed'].forEach(t => {
+    const panel = document.getElementById('se-panel-' + t);
+    const btn   = document.getElementById('se-tab-' + t);
+    if (panel) panel.style.display = t === tab ? '' : 'none';
+    if (btn) {
+      btn.style.color        = t === tab ? 'var(--accent)' : 'var(--muted)';
+      btn.style.borderBottom = t === tab ? '2px solid var(--accent)' : '2px solid transparent';
+    }
+  });
+  if (tab === 'fixed') loadFixedCostPayments();
+}
+
+// ============================================================
+// 固定費マスタ（マスタ管理ページ）
+// ============================================================
+let _fixedCostMasters = [];
+
+async function loadFixedCostMaster() {
+  const listEl = document.getElementById('fixed-cost-master-list');
+  if (!listEl) return;
+  listEl.innerHTML = '読み込み中...';
+  try {
+    _fixedCostMasters = await apiGet('getFixedCostMasters') || [];
+    if (!_fixedCostMasters.length) {
+      listEl.innerHTML = '<p style="color:var(--muted);font-size:13px">固定費が登録されていません</p>';
+      return;
+    }
+    // カテゴリ別グループ
+    const byCategory = {};
+    _fixedCostMasters.forEach(fc => {
+      if (!byCategory[fc.category]) byCategory[fc.category] = [];
+      byCategory[fc.category].push(fc);
+    });
+    listEl.innerHTML = Object.entries(byCategory).map(([cat, items]) => `
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border)">${cat}</div>
+        ${items.map(fc => `
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+          <div style="flex:1">
+            <div style="font-weight:600">${fc.name}</div>
+            <div style="color:var(--muted);font-size:12px">${fc.room_name ? '🚪 ' + fc.room_name : '🏪 店舗全体'}${fc.due_day ? '　毎月' + fc.due_day + '日' : ''}</div>
+          </div>
+          <div style="font-weight:700;color:var(--accent2);white-space:nowrap">
+            ${fc.default_amount != null ? '¥' + Number(fc.default_amount).toLocaleString() : '<span style="color:var(--muted);font-size:12px">変動</span>'}
+          </div>
+          <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 8px"
+            onclick="openFixedCostForm('${fc.id}')">編集</button>
+          <button class="btn btn-sm" style="font-size:11px;padding:4px 8px;background:#fee2e2;color:#dc2626;border:none"
+            onclick="deleteFixedCostMasterRow('${fc.id}','${fc.name.replace(/'/g,String.fromCharCode(39))}')">削除</button>
+        </div>`).join('')}
+      </div>`).join('');
+  } catch(e) {
+    listEl.innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+async function openFixedCostForm(id) {
+  document.getElementById('fixed-cost-form-card').style.display = '';
+  document.getElementById('fixed-cost-form-title').textContent = id ? '固定費を編集' : '固定費を追加';
+  document.getElementById('fc-edit-id').value = id || '';
+  // ルーム選択肢を動的構築
+  const roomSel = document.getElementById('fc-room');
+  roomSel.innerHTML = '<option value="">店舗全体</option>';
+  try {
+    const rooms = await apiGet('getRooms') || [];
+    rooms.filter(r => r.active !== false).forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r.id; opt.textContent = r.name; roomSel.appendChild(opt);
+    });
+  } catch(e) {}
+
+  if (id) {
+    const fc = _fixedCostMasters.find(f => f.id === id);
+    if (fc) {
+      document.getElementById('fc-name').value     = fc.name || '';
+      document.getElementById('fc-category').value = fc.category || 'その他';
+      document.getElementById('fc-room').value     = fc.room_id || '';
+      document.getElementById('fc-amount').value   = fc.default_amount != null ? fc.default_amount : '';
+      document.getElementById('fc-due-day').value  = fc.due_day || '';
+    }
+  } else {
+    document.getElementById('fc-name').value     = '';
+    document.getElementById('fc-category').value = '家賃';
+    document.getElementById('fc-room').value     = '';
+    document.getElementById('fc-amount').value   = '';
+    document.getElementById('fc-due-day').value  = '';
+  }
+  document.getElementById('fc-name').focus();
+}
+
+function closeFixedCostForm() {
+  document.getElementById('fixed-cost-form-card').style.display = 'none';
+}
+
+async function saveFixedCostMasterRow() {
+  const id      = document.getElementById('fc-edit-id').value;
+  const name    = document.getElementById('fc-name').value.trim();
+  const cat     = document.getElementById('fc-category').value;
+  const roomSel = document.getElementById('fc-room');
+  const roomId  = roomSel.value || null;
+  const roomName = roomId ? roomSel.options[roomSel.selectedIndex].textContent : null;
+  const amount  = document.getElementById('fc-amount').value;
+  const dueDay  = document.getElementById('fc-due-day').value;
+
+  if (!name) { alert('費用名を入力してください'); return; }
+
+  try {
+    showOverlay();
+    await apiGet('saveFixedCostMaster', {
+      id: id || null, name, category: cat,
+      roomId, roomName,
+      amount: amount !== '' ? amount : null,
+      dueDay: dueDay !== '' ? dueDay : null
+    });
+    closeFixedCostForm();
+    showToast('保存しました');
+    loadFixedCostMaster();
+  } catch(e) {
+    alert('保存失敗: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function deleteFixedCostMasterRow(id, name) {
+  if (!await _confirm(`「${name}」を削除しますか？\n支払い記録は残ります。`, '削除', 'キャンセル')) return;
+  try {
+    showOverlay();
+    await apiGet('deleteFixedCostMaster', { id });
+    showToast('削除しました');
+    loadFixedCostMaster();
+  } catch(e) {
+    alert('削除失敗: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+// ============================================================
+// 固定費支払い管理（売上確認ページ）
+// ============================================================
+async function loadFixedCostPayments() {
+  const monthEl = document.getElementById('se-fixed-month');
+  if (!monthEl) return;
+  if (!monthEl.value) {
+    // デフォルトは今月
+    const now = new Date();
+    monthEl.value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  }
+  const period = monthEl.value; // "YYYY-MM"
+  const listEl = document.getElementById('fixed-cost-payment-list');
+  if (!listEl) return;
+  listEl.innerHTML = '読み込み中...';
+  try {
+    const [masters, payments] = await Promise.all([
+      apiGet('getFixedCostMasters'),
+      apiGet('getFixedCostPayments', { period })
+    ]);
+    const mList = masters || [];
+    const pMap  = {};
+    (payments || []).forEach(p => { pMap[p.fixed_cost_id] = p; });
+    renderFixedCostPayments(mList, pMap, period);
+  } catch(e) {
+    listEl.innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+function renderFixedCostPayments(masters, pMap, period) {
+  const listEl = document.getElementById('fixed-cost-payment-list');
+  if (!masters.length) {
+    listEl.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:12px">マスタ管理 → 💴 固定費 で費用を登録してください</p>';
+    return;
+  }
+
+  const unpaid = masters.filter(fc => !pMap[fc.id]?.paid);
+  const paid   = masters.filter(fc => pMap[fc.id]?.paid);
+  const totalUnpaid = unpaid.reduce((s, fc) => {
+    const p = pMap[fc.id];
+    return s + (p?.amount ?? fc.default_amount ?? 0);
+  }, 0);
+  const totalPaid = paid.reduce((s, fc) => s + (pMap[fc.id]?.amount || 0), 0);
+
+  // カテゴリ別グループ（未払い優先）
+  const renderGroup = (list, isPaid) => {
+    const byCategory = {};
+    list.forEach(fc => {
+      if (!byCategory[fc.category]) byCategory[fc.category] = [];
+      byCategory[fc.category].push(fc);
+    });
+    return Object.entries(byCategory).map(([cat, items]) => `
+      <div style="margin-bottom:10px">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px">${cat}</div>
+        ${items.map(fc => {
+          const p = pMap[fc.id];
+          const dispAmt = p?.amount ?? fc.default_amount;
+          const isVar   = fc.default_amount == null;
+          return `
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;margin-bottom:4px;
+            background:${isPaid ? 'var(--bg2)' : '#fff7ed'};border:1px solid ${isPaid ? 'var(--border)' : '#fed7aa'}">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;${isPaid ? 'color:var(--muted)' : ''}">${fc.name}</div>
+              <div style="font-size:11px;color:var(--muted)">${fc.room_name || '店舗全体'}${fc.due_day ? '　毎月' + fc.due_day + '日' : ''}</div>
+              ${isPaid && p?.paid_at ? `<div style="font-size:11px;color:var(--success)">${p.paid_at.substring(0,10)} 支払済 ✓</div>` : ''}
+            </div>
+            ${isPaid
+              ? `<div style="font-weight:700;color:var(--muted)">¥${Number(p.amount).toLocaleString()}</div>
+                 <button class="btn btn-sm" style="font-size:11px;padding:4px 8px;background:#fef2f2;color:#dc2626;border:none"
+                   onclick="unmarkFixedCostPaid('${fc.id}','${period}')">取消</button>`
+              : `${isVar
+                  ? `<input type="number" id="fc-amt-${fc.id}" placeholder="金額" min="0"
+                       style="width:90px;padding:5px 8px;border:1.5px solid var(--border);border-radius:6px;font-size:13px">`
+                  : `<div style="font-weight:700;color:var(--accent2)">¥${Number(fc.default_amount).toLocaleString()}</div>`}
+                 <button class="btn btn-sm btn-primary" style="font-size:11px;padding:4px 10px;white-space:nowrap"
+                   onclick="markFixedCostPaid('${fc.id}','${period}',${isVar ? 'null' : fc.default_amount})">支払済</button>`
+            }
+          </div>`;
+        }).join('')}
+      </div>`).join('');
+  };
+
+  listEl.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1;padding:8px 12px;background:#fff7ed;border-radius:8px;text-align:center">
+        <div style="font-size:11px;color:#c2410c;font-weight:600">未払い</div>
+        <div style="font-size:16px;font-weight:700;color:#c2410c">${unpaid.length}件</div>
+      </div>
+      <div style="flex:1;padding:8px 12px;background:#f0fdf4;border-radius:8px;text-align:center">
+        <div style="font-size:11px;color:var(--success);font-weight:600">支払済</div>
+        <div style="font-size:16px;font-weight:700;color:var(--success)">${paid.length}件 ¥${totalPaid.toLocaleString()}</div>
+      </div>
+    </div>
+    ${unpaid.length ? renderGroup(unpaid, false) : ''}
+    ${paid.length ? `<div style="font-size:12px;font-weight:600;color:var(--muted);margin:10px 0 6px">— 支払済み —</div>${renderGroup(paid, true)}` : ''}`;
+}
+
+async function markFixedCostPaid(fixedCostId, period, defaultAmount) {
+  // 変動費は入力フィールドから取得
+  let amount = defaultAmount;
+  if (amount == null) {
+    const inp = document.getElementById('fc-amt-' + fixedCostId);
+    amount = inp ? Number(inp.value) : 0;
+    if (!amount) { alert('金額を入力してください'); inp?.focus(); return; }
+  }
+  try {
+    showOverlay();
+    await apiGet('saveFixedCostPayment', { fixedCostId, period, amount, paid: true });
+    showToast('支払済みにしました');
+    loadFixedCostPayments();
+  } catch(e) {
+    alert('保存失敗: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function unmarkFixedCostPaid(fixedCostId, period) {
+  if (!await _confirm('支払済みを取り消しますか？', '取消', 'キャンセル')) return;
+  try {
+    showOverlay();
+    await apiGet('saveFixedCostPayment', { fixedCostId, period, amount: 0, paid: false });
+    showToast('取り消しました');
+    loadFixedCostPayments();
+  } catch(e) {
+    alert('失敗: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
 // 売上詳細トグル・売上編集
 // ============================================================
 function toggleSalesDetail(id) {
@@ -9577,7 +9991,7 @@ function initMasterMgmt() {
 
 function switchMasterTab(tab) {
   _currentMasterTab = tab;
-  ['menu','room','therapist','store','manual','checklist'].forEach(t => {
+  ['menu','room','therapist','store','manual','checklist','fixedcost'].forEach(t => {
     const panel = document.getElementById('master-panel-' + t);
     const btn   = document.getElementById('master-tab-' + t);
     if (panel) panel.style.display = t === tab ? '' : 'none';
@@ -9592,6 +10006,7 @@ function switchMasterTab(tab) {
   if (tab === 'store')     loadStoreSettingsUI();
   if (tab === 'manual')    loadManualMaster();
   if (tab === 'checklist') initChecklistMaster();
+  if (tab === 'fixedcost') loadFixedCostMaster();
 }
 
 // ===== メニューマスタ =====
