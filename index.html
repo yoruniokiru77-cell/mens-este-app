@@ -718,6 +718,52 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <!-- 明細テーブル -->
       <div id="report-table">日付を選択して「表示」を押してください</div>
     </div>
+
+    <!-- 店舗経費セクション -->
+    <div id="store-expense-section" class="card" style="display:none">
+      <div class="sec-header" style="margin-bottom:12px">
+        <div class="sec-title">🏪 店舗経費</div>
+      </div>
+      <!-- 入力フォーム -->
+      <div style="background:var(--bg2);border-radius:8px;padding:12px;margin-bottom:14px">
+        <div class="grid2" style="gap:8px;margin-bottom:8px">
+          <div class="form-group" style="margin-bottom:0">
+            <label>日付</label>
+            <input type="date" id="se-date">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>カテゴリ</label>
+            <select id="se-category-preset" onchange="onSePresetChange(this.value)" class="ts">
+              <option value="家賃">家賃</option>
+              <option value="光熱費">光熱費</option>
+              <option value="消耗品">消耗品</option>
+              <option value="広告費">広告費</option>
+              <option value="その他">その他</option>
+              <option value="__custom">カスタム入力...</option>
+            </select>
+          </div>
+        </div>
+        <div id="se-custom-wrap" style="display:none;margin-bottom:8px">
+          <div class="form-group" style="margin-bottom:0">
+            <label>カテゴリ名</label>
+            <input type="text" id="se-category-custom" placeholder="カテゴリ名を入力" class="ti">
+          </div>
+        </div>
+        <div class="grid2" style="gap:8px;margin-bottom:8px">
+          <div class="form-group" style="margin-bottom:0">
+            <label>金額（円）</label>
+            <input type="number" id="se-amount" min="0" placeholder="0" class="ti">
+          </div>
+          <div class="form-group" style="margin-bottom:0">
+            <label>メモ</label>
+            <input type="text" id="se-memo" placeholder="任意" class="ti">
+          </div>
+        </div>
+        <button class="btn btn-primary" style="width:100%" onclick="saveStoreExpenseRow()">＋ 追加</button>
+      </div>
+      <!-- 一覧 -->
+      <div id="store-expense-list"></div>
+    </div>
   </div>
 
 
@@ -3103,9 +3149,23 @@ async function apiGet(action, params = {}) {
       if (params.endDate)    q = q.lte('date', params.endDate);
       if (params.therapist)  q = q.eq('therapist_name', params.therapist);
       if (params.date)       q = q.eq('date', params.date);
+      if (params.storeOnly)  q = q.is('therapist_name', null);
       const { data, error } = await q;
       if (error) throw new Error(error.message);
       return (data || []).map(r => ({ ...r, row: r.id }));
+    }
+
+    case 'saveStoreExpense': {
+      const { error } = await _sb.from('expenses').insert({
+        store_id:       STORE_ID,
+        date:           params.date,
+        category:       params.category,
+        amount:         Number(params.amount),
+        memo:           params.memo || null,
+        therapist_name: null
+      });
+      if (error) throw new Error(error.message);
+      return { ok: true };
     }
 
     case 'saveExpense': {
@@ -7472,18 +7532,28 @@ async function loadSalesReport() {
 
   try {
     showOverlay();
-    const [data, expData] = await Promise.all([
+    const [data, expData, storeExpData] = await Promise.all([
       apiGet('getPayrollData', { startDate, endDate }),
-      apiGet('getExpenses', { startDate, endDate })
+      apiGet('getExpenses', { startDate, endDate }),
+      apiGet('getExpenses', { startDate, endDate, storeOnly: true })
     ]);
     // セラピスト名・日付 → 雑費マップを作成
     const expMap = {};
-    (expData || []).forEach(e => {
+    (expData || []).filter(e => e.therapist_name).forEach(e => {
       const key = e.therapist_name + '|' + e.date;
       if (!expMap[key]) expMap[key] = {};
       expMap[key][e.category] = e.amount;
     });
-    renderSalesReport(data, therapist, expMap);
+    renderSalesReport(data, therapist, expMap, storeExpData || []);
+    renderStoreExpenseList(storeExpData || []);
+    // 店舗経費セクション表示（日付選択後は常に表示）
+    const seSection = document.getElementById('store-expense-section');
+    if (seSection) {
+      seSection.style.display = '';
+      // 開始日を経費入力のデフォルト日付にセット
+      const seDateEl = document.getElementById('se-date');
+      if (seDateEl && !seDateEl.value) seDateEl.value = endDate;
+    }
   } catch(e) {
     document.getElementById('report-table').innerHTML = '<p style="color:red">' + e.message + '</p>';
   } finally {
@@ -7491,8 +7561,9 @@ async function loadSalesReport() {
   }
 }
 
-function renderSalesReport(data, filterTherapist, expMap) {
+function renderSalesReport(data, filterTherapist, expMap, storeExpData) {
   expMap = expMap || {};
+  storeExpData = storeExpData || [];
   const summaryEl = document.getElementById('report-summary');
   const tableEl   = document.getElementById('report-table');
 
@@ -7507,7 +7578,7 @@ function renderSalesReport(data, filterTherapist, expMap) {
 
   // 集計
   let totalPay   = 0, totalStore = 0, totalCount = 0;
-  let totalNew   = 0; // 新規客カウント（全員表示時のみ集計）
+  let totalNew   = 0;
 
   filtered.forEach(r => {
     totalPay   += r.pay;
@@ -7518,12 +7589,24 @@ function renderSalesReport(data, filterTherapist, expMap) {
     });
   });
 
+  const totalStoreExp = storeExpData.reduce((s, e) => s + Number(e.amount || 0), 0);
+  const netProfit     = totalStore - totalStoreExp;
+
   // サマリーカード
   const newBadge = !filterTherapist && totalNew > 0
     ? `<div style="font-size:12px;font-weight:600;color:#6d28d9;background:#ede9fe;border-radius:6px;padding:4px 10px;margin-top:6px;display:inline-block">🆕 新規客 ${totalNew}名</div>`
     : '';
+  const expRow = totalStoreExp > 0 ? `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#fff7ed;border-radius:8px;margin-top:8px;font-size:13px">
+      <span style="color:#c2410c;font-weight:600">🏪 店舗経費</span>
+      <span style="color:#c2410c;font-weight:700">−¥${totalStoreExp.toLocaleString()}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:${netProfit >= 0 ? '#f0fdf4' : '#fef2f2'};border-radius:8px;margin-top:4px;font-size:13px">
+      <span style="color:${netProfit >= 0 ? '#15803d' : '#dc2626'};font-weight:600">純利益（店落ち−経費）</span>
+      <span style="color:${netProfit >= 0 ? '#15803d' : '#dc2626'};font-weight:700">¥${netProfit.toLocaleString()}</span>
+    </div>` : '';
   summaryEl.innerHTML = `
-    <div class="grid3" style="margin-bottom:12px">
+    <div class="grid3" style="margin-bottom:8px">
       <div class="card" style="margin-bottom:0;text-align:center">
         <div class="card-title">総本数</div>
         <div class="card-value">${totalCount}本</div>
@@ -7537,7 +7620,7 @@ function renderSalesReport(data, filterTherapist, expMap) {
         <div class="card-title">店落ち合計</div>
         <div class="card-value store" style="color:var(--accent2)">¥${totalStore.toLocaleString()}</div>
       </div>
-    </div>`;
+    </div>${expRow}`;
 
   // 日付・セラピスト別テーブル
   tableEl.innerHTML = `
@@ -7657,6 +7740,85 @@ function renderSalesReport(data, filterTherapist, expMap) {
     </div>`;
 }
 
+
+// ============================================================
+// 店舗経費（売上確認画面）
+// ============================================================
+function onSePresetChange(val) {
+  document.getElementById('se-custom-wrap').style.display = val === '__custom' ? '' : 'none';
+}
+
+function renderStoreExpenseList(list) {
+  const el = document.getElementById('store-expense-list');
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:8px 0">経費データなし</p>';
+    return;
+  }
+  // 日付順にソート
+  const sorted = [...list].sort((a, b) => (a.date > b.date ? 1 : a.date < b.date ? -1 : 0));
+  let byDate = {};
+  sorted.forEach(e => { if (!byDate[e.date]) byDate[e.date] = []; byDate[e.date].push(e); });
+  el.innerHTML = Object.entries(byDate).map(([date, items]) => {
+    const dayTotal = items.reduce((s, e) => s + Number(e.amount || 0), 0);
+    return `
+    <div style="margin-bottom:10px">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:4px;display:flex;justify-content:space-between">
+        <span>${date.replace(/-/g,'/')}</span><span>¥${dayTotal.toLocaleString()}</span>
+      </div>
+      ${items.map(e => `
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <span style="flex:0 0 70px;font-weight:600">${e.category}</span>
+        <span style="flex:0 0 80px;color:var(--accent2);font-weight:700">¥${Number(e.amount).toLocaleString()}</span>
+        <span style="flex:1;color:var(--muted)">${e.memo || ''}</span>
+        <button class="btn btn-sm" style="font-size:11px;padding:2px 8px;background:#fee2e2;color:#dc2626;border:none"
+          onclick="deleteStoreExpenseRow('${e.row}')">削除</button>
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+async function saveStoreExpenseRow() {
+  const date   = document.getElementById('se-date').value;
+  const preset = document.getElementById('se-category-preset').value;
+  const cat    = preset === '__custom'
+    ? (document.getElementById('se-category-custom').value.trim())
+    : preset;
+  const amount = Number(document.getElementById('se-amount').value);
+  const memo   = document.getElementById('se-memo').value.trim();
+
+  if (!date)   { alert('日付を選択してください'); return; }
+  if (!cat)    { alert('カテゴリを入力してください'); return; }
+  if (!amount) { alert('金額を入力してください'); return; }
+
+  try {
+    showOverlay();
+    await apiGet('saveStoreExpense', { date, category: cat, amount, memo: memo || null });
+    document.getElementById('se-amount').value = '';
+    document.getElementById('se-memo').value   = '';
+    showToast('追加しました');
+    // レポートを再読み込み（店舗経費リストも更新）
+    await loadSalesReport();
+  } catch(e) {
+    alert('保存失敗: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function deleteStoreExpenseRow(id) {
+  if (!await _confirm('この経費を削除しますか？', '削除', 'キャンセル')) return;
+  try {
+    showOverlay();
+    await apiGet('deleteExpense', { row: id });
+    showToast('削除しました');
+    await loadSalesReport();
+  } catch(e) {
+    alert('削除失敗: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
 
 // ============================================================
 // 売上詳細トグル・売上編集
