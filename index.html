@@ -772,16 +772,43 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         <div id="store-expense-list"></div>
       </div>
 
-      <!-- 固定費タブ -->
+      <!-- 固定費タブ（店舗別） -->
       <div id="se-panel-fixed" style="display:none">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-          <div class="form-group" style="margin-bottom:0;flex:1">
-            <label>対象月</label>
-            <input type="month" id="se-fixed-month" onchange="loadFixedCostPayments()">
-          </div>
-          <button class="btn btn-secondary btn-sm" style="margin-top:20px" onclick="loadFixedCostPayments()">更新</button>
+        <!-- サブタブ -->
+        <div style="display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:0">
+          <button id="se-fixed-sub-store" onclick="switchSeFixedSub('store')"
+            style="padding:7px 14px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--accent);margin-bottom:-1px;color:var(--accent);cursor:pointer">
+            この店舗
+          </button>
+          <button id="se-fixed-sub-all" onclick="switchSeFixedSub('all')"
+            style="padding:7px 14px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--muted);cursor:pointer">
+            🏢 全店舗集計
+          </button>
         </div>
-        <div id="fixed-cost-payment-list">マスタ管理 → 固定費 で費用を登録してください</div>
+
+        <!-- この店舗パネル -->
+        <div id="se-fixed-panel-store">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <div class="form-group" style="margin-bottom:0;flex:1">
+              <label>対象月</label>
+              <input type="month" id="se-fixed-month" onchange="loadFixedCostPayments()">
+            </div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:20px" onclick="loadFixedCostPayments()">更新</button>
+          </div>
+          <div id="fixed-cost-payment-list">マスタ管理 → 固定費 で費用を登録してください</div>
+        </div>
+
+        <!-- 全店舗集計パネル -->
+        <div id="se-fixed-panel-all" style="display:none">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <div class="form-group" style="margin-bottom:0;flex:1">
+              <label>対象月</label>
+              <input type="month" id="se-fixed-all-month" onchange="loadAllStoreFixedSummary()">
+            </div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:20px" onclick="loadAllStoreFixedSummary()">更新</button>
+          </div>
+          <div id="all-store-fixed-summary">月を選択してください</div>
+        </div>
       </div>
     </div>
   </div>
@@ -1266,6 +1293,10 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <button id="master-tab-fixedcost" onclick="switchMasterTab('fixedcost')"
         style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
         💴 固定費
+      </button>
+      <button id="master-tab-paymentdest" onclick="switchMasterTab('paymentdest')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        🏦 振込先
       </button>
     </div>
 
@@ -1770,6 +1801,60 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         </div>
       </div>
     </div>
+    <!-- 振込先マスタ -->
+    <div id="master-panel-paymentdest" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title">🏦 振込先マスタ</div>
+          <button class="btn btn-primary btn-sm" onclick="openPaymentDestForm()">＋ 追加</button>
+        </div>
+        <div id="payment-dest-list">読み込み中...</div>
+      </div>
+      <div id="payment-dest-form-card" class="card" style="display:none">
+        <div class="sec-title" style="margin-bottom:12px" id="pd-form-title">振込先を追加</div>
+        <input type="hidden" id="pd-edit-id">
+        <div class="form-group">
+          <label>振込先名 <span style="color:red">*</span></label>
+          <input type="text" id="pd-name" placeholder="例: ○○不動産・東京電力" class="ti">
+        </div>
+        <div class="grid2" style="gap:8px">
+          <div class="form-group">
+            <label>銀行名</label>
+            <input type="text" id="pd-bank" placeholder="例: ○○銀行" class="ti">
+          </div>
+          <div class="form-group">
+            <label>支店名</label>
+            <input type="text" id="pd-branch" placeholder="例: 渋谷支店" class="ti">
+          </div>
+        </div>
+        <div class="grid2" style="gap:8px">
+          <div class="form-group">
+            <label>口座種別</label>
+            <select id="pd-account-type" class="ts">
+              <option value="普通">普通</option>
+              <option value="当座">当座</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>口座番号</label>
+            <input type="text" id="pd-account-number" placeholder="例: 1234567" class="ti">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>口座名義</label>
+          <input type="text" id="pd-account-holder" placeholder="例: カ）ナントカ" class="ti">
+        </div>
+        <div class="form-group">
+          <label>メモ</label>
+          <input type="text" id="pd-memo" placeholder="任意" class="ti">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1" onclick="savePaymentDestRow()">保存</button>
+          <button class="btn btn-secondary" onclick="closePaymentDestForm()">キャンセル</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 固定費マスタ -->
     <div id="master-panel-fixedcost" style="display:none">
       <div class="card">
@@ -1805,6 +1890,12 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
               <option value="">店舗全体</option>
             </select>
           </div>
+        </div>
+        <div class="form-group">
+          <label>振込先</label>
+          <select id="fc-payment-dest" class="ts">
+            <option value="">未設定</option>
+          </select>
         </div>
         <div class="form-group">
           <label>金額（円）― 変動費は空欄</label>
@@ -3299,16 +3390,17 @@ async function apiGet(action, params = {}) {
 
     case 'saveFixedCostMaster': {
       const row = {
-        store_id:      STORE_ID,
-        name:          params.name,
-        category:      params.category,
-        room_id:       params.roomId   || null,
-        room_name:     params.roomName || null,
-        default_amount: params.amount != null && params.amount !== '' ? Number(params.amount) : null,
-        is_variable:   !params.amount,
-        due_day:       params.dueDay ? Number(params.dueDay) : null,
-        memo:          params.memo || null,
-        active:        true
+        store_id:               STORE_ID,
+        name:                   params.name,
+        category:               params.category,
+        room_id:                params.roomId   || null,
+        room_name:              params.roomName || null,
+        default_amount:         params.amount != null && params.amount !== '' ? Number(params.amount) : null,
+        is_variable:            !params.amount,
+        due_day:                params.dueDay ? Number(params.dueDay) : null,
+        memo:                   params.memo || null,
+        payment_destination_id: params.paymentDestId || null,
+        active:                 true
       };
       if (params.id) {
         const { error } = await _sb.from('store_fixed_costs').update(row).eq('id', params.id);
@@ -3354,6 +3446,52 @@ async function apiGet(action, params = {}) {
         if (error) throw new Error(error.message);
       }
       return { ok: true };
+    }
+
+    // ===== 振込先マスタ =====
+    case 'getPaymentDestinations': {
+      const { data, error } = await _sb.from('payment_destinations')
+        .select('*').eq('active', true).order('name');
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
+
+    case 'savePaymentDestination': {
+      const row = {
+        name:           params.name,
+        bank_name:      params.bankName      || null,
+        branch_name:    params.branchName    || null,
+        account_type:   params.accountType   || null,
+        account_number: params.accountNumber || null,
+        account_holder: params.accountHolder || null,
+        memo:           params.memo          || null,
+        active:         true
+      };
+      if (params.id) {
+        const { error } = await _sb.from('payment_destinations').update(row).eq('id', params.id);
+        if (error) throw new Error(error.message);
+      } else {
+        const { error } = await _sb.from('payment_destinations').insert(row);
+        if (error) throw new Error(error.message);
+      }
+      return { ok: true };
+    }
+
+    case 'deletePaymentDestination': {
+      const { error } = await _sb.from('payment_destinations').update({ active: false }).eq('id', params.id);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'getAllStoreFixedCostSummary': {
+      // 全店舗の固定費マスタ＋支払い記録を取得（store_idフィルタなし）
+      const { data: masters, error: e1 } = await _sb.from('store_fixed_costs')
+        .select('*, payment_destinations(name)').eq('active', true).order('category').order('name');
+      if (e1) throw new Error(e1.message);
+      const { data: payments, error: e2 } = await _sb.from('fixed_cost_payments')
+        .select('*').eq('period', params.period);
+      if (e2) throw new Error(e2.message);
+      return { masters: masters || [], payments: payments || [] };
     }
 
     // ===== シフト =====
@@ -7983,8 +8121,113 @@ async function deleteStoreExpenseRow(id) {
 
 // ============================================================
 // ============================================================
+// 振込先マスタ
+// ============================================================
+let _paymentDestinations = [];
+
+async function loadPaymentDestMaster() {
+  const listEl = document.getElementById('payment-dest-list');
+  if (!listEl) return;
+  listEl.innerHTML = '読み込み中...';
+  try {
+    _paymentDestinations = await apiGet('getPaymentDestinations') || [];
+    if (!_paymentDestinations.length) {
+      listEl.innerHTML = '<p style="color:var(--muted);font-size:13px">振込先が登録されていません</p>';
+      return;
+    }
+    listEl.innerHTML = _paymentDestinations.map(pd => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:flex-start;gap:8px">
+          <div style="flex:1">
+            <div style="font-weight:600;font-size:14px">${pd.name}</div>
+            ${pd.bank_name ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">${pd.bank_name}${pd.branch_name ? ' ' + pd.branch_name : ''}　${pd.account_type || ''}　${pd.account_number || ''}　${pd.account_holder || ''}</div>` : ''}
+            ${pd.memo ? `<div style="font-size:12px;color:var(--muted)">📝 ${pd.memo}</div>` : ''}
+          </div>
+          <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 8px" onclick="openPaymentDestForm('${pd.id}')">編集</button>
+          <button class="btn btn-sm" style="font-size:11px;padding:4px 8px;background:#fee2e2;color:#dc2626;border:none" onclick="deletePaymentDestRow('${pd.id}','${pd.name.replace(/'/g,String.fromCharCode(39))}')">削除</button>
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    listEl.innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+async function openPaymentDestForm(id) {
+  document.getElementById('payment-dest-form-card').style.display = '';
+  document.getElementById('pd-form-title').textContent = id ? '振込先を編集' : '振込先を追加';
+  document.getElementById('pd-edit-id').value = id || '';
+  if (id) {
+    const pd = _paymentDestinations.find(p => p.id === id);
+    if (pd) {
+      document.getElementById('pd-name').value           = pd.name || '';
+      document.getElementById('pd-bank').value           = pd.bank_name || '';
+      document.getElementById('pd-branch').value         = pd.branch_name || '';
+      document.getElementById('pd-account-type').value  = pd.account_type || '普通';
+      document.getElementById('pd-account-number').value = pd.account_number || '';
+      document.getElementById('pd-account-holder').value = pd.account_holder || '';
+      document.getElementById('pd-memo').value           = pd.memo || '';
+    }
+  } else {
+    ['pd-name','pd-bank','pd-branch','pd-account-number','pd-account-holder','pd-memo'].forEach(id => {
+      document.getElementById(id).value = '';
+    });
+    document.getElementById('pd-account-type').value = '普通';
+  }
+  document.getElementById('pd-name').focus();
+}
+
+function closePaymentDestForm() {
+  document.getElementById('payment-dest-form-card').style.display = 'none';
+}
+
+async function savePaymentDestRow() {
+  const id   = document.getElementById('pd-edit-id').value;
+  const name = document.getElementById('pd-name').value.trim();
+  if (!name) { alert('振込先名を入力してください'); return; }
+  try {
+    showOverlay();
+    await apiGet('savePaymentDestination', {
+      id: id || null,
+      name,
+      bankName:      document.getElementById('pd-bank').value.trim() || null,
+      branchName:    document.getElementById('pd-branch').value.trim() || null,
+      accountType:   document.getElementById('pd-account-type').value || null,
+      accountNumber: document.getElementById('pd-account-number').value.trim() || null,
+      accountHolder: document.getElementById('pd-account-holder').value.trim() || null,
+      memo:          document.getElementById('pd-memo').value.trim() || null
+    });
+    closePaymentDestForm();
+    showToast('保存しました');
+    loadPaymentDestMaster();
+  } catch(e) { alert('保存失敗: ' + e.message); } finally { hideOverlay(); }
+}
+
+async function deletePaymentDestRow(id, name) {
+  if (!await _confirm(`「${name}」を削除しますか？`, '削除', 'キャンセル')) return;
+  try {
+    showOverlay();
+    await apiGet('deletePaymentDestination', { id });
+    showToast('削除しました');
+    loadPaymentDestMaster();
+  } catch(e) { alert('削除失敗: ' + e.message); } finally { hideOverlay(); }
+}
+
+// ============================================================
 // 店舗経費タブ切替
 // ============================================================
+function switchSeFixedSub(sub) {
+  ['store','all'].forEach(s => {
+    const panel = document.getElementById('se-fixed-panel-' + s);
+    const btn   = document.getElementById('se-fixed-sub-' + s);
+    if (panel) panel.style.display = s === sub ? '' : 'none';
+    if (btn) {
+      btn.style.color        = s === sub ? 'var(--accent)' : 'var(--muted)';
+      btn.style.borderBottom = s === sub ? '2px solid var(--accent)' : '2px solid transparent';
+    }
+  });
+  if (sub === 'all') loadAllStoreFixedSummary();
+}
+
 function switchSeTab(tab) {
   ['adhoc','fixed'].forEach(t => {
     const panel = document.getElementById('se-panel-' + t);
@@ -8027,7 +8270,8 @@ async function loadFixedCostMaster() {
           <div style="flex:1">
             <div style="font-weight:600">${fc.name}</div>
             <div style="color:var(--muted);font-size:12px">${fc.room_name ? '🚪 ' + fc.room_name : '🏪 店舗全体'}${fc.due_day ? '　毎月' + fc.due_day + '日' : ''}</div>
-            ${fc.memo ? `<div style="color:var(--muted);font-size:12px;margin-top:2px">📝 ${fc.memo}</div>` : ''}
+            ${fc.payment_destination_id ? `<div style="color:var(--muted);font-size:12px">🏦 ${(_paymentDestinations.find(p=>p.id===fc.payment_destination_id)||{}).name||''}</div>` : ''}
+            ${fc.memo ? `<div style="color:var(--muted);font-size:12px">📝 ${fc.memo}</div>` : ''}
           </div>
           <div style="font-weight:700;color:var(--accent2);white-space:nowrap">
             ${fc.default_amount != null ? '¥' + Number(fc.default_amount).toLocaleString() : '<span style="color:var(--muted);font-size:12px">変動</span>'}
@@ -8058,23 +8302,36 @@ async function openFixedCostForm(id) {
     });
   } catch(e) {}
 
+  // 振込先選択肢を構築
+  const pdSel = document.getElementById('fc-payment-dest');
+  pdSel.innerHTML = '<option value="">未設定</option>';
+  try {
+    if (!_paymentDestinations.length) _paymentDestinations = await apiGet('getPaymentDestinations') || [];
+    _paymentDestinations.forEach(pd => {
+      const opt = document.createElement('option');
+      opt.value = pd.id; opt.textContent = pd.name; pdSel.appendChild(opt);
+    });
+  } catch(e) {}
+
   if (id) {
     const fc = _fixedCostMasters.find(f => f.id === id);
     if (fc) {
-      document.getElementById('fc-name').value     = fc.name || '';
-      document.getElementById('fc-category').value = fc.category || 'その他';
-      document.getElementById('fc-room').value     = fc.room_id || '';
-      document.getElementById('fc-amount').value   = fc.default_amount != null ? fc.default_amount : '';
-      document.getElementById('fc-due-day').value  = fc.due_day || '';
-      document.getElementById('fc-memo').value     = fc.memo || '';
+      document.getElementById('fc-name').value         = fc.name || '';
+      document.getElementById('fc-category').value     = fc.category || 'その他';
+      document.getElementById('fc-room').value         = fc.room_id || '';
+      document.getElementById('fc-payment-dest').value = fc.payment_destination_id || '';
+      document.getElementById('fc-amount').value       = fc.default_amount != null ? fc.default_amount : '';
+      document.getElementById('fc-due-day').value      = fc.due_day || '';
+      document.getElementById('fc-memo').value         = fc.memo || '';
     }
   } else {
-    document.getElementById('fc-name').value     = '';
-    document.getElementById('fc-category').value = '家賃';
-    document.getElementById('fc-room').value     = '';
-    document.getElementById('fc-amount').value   = '';
-    document.getElementById('fc-due-day').value  = '';
-    document.getElementById('fc-memo').value     = '';
+    document.getElementById('fc-name').value         = '';
+    document.getElementById('fc-category').value     = '家賃';
+    document.getElementById('fc-room').value         = '';
+    document.getElementById('fc-payment-dest').value = '';
+    document.getElementById('fc-amount').value       = '';
+    document.getElementById('fc-due-day').value      = '';
+    document.getElementById('fc-memo').value         = '';
   }
   document.getElementById('fc-name').focus();
 }
@@ -8091,8 +8348,10 @@ async function saveFixedCostMasterRow() {
   const roomId  = roomSel.value || null;
   const roomName = roomId ? roomSel.options[roomSel.selectedIndex].textContent : null;
   const amount  = document.getElementById('fc-amount').value;
-  const dueDay  = document.getElementById('fc-due-day').value;
-  const memo    = document.getElementById('fc-memo').value.trim();
+  const dueDay   = document.getElementById('fc-due-day').value;
+  const memo     = document.getElementById('fc-memo').value.trim();
+  const pdSel    = document.getElementById('fc-payment-dest');
+  const paymentDestId = pdSel.value || null;
 
   if (!name) { alert('費用名を入力してください'); return; }
 
@@ -8103,7 +8362,8 @@ async function saveFixedCostMasterRow() {
       roomId, roomName,
       amount: amount !== '' ? amount : null,
       dueDay: dueDay !== '' ? dueDay : null,
-      memo:   memo   || null
+      memo:   memo   || null,
+      paymentDestId
     });
     closeFixedCostForm();
     showToast('保存しました');
@@ -8193,6 +8453,7 @@ function renderFixedCostPayments(masters, pMap, period) {
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:600;${isPaid ? 'color:var(--muted)' : ''}">${fc.name}</div>
               <div style="font-size:11px;color:var(--muted)">${fc.room_name || '店舗全体'}${fc.due_day ? '　毎月' + fc.due_day + '日' : ''}</div>
+              ${fc.payment_destination_id ? `<div style="font-size:11px;color:var(--muted)">🏦 ${(_paymentDestinations.find(p=>p.id===fc.payment_destination_id)||{}).name||''}</div>` : ''}
               ${isPaid && p?.paid_at ? `<div style="font-size:11px;color:var(--success)">${p.paid_at.substring(0,10)} 支払済 ✓</div>` : ''}
             </div>
             ${isPaid
@@ -8257,6 +8518,101 @@ async function unmarkFixedCostPaid(fixedCostId, period) {
     alert('失敗: ' + e.message);
   } finally {
     hideOverlay();
+  }
+}
+
+// ============================================================
+// 全店舗固定費集計
+// ============================================================
+const STORE_NAMES = {
+  '11111111-0000-0000-0000-000000000001': 'いわき',
+  '22222222-0000-0000-0000-000000000002': '水戸',
+  '33333333-0000-0000-0000-000000000003': '神栖',
+  '44444444-0000-0000-0000-000000000004': 'NEVERLAND'
+};
+
+async function loadAllStoreFixedSummary() {
+  const monthEl = document.getElementById('se-fixed-all-month');
+  if (!monthEl) return;
+  if (!monthEl.value) {
+    const now = new Date();
+    monthEl.value = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  }
+  const period  = monthEl.value;
+  const summaryEl = document.getElementById('all-store-fixed-summary');
+  if (!summaryEl) return;
+  summaryEl.innerHTML = '読み込み中...';
+  try {
+    if (!_paymentDestinations.length) _paymentDestinations = await apiGet('getPaymentDestinations') || [];
+    const { masters, payments } = await apiGet('getAllStoreFixedCostSummary', { period });
+    const pMap = {};
+    payments.forEach(p => { pMap[p.fixed_cost_id] = p; });
+
+    if (!masters.length) {
+      summaryEl.innerHTML = '<p style="color:var(--muted);font-size:13px;text-align:center;padding:12px">固定費データなし</p>';
+      return;
+    }
+
+    // カテゴリ別集計
+    const byCategory = {};
+    masters.forEach(fc => {
+      if (!byCategory[fc.category]) byCategory[fc.category] = { items: [], total: 0, paidTotal: 0 };
+      const p = pMap[fc.id];
+      const amt = p?.paid ? (p.amount || 0) : (fc.default_amount || 0);
+      byCategory[fc.category].items.push({ fc, p });
+      byCategory[fc.category].total += amt;
+      if (p?.paid) byCategory[fc.category].paidTotal += (p.amount || 0);
+    });
+
+    const grandTotal     = Object.values(byCategory).reduce((s, g) => s + g.total, 0);
+    const grandPaidTotal = Object.values(byCategory).reduce((s, g) => s + g.paidTotal, 0);
+    const unpaidCount    = masters.filter(fc => !pMap[fc.id]?.paid).length;
+
+    summaryEl.innerHTML = `
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <div style="flex:1;padding:8px 12px;background:#fff7ed;border-radius:8px;text-align:center">
+          <div style="font-size:11px;color:#c2410c;font-weight:600">未払い</div>
+          <div style="font-size:16px;font-weight:700;color:#c2410c">${unpaidCount}件</div>
+        </div>
+        <div style="flex:1;padding:8px 12px;background:#f0fdf4;border-radius:8px;text-align:center">
+          <div style="font-size:11px;color:var(--success);font-weight:600">支払済合計</div>
+          <div style="font-size:16px;font-weight:700;color:var(--success)">¥${grandPaidTotal.toLocaleString()}</div>
+        </div>
+        <div style="flex:1;padding:8px 12px;background:var(--bg2);border-radius:8px;text-align:center">
+          <div style="font-size:11px;color:var(--muted);font-weight:600">総合計</div>
+          <div style="font-size:16px;font-weight:700">¥${grandTotal.toLocaleString()}</div>
+        </div>
+      </div>
+      ${Object.entries(byCategory).map(([cat, grp]) => `
+        <div style="margin-bottom:14px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:var(--muted);padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:6px">
+            <span>${cat}</span>
+            <span>¥${grp.total.toLocaleString()}</span>
+          </div>
+          ${grp.items.map(({ fc, p }) => {
+            const storeName = STORE_NAMES[fc.store_id] || fc.store_id?.substring(0,8);
+            const isPaid    = p?.paid;
+            const amt       = isPaid ? (p.amount || 0) : (fc.default_amount || 0);
+            const pdName    = fc.payment_destination_id
+              ? ((_paymentDestinations.find(d=>d.id===fc.payment_destination_id)||{}).name||'') : '';
+            return `
+            <div style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;margin-bottom:3px;
+              background:${isPaid ? 'var(--bg2)' : '#fff7ed'};border:1px solid ${isPaid ? 'var(--border)' : '#fed7aa'}">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:600;${isPaid ? 'color:var(--muted)' : ''}">${fc.name}</div>
+                <div style="font-size:11px;color:var(--muted)">${storeName}${fc.room_name ? ' / ' + fc.room_name : ''}${pdName ? '　🏦 ' + pdName : ''}</div>
+              </div>
+              <div style="font-weight:700;font-size:13px;${isPaid ? 'color:var(--muted)' : 'color:var(--accent2)'}">
+                ${fc.default_amount == null && !isPaid ? '<span style="font-size:11px;color:var(--muted)">変動</span>' : '¥' + Number(amt).toLocaleString()}
+              </div>
+              <div style="font-size:11px;font-weight:600;white-space:nowrap;${isPaid ? 'color:var(--success)' : 'color:#c2410c'}">
+                ${isPaid ? '✓ 支払済' : '未払い'}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>`).join('')}`;
+  } catch(e) {
+    summaryEl.innerHTML = '<p style="color:red">' + e.message + '</p>';
   }
 }
 
@@ -10003,7 +10359,7 @@ function initMasterMgmt() {
 
 function switchMasterTab(tab) {
   _currentMasterTab = tab;
-  ['menu','room','therapist','store','manual','checklist','fixedcost'].forEach(t => {
+  ['menu','room','therapist','store','manual','checklist','fixedcost','paymentdest'].forEach(t => {
     const panel = document.getElementById('master-panel-' + t);
     const btn   = document.getElementById('master-tab-' + t);
     if (panel) panel.style.display = t === tab ? '' : 'none';
@@ -10018,7 +10374,8 @@ function switchMasterTab(tab) {
   if (tab === 'store')     loadStoreSettingsUI();
   if (tab === 'manual')    loadManualMaster();
   if (tab === 'checklist') initChecklistMaster();
-  if (tab === 'fixedcost') loadFixedCostMaster();
+  if (tab === 'fixedcost')    loadFixedCostMaster();
+  if (tab === 'paymentdest') loadPaymentDestMaster();
 }
 
 // ===== メニューマスタ =====
