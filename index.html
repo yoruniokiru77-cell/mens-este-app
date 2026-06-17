@@ -1810,9 +1810,15 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
           <label>金額（円）― 変動費は空欄</label>
           <input type="number" id="fc-amount" min="0" placeholder="変動の場合は空欄" class="ti">
         </div>
-        <div class="form-group">
-          <label>支払日（毎月何日）</label>
-          <input type="number" id="fc-due-day" min="1" max="31" placeholder="例: 25" class="ti">
+        <div class="grid2" style="gap:8px">
+          <div class="form-group">
+            <label>支払日（毎月何日）</label>
+            <input type="number" id="fc-due-day" min="1" max="31" placeholder="例: 25" class="ti">
+          </div>
+          <div class="form-group">
+            <label>メモ</label>
+            <input type="text" id="fc-memo" placeholder="振込先・口座番号など" class="ti">
+          </div>
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-primary" style="flex:1" onclick="saveFixedCostMasterRow()">保存</button>
@@ -3301,6 +3307,7 @@ async function apiGet(action, params = {}) {
         default_amount: params.amount != null && params.amount !== '' ? Number(params.amount) : null,
         is_variable:   !params.amount,
         due_day:       params.dueDay ? Number(params.dueDay) : null,
+        memo:          params.memo || null,
         active:        true
       };
       if (params.id) {
@@ -8020,6 +8027,7 @@ async function loadFixedCostMaster() {
           <div style="flex:1">
             <div style="font-weight:600">${fc.name}</div>
             <div style="color:var(--muted);font-size:12px">${fc.room_name ? '🚪 ' + fc.room_name : '🏪 店舗全体'}${fc.due_day ? '　毎月' + fc.due_day + '日' : ''}</div>
+            ${fc.memo ? `<div style="color:var(--muted);font-size:12px;margin-top:2px">📝 ${fc.memo}</div>` : ''}
           </div>
           <div style="font-weight:700;color:var(--accent2);white-space:nowrap">
             ${fc.default_amount != null ? '¥' + Number(fc.default_amount).toLocaleString() : '<span style="color:var(--muted);font-size:12px">変動</span>'}
@@ -8058,6 +8066,7 @@ async function openFixedCostForm(id) {
       document.getElementById('fc-room').value     = fc.room_id || '';
       document.getElementById('fc-amount').value   = fc.default_amount != null ? fc.default_amount : '';
       document.getElementById('fc-due-day').value  = fc.due_day || '';
+      document.getElementById('fc-memo').value     = fc.memo || '';
     }
   } else {
     document.getElementById('fc-name').value     = '';
@@ -8065,6 +8074,7 @@ async function openFixedCostForm(id) {
     document.getElementById('fc-room').value     = '';
     document.getElementById('fc-amount').value   = '';
     document.getElementById('fc-due-day').value  = '';
+    document.getElementById('fc-memo').value     = '';
   }
   document.getElementById('fc-name').focus();
 }
@@ -8082,6 +8092,7 @@ async function saveFixedCostMasterRow() {
   const roomName = roomId ? roomSel.options[roomSel.selectedIndex].textContent : null;
   const amount  = document.getElementById('fc-amount').value;
   const dueDay  = document.getElementById('fc-due-day').value;
+  const memo    = document.getElementById('fc-memo').value.trim();
 
   if (!name) { alert('費用名を入力してください'); return; }
 
@@ -8091,7 +8102,8 @@ async function saveFixedCostMasterRow() {
       id: id || null, name, category: cat,
       roomId, roomName,
       amount: amount !== '' ? amount : null,
-      dueDay: dueDay !== '' ? dueDay : null
+      dueDay: dueDay !== '' ? dueDay : null,
+      memo:   memo   || null
     });
     closeFixedCostForm();
     showToast('保存しました');
