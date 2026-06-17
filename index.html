@@ -720,7 +720,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
     </div>
 
     <!-- 店舗経費セクション -->
-    <div id="store-expense-section" class="card" style="display:none">
+    <div id="store-expense-section" class="card">
       <div class="sec-header" style="margin-bottom:12px">
         <div class="sec-title">🏪 店舗経費</div>
       </div>
@@ -7511,6 +7511,13 @@ function initSalesReport() {
   if (!startEl.value) startEl.value = today;
   if (!endEl.value)   endEl.value   = today;
 
+  // 経費入力の日付デフォルト
+  const seDateEl = document.getElementById('se-date');
+  if (seDateEl && !seDateEl.value) seDateEl.value = today;
+
+  // 今月の店舗経費を初期ロード
+  loadStoreExpensesOnly();
+
   // セラピスト選択肢
   const sel = document.getElementById('report-therapist');
   if (sel.options.length <= 1 && therapists.length) {
@@ -7546,14 +7553,6 @@ async function loadSalesReport() {
     });
     renderSalesReport(data, therapist, expMap, storeExpData || []);
     renderStoreExpenseList(storeExpData || []);
-    // 店舗経費セクション表示（日付選択後は常に表示）
-    const seSection = document.getElementById('store-expense-section');
-    if (seSection) {
-      seSection.style.display = '';
-      // 開始日を経費入力のデフォルト日付にセット
-      const seDateEl = document.getElementById('se-date');
-      if (seDateEl && !seDateEl.value) seDateEl.value = endDate;
-    }
   } catch(e) {
     document.getElementById('report-table').innerHTML = '<p style="color:red">' + e.message + '</p>';
   } finally {
@@ -7744,6 +7743,20 @@ function renderSalesReport(data, filterTherapist, expMap, storeExpData) {
 // ============================================================
 // 店舗経費（売上確認画面）
 // ============================================================
+async function loadStoreExpensesOnly() {
+  // 今月1日〜月末の店舗経費を取得して一覧表示
+  const now  = new Date();
+  const y    = now.getFullYear();
+  const m    = String(now.getMonth()+1).padStart(2,'0');
+  const startDate = y + '-' + m + '-01';
+  const lastDay   = new Date(y, now.getMonth()+1, 0).getDate();
+  const endDate   = y + '-' + m + '-' + String(lastDay).padStart(2,'0');
+  try {
+    const list = await apiGet('getExpenses', { startDate, endDate, storeOnly: true });
+    renderStoreExpenseList(list || []);
+  } catch(e) { console.warn('店舗経費取得エラー:', e); }
+}
+
 function onSePresetChange(val) {
   document.getElementById('se-custom-wrap').style.display = val === '__custom' ? '' : 'none';
 }
