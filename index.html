@@ -3567,14 +3567,16 @@ async function apiGet(action, params = {}) {
     }
 
     case 'getAllStoreFixedCostSummary': {
-      // 全店舗の固定費マスタ＋支払い記録を取得（store_idフィルタなし）
-      const { data: masters, error: e1 } = await _sb.from('store_fixed_costs')
-        .select('*, payment_destinations(name)').eq('active', true).order('category').order('name');
-      if (e1) throw new Error(e1.message);
-      const { data: payments, error: e2 } = await _sb.from('fixed_cost_payments')
-        .select('*').eq('period', params.period);
-      if (e2) throw new Error(e2.message);
-      return { masters: masters || [], payments: payments || [] };
+      // 全店舗の固定費マスタ＋支払い記録＋振込先を取得（JOINせず分割クエリ）
+      const [r1, r2, r3] = await Promise.all([
+        _sb.from('store_fixed_costs').select('*').eq('active', true).order('category').order('name'),
+        _sb.from('fixed_cost_payments').select('*').eq('period', params.period),
+        _sb.from('payment_destinations').select('*').eq('active', true)
+      ]);
+      if (r1.error) throw new Error(r1.error.message);
+      if (r2.error) throw new Error(r2.error.message);
+      if (r3.error) throw new Error(r3.error.message);
+      return { masters: r1.data || [], payments: r2.data || [], paymentDests: r3.data || [] };
     }
 
     // ===== シフト =====
@@ -8833,8 +8835,8 @@ async function loadAllStoreFixedSummary() {
   if (!summaryEl) return;
   summaryEl.innerHTML = '読み込み中...';
   try {
-    if (!_paymentDestinations.length) _paymentDestinations = await apiGet('getPaymentDestinations') || [];
-    const { masters, payments } = await apiGet('getAllStoreFixedCostSummary', { period });
+    const { masters, payments, paymentDests } = await apiGet('getAllStoreFixedCostSummary', { period });
+    _paymentDestinations = paymentDests || [];
     const pMap = {};
     payments.forEach(p => { pMap[p.fixed_cost_id] = p; });
 
