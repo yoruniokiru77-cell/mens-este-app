@@ -8447,13 +8447,26 @@ function renderFixedCostPayments(masters, pMap, period) {
           const p = pMap[fc.id];
           const dispAmt = p?.amount ?? fc.default_amount;
           const isVar   = fc.default_amount == null;
+          const pdInfo  = fc.payment_destination_id
+            ? (_paymentDestinations.find(d => d.id === fc.payment_destination_id) || null) : null;
+          const pdDetailId = 'pd-detail-' + fc.id;
+          const pdDetail = pdInfo ? (() => {
+            const lines = [];
+            if (pdInfo.bank_name)      lines.push(pdInfo.bank_name + (pdInfo.branch_name ? ' ' + pdInfo.branch_name : ''));
+            if (pdInfo.account_type || pdInfo.account_number)
+              lines.push((pdInfo.account_type || '') + '　' + (pdInfo.account_number || ''));
+            if (pdInfo.account_holder) lines.push(pdInfo.account_holder);
+            if (pdInfo.memo)           lines.push('📝 ' + pdInfo.memo);
+            return lines;
+          })() : [];
           return `
-          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;margin-bottom:4px;
+          <div style="border-radius:8px;margin-bottom:4px;overflow:hidden;
             background:${isPaid ? 'var(--bg2)' : '#fff7ed'};border:1px solid ${isPaid ? 'var(--border)' : '#fed7aa'}">
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 10px">
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:600;${isPaid ? 'color:var(--muted)' : ''}">${fc.name}</div>
               <div style="font-size:11px;color:var(--muted)">${fc.room_name || '店舗全体'}${fc.due_day ? '　毎月' + fc.due_day + '日' : ''}</div>
-              ${fc.payment_destination_id ? `<div style="font-size:11px;color:var(--muted)">🏦 ${(_paymentDestinations.find(p=>p.id===fc.payment_destination_id)||{}).name||''}</div>` : ''}
+              ${pdInfo ? `<div style="font-size:11px;color:var(--accent);cursor:pointer;margin-top:2px" onclick="togglePdDetail('${pdDetailId}')">🏦 ${pdInfo.name} <span style="font-size:10px">▼</span></div>` : ''}
               ${isPaid && p?.paid_at ? `<div style="font-size:11px;color:var(--success)">${p.paid_at.substring(0,10)} 支払済 ✓</div>` : ''}
             </div>
             ${isPaid
@@ -8467,6 +8480,11 @@ function renderFixedCostPayments(masters, pMap, period) {
                  <button class="btn btn-sm btn-primary" style="font-size:11px;padding:4px 10px;white-space:nowrap"
                    onclick="markFixedCostPaid('${fc.id}','${period}',${isVar ? 'null' : fc.default_amount})">支払済</button>`
             }
+            </div>
+            ${pdInfo && pdDetail.length ? `
+            <div id="${pdDetailId}" style="display:none;padding:8px 12px;border-top:1px solid ${isPaid ? 'var(--border)' : '#fed7aa'};background:${isPaid ? 'var(--bg)' : '#fffbeb'}">
+              ${pdDetail.map(line => `<div style="font-size:12px;color:var(--muted);line-height:1.8">${line}</div>`).join('')}
+            </div>` : ''}
           </div>`;
         }).join('')}
       </div>`).join('');
@@ -8485,6 +8503,15 @@ function renderFixedCostPayments(masters, pMap, period) {
     </div>
     ${unpaid.length ? renderGroup(unpaid, false) : ''}
     ${paid.length ? `<div style="font-size:12px;font-weight:600;color:var(--muted);margin:10px 0 6px">— 支払済み —</div>${renderGroup(paid, true)}` : ''}`;
+}
+
+function togglePdDetail(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const visible = el.style.display !== 'none';
+  el.style.display = visible ? 'none' : '';
+  const trigger = el.previousElementSibling?.querySelector('[onclick*="togglePdDetail"]');
+  if (trigger) trigger.innerHTML = trigger.innerHTML.replace(visible ? '▲' : '▼', visible ? '▼' : '▲');
 }
 
 async function markFixedCostPaid(fixedCostId, period, defaultAmount) {
