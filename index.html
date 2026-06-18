@@ -8405,10 +8405,12 @@ async function loadFixedCostPayments() {
   if (!listEl) return;
   listEl.innerHTML = '読み込み中...';
   try {
-    const [masters, payments] = await Promise.all([
+    const [masters, payments, paymentDests] = await Promise.all([
       apiGet('getFixedCostMasters'),
-      apiGet('getFixedCostPayments', { period })
+      apiGet('getFixedCostPayments', { period }),
+      apiGet('getPaymentDestinations')
     ]);
+    _paymentDestinations = paymentDests || [];
     const mList = masters || [];
     const pMap  = {};
     (payments || []).forEach(p => { pMap[p.fixed_cost_id] = p; });
@@ -8481,9 +8483,9 @@ function renderFixedCostPayments(masters, pMap, period) {
                    onclick="markFixedCostPaid('${fc.id}','${period}',${isVar ? 'null' : fc.default_amount})">支払済</button>`
             }
             </div>
-            ${pdInfo && pdDetail.length ? `
+            ${pdInfo ? `
             <div id="${pdDetailId}" style="display:none;padding:8px 12px;border-top:1px solid ${isPaid ? 'var(--border)' : '#fed7aa'};background:${isPaid ? 'var(--bg)' : '#fffbeb'}">
-              ${pdDetail.map(line => `<div style="font-size:12px;color:var(--muted);line-height:1.8">${line}</div>`).join('')}
+              ${pdDetail.length ? pdDetail.map(line => `<div style="font-size:12px;color:var(--muted);line-height:1.8">${line}</div>`).join('') : `<div style="font-size:12px;color:var(--muted)">口座情報未登録</div>`}
             </div>` : ''}
           </div>`;
         }).join('')}
