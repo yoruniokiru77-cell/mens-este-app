@@ -8251,7 +8251,12 @@ async function loadFixedCostMaster() {
   if (!listEl) return;
   listEl.innerHTML = '読み込み中...';
   try {
-    _fixedCostMasters = await apiGet('getFixedCostMasters') || [];
+    const [masters, paymentDests] = await Promise.all([
+      apiGet('getFixedCostMasters'),
+      apiGet('getPaymentDestinations')
+    ]);
+    _fixedCostMasters = masters || [];
+    _paymentDestinations = paymentDests || [];
     if (!_fixedCostMasters.length) {
       listEl.innerHTML = '<p style="color:var(--muted);font-size:13px">固定費が登録されていません</p>';
       return;
@@ -8451,14 +8456,13 @@ function renderFixedCostPayments(masters, pMap, period) {
           const isVar   = fc.default_amount == null;
           const pdInfo  = fc.payment_destination_id
             ? (_paymentDestinations.find(d => d.id === fc.payment_destination_id) || null) : null;
-          const pdDetailId = 'pd-detail-' + fc.id;
-          const pdDetail = pdInfo ? (() => {
+          const pdLines = pdInfo ? (() => {
             const lines = [];
-            if (pdInfo.bank_name)      lines.push(pdInfo.bank_name + (pdInfo.branch_name ? ' ' + pdInfo.branch_name : ''));
+            if (pdInfo.bank_name) lines.push(pdInfo.bank_name + (pdInfo.branch_name ? ' ' + pdInfo.branch_name : ''));
             if (pdInfo.account_type || pdInfo.account_number)
               lines.push((pdInfo.account_type || '') + '　' + (pdInfo.account_number || ''));
             if (pdInfo.account_holder) lines.push(pdInfo.account_holder);
-            if (pdInfo.memo)           lines.push('📝 ' + pdInfo.memo);
+            if (pdInfo.memo) lines.push(pdInfo.memo);
             return lines;
           })() : [];
           return `
@@ -8468,8 +8472,9 @@ function renderFixedCostPayments(masters, pMap, period) {
             <div style="flex:1;min-width:0">
               <div style="font-size:13px;font-weight:600;${isPaid ? 'color:var(--muted)' : ''}">${fc.name}</div>
               <div style="font-size:11px;color:var(--muted)">${fc.room_name || '店舗全体'}${fc.due_day ? '　毎月' + fc.due_day + '日' : ''}</div>
-              ${pdInfo ? `<div style="font-size:11px;color:var(--accent);cursor:pointer;margin-top:2px" onclick="togglePdDetail('${pdDetailId}')">🏦 ${pdInfo.name} <span style="font-size:10px">▼</span></div>` : ''}
-              ${isPaid && p?.paid_at ? `<div style="font-size:11px;color:var(--success)">${p.paid_at.substring(0,10)} 支払済 ✓</div>` : ''}
+              ${pdInfo ? `<div style="font-size:11px;color:var(--accent);margin-top:2px">🏦 ${pdInfo.name}</div>
+              ${pdLines.length ? `<div style="font-size:10px;color:var(--muted);margin-top:1px;line-height:1.6">${pdLines.join('　')}</div>` : ''}` : ''}
+              ${isPaid && p?.paid_at ? `<div style="font-size:11px;color:var(--success);margin-top:2px">${p.paid_at.substring(0,10)} 支払済 ✓</div>` : ''}
             </div>
             ${isPaid
               ? `<div style="font-weight:700;color:var(--muted)">¥${Number(p.amount).toLocaleString()}</div>
@@ -8483,10 +8488,6 @@ function renderFixedCostPayments(masters, pMap, period) {
                    onclick="markFixedCostPaid('${fc.id}','${period}',${isVar ? 'null' : fc.default_amount})">支払済</button>`
             }
             </div>
-            ${pdInfo ? `
-            <div id="${pdDetailId}" style="display:none;padding:8px 12px;border-top:1px solid ${isPaid ? 'var(--border)' : '#fed7aa'};background:${isPaid ? 'var(--bg)' : '#fffbeb'}">
-              ${pdDetail.length ? pdDetail.map(line => `<div style="font-size:12px;color:var(--muted);line-height:1.8">${line}</div>`).join('') : `<div style="font-size:12px;color:var(--muted)">口座情報未登録</div>`}
-            </div>` : ''}
           </div>`;
         }).join('')}
       </div>`).join('');
@@ -8507,14 +8508,6 @@ function renderFixedCostPayments(masters, pMap, period) {
     ${paid.length ? `<div style="font-size:12px;font-weight:600;color:var(--muted);margin:10px 0 6px">— 支払済み —</div>${renderGroup(paid, true)}` : ''}`;
 }
 
-function togglePdDetail(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const visible = el.style.display !== 'none';
-  el.style.display = visible ? 'none' : '';
-  const trigger = el.previousElementSibling?.querySelector('[onclick*="togglePdDetail"]');
-  if (trigger) trigger.innerHTML = trigger.innerHTML.replace(visible ? '▲' : '▼', visible ? '▼' : '▲');
-}
 
 async function markFixedCostPaid(fixedCostId, period, defaultAmount) {
   // 変動費は入力フィールドから取得
