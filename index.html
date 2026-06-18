@@ -735,6 +735,13 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
       <!-- 都度経費タブ -->
       <div id="se-panel-adhoc">
         <div style="background:var(--bg2);border-radius:8px;padding:12px;margin-bottom:14px">
+          <div class="form-group" style="margin-bottom:8px">
+            <label>マスタから選択</label>
+            <select id="se-template-select" class="ts" onchange="onSeTemplateChange(this.value)">
+              <option value="">-- 直接入力 --</option>
+            </select>
+          </div>
+          <div id="se-template-pd-info" style="display:none;font-size:11px;color:var(--accent);background:var(--bg);border-radius:6px;padding:6px 10px;margin-bottom:8px"></div>
           <div class="grid2" style="gap:8px;margin-bottom:8px">
             <div class="form-group" style="margin-bottom:0">
               <label>日付</label>
@@ -1298,6 +1305,10 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
         🏦 振込先
       </button>
+      <button id="master-tab-expensetpl" onclick="switchMasterTab('expensetpl')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        📝 都度経費
+      </button>
     </div>
 
     <!-- メニューマスタ -->
@@ -1801,6 +1812,50 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         </div>
       </div>
     </div>
+    <!-- 都度経費マスタ -->
+    <div id="master-panel-expensetpl" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title">📝 都度経費マスタ</div>
+          <button class="btn btn-primary btn-sm" onclick="openExpenseTplForm()">＋ 追加</button>
+        </div>
+        <div id="expense-tpl-list">読み込み中...</div>
+      </div>
+      <div id="expense-tpl-form-card" class="card" style="display:none">
+        <div class="sec-title" style="margin-bottom:12px" id="expense-tpl-form-title">都度経費項目を追加</div>
+        <input type="hidden" id="etpl-edit-id">
+        <div class="form-group">
+          <label>項目名 <span style="color:red">*</span></label>
+          <input type="text" id="etpl-name" placeholder="例: クリーニング代・備品購入" class="ti">
+        </div>
+        <div class="grid2" style="gap:8px">
+          <div class="form-group">
+            <label>カテゴリ <span style="color:red">*</span></label>
+            <select id="etpl-category" class="ts">
+              <option value="消耗品">消耗品</option>
+              <option value="広告費">広告費</option>
+              <option value="交通費">交通費</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>金額（円）</label>
+            <input type="number" id="etpl-amount" min="0" placeholder="変動の場合は空欄" class="ti">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>振込先</label>
+          <select id="etpl-payment-dest" class="ts">
+            <option value="">未設定</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1" onclick="saveExpenseTplRow()">保存</button>
+          <button class="btn btn-secondary" onclick="closeExpenseTplForm()">キャンセル</button>
+        </div>
+      </div>
+    </div>
+
     <!-- 振込先マスタ -->
     <div id="master-panel-paymentdest" style="display:none">
       <div class="card">
@@ -3479,6 +3534,34 @@ async function apiGet(action, params = {}) {
 
     case 'deletePaymentDestination': {
       const { error } = await _sb.from('payment_destinations').update({ active: false }).eq('id', params.id);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'getExpenseTemplates': {
+      const { data, error } = await _sb.from('store_expense_templates')
+        .select('*').eq('store_id', STORE_ID).eq('active', true).order('category').order('name');
+      if (error) throw new Error(error.message);
+      return data;
+    }
+    case 'saveExpenseTemplate': {
+      const { id, name, category, amount, paymentDestId } = params;
+      const row = {
+        store_id: STORE_ID, name, category: category || 'その他',
+        amount: amount != null && amount !== '' ? Number(amount) : null,
+        payment_destination_id: paymentDestId || null
+      };
+      let data, error;
+      if (id) {
+        ({ data, error } = await _sb.from('store_expense_templates').update(row).eq('id', id).select().single());
+      } else {
+        ({ data, error } = await _sb.from('store_expense_templates').insert(row).select().single());
+      }
+      if (error) throw new Error(error.message);
+      return data;
+    }
+    case 'deleteExpenseTemplate': {
+      const { error } = await _sb.from('store_expense_templates').update({ active: false }).eq('id', params.id);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
@@ -7803,6 +7886,8 @@ function initSalesReport() {
 
   // 今月の店舗経費を初期ロード
   loadStoreExpensesOnly();
+  // 都度経費テンプレートセレクトを初期化
+  refreshSeTemplateSelect();
 
   // セラピスト選択肢
   const sel = document.getElementById('report-therapist');
@@ -8239,6 +8324,189 @@ function switchSeTab(tab) {
     }
   });
   if (tab === 'fixed') loadFixedCostPayments();
+}
+
+// ============================================================
+// 都度経費マスタ（マスタ管理ページ）
+// ============================================================
+let _expenseTemplates = [];
+
+async function loadExpenseTemplateMaster() {
+  const listEl = document.getElementById('expense-tpl-list');
+  if (!listEl) return;
+  listEl.innerHTML = '読み込み中...';
+  try {
+    const [templates, paymentDests] = await Promise.all([
+      apiGet('getExpenseTemplates'),
+      apiGet('getPaymentDestinations')
+    ]);
+    _expenseTemplates = templates || [];
+    _paymentDestinations = paymentDests || [];
+    if (!_expenseTemplates.length) {
+      listEl.innerHTML = '<p style="color:var(--muted);font-size:13px">都度経費項目が登録されていません</p>';
+      return;
+    }
+    const byCategory = {};
+    _expenseTemplates.forEach(t => {
+      if (!byCategory[t.category]) byCategory[t.category] = [];
+      byCategory[t.category].push(t);
+    });
+    listEl.innerHTML = Object.entries(byCategory).map(([cat, items]) => `
+      <div style="margin-bottom:14px">
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid var(--border)">${cat}</div>
+        ${items.map(t => {
+          const pd = t.payment_destination_id ? (_paymentDestinations.find(p => p.id === t.payment_destination_id) || null) : null;
+          return `
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+            <div style="flex:1">
+              <div style="font-weight:600">${t.name}</div>
+              ${pd ? `<div style="color:var(--muted);font-size:12px">🏦 ${pd.name}</div>` : ''}
+            </div>
+            <div style="font-weight:700;color:var(--accent2);white-space:nowrap">
+              ${t.amount != null ? '¥' + Number(t.amount).toLocaleString() : '<span style="color:var(--muted);font-size:12px">変動</span>'}
+            </div>
+            <button class="btn btn-sm btn-secondary" style="font-size:11px;padding:4px 8px"
+              onclick="openExpenseTplForm('${t.id}')">編集</button>
+            <button class="btn btn-sm" style="font-size:11px;padding:4px 8px;background:#fee2e2;color:#dc2626;border:none"
+              onclick="deleteExpenseTplRow('${t.id}','${t.name.replace(/'/g,String.fromCharCode(39))}')">削除</button>
+          </div>`;
+        }).join('')}
+      </div>`).join('');
+  } catch(e) {
+    listEl.innerHTML = '<p style="color:red">' + e.message + '</p>';
+  }
+}
+
+async function openExpenseTplForm(id) {
+  const card = document.getElementById('expense-tpl-form-card');
+  card.style.display = '';
+  document.getElementById('expense-tpl-form-title').textContent = id ? '都度経費項目を編集' : '都度経費項目を追加';
+  document.getElementById('etpl-edit-id').value = id || '';
+  // 振込先選択肢を構築
+  const pdSel = document.getElementById('etpl-payment-dest');
+  pdSel.innerHTML = '<option value="">未設定</option>';
+  try {
+    if (!_paymentDestinations.length) _paymentDestinations = await apiGet('getPaymentDestinations') || [];
+    _paymentDestinations.forEach(pd => {
+      const opt = document.createElement('option');
+      opt.value = pd.id; opt.textContent = pd.name; pdSel.appendChild(opt);
+    });
+  } catch(e) {}
+  if (id) {
+    const t = _expenseTemplates.find(x => x.id === id);
+    if (t) {
+      document.getElementById('etpl-name').value         = t.name || '';
+      document.getElementById('etpl-category').value     = t.category || 'その他';
+      document.getElementById('etpl-amount').value       = t.amount != null ? t.amount : '';
+      document.getElementById('etpl-payment-dest').value = t.payment_destination_id || '';
+    }
+  } else {
+    document.getElementById('etpl-name').value         = '';
+    document.getElementById('etpl-category').value     = 'その他';
+    document.getElementById('etpl-amount').value       = '';
+    document.getElementById('etpl-payment-dest').value = '';
+  }
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function closeExpenseTplForm() {
+  document.getElementById('expense-tpl-form-card').style.display = 'none';
+}
+
+async function saveExpenseTplRow() {
+  const id      = document.getElementById('etpl-edit-id').value;
+  const name    = document.getElementById('etpl-name').value.trim();
+  const category = document.getElementById('etpl-category').value;
+  const amount  = document.getElementById('etpl-amount').value;
+  const paymentDestId = document.getElementById('etpl-payment-dest').value;
+  if (!name) { alert('項目名を入力してください'); return; }
+  try {
+    showOverlay();
+    await apiGet('saveExpenseTemplate', { id: id || null, name, category, amount, paymentDestId });
+    closeExpenseTplForm();
+    showToast('保存しました');
+    await loadExpenseTemplateMaster();
+    refreshSeTemplateSelect();
+  } catch(e) { alert('保存失敗: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
+async function deleteExpenseTplRow(id, name) {
+  if (!await _confirm('「' + name + '」を削除しますか？', '削除', 'キャンセル')) return;
+  try {
+    showOverlay();
+    await apiGet('deleteExpenseTemplate', { id });
+    showToast('削除しました');
+    await loadExpenseTemplateMaster();
+    refreshSeTemplateSelect();
+  } catch(e) { alert('削除失敗: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
+// 都度経費入力フォームのテンプレート選択セレクトを更新
+async function refreshSeTemplateSelect() {
+  const sel = document.getElementById('se-template-select');
+  if (!sel) return;
+  try {
+    if (!_expenseTemplates.length) _expenseTemplates = await apiGet('getExpenseTemplates') || [];
+    if (!_paymentDestinations.length) _paymentDestinations = await apiGet('getPaymentDestinations') || [];
+  } catch(e) {}
+  sel.innerHTML = '<option value="">-- 直接入力 --</option>';
+  const byCategory = {};
+  _expenseTemplates.forEach(t => {
+    if (!byCategory[t.category]) byCategory[t.category] = [];
+    byCategory[t.category].push(t);
+  });
+  Object.entries(byCategory).forEach(([cat, items]) => {
+    const grp = document.createElement('optgroup');
+    grp.label = cat;
+    items.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.name + (t.amount != null ? '（¥' + Number(t.amount).toLocaleString() + '）' : '');
+      grp.appendChild(opt);
+    });
+    sel.appendChild(grp);
+  });
+}
+
+function onSeTemplateChange(val) {
+  const pdInfoEl = document.getElementById('se-template-pd-info');
+  if (!val) {
+    if (pdInfoEl) pdInfoEl.style.display = 'none';
+    return;
+  }
+  const t = _expenseTemplates.find(x => x.id === val);
+  if (!t) return;
+  // カテゴリ設定
+  const presetSel = document.getElementById('se-category-preset');
+  const presets = ['消耗品','広告費','交通費','その他'];
+  if (presets.includes(t.category)) {
+    presetSel.value = t.category;
+    document.getElementById('se-custom-wrap').style.display = 'none';
+  } else {
+    presetSel.value = '__custom';
+    document.getElementById('se-custom-wrap').style.display = '';
+    document.getElementById('se-category-custom').value = t.category;
+  }
+  // 金額設定
+  if (t.amount != null) document.getElementById('se-amount').value = t.amount;
+  // メモに項目名をセット
+  document.getElementById('se-memo').value = t.name;
+  // 振込先表示
+  if (pdInfoEl) {
+    const pd = t.payment_destination_id ? (_paymentDestinations.find(d => d.id === t.payment_destination_id) || null) : null;
+    if (pd) {
+      const parts = [];
+      if (pd.bank_name) parts.push(pd.bank_name + (pd.branch_name ? ' ' + pd.branch_name : ''));
+      if (pd.account_type || pd.account_number) parts.push((pd.account_type || '') + '　' + (pd.account_number || ''));
+      if (pd.account_holder) parts.push(pd.account_holder);
+      pdInfoEl.innerHTML = '🏦 ' + pd.name + (parts.length ? '　' + parts.join('　') : '');
+      pdInfoEl.style.display = '';
+    } else {
+      pdInfoEl.style.display = 'none';
+    }
+  }
 }
 
 // ============================================================
@@ -10381,7 +10649,7 @@ function initMasterMgmt() {
 
 function switchMasterTab(tab) {
   _currentMasterTab = tab;
-  ['menu','room','therapist','store','manual','checklist','fixedcost','paymentdest'].forEach(t => {
+  ['menu','room','therapist','store','manual','checklist','fixedcost','paymentdest','expensetpl'].forEach(t => {
     const panel = document.getElementById('master-panel-' + t);
     const btn   = document.getElementById('master-tab-' + t);
     if (panel) panel.style.display = t === tab ? '' : 'none';
@@ -10398,6 +10666,7 @@ function switchMasterTab(tab) {
   if (tab === 'checklist') initChecklistMaster();
   if (tab === 'fixedcost')    loadFixedCostMaster();
   if (tab === 'paymentdest') loadPaymentDestMaster();
+  if (tab === 'expensetpl')  loadExpenseTemplateMaster();
 }
 
 // ===== メニューマスタ =====
