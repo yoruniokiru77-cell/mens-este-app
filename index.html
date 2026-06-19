@@ -13369,12 +13369,14 @@ async function updateResvRow() {
     const newEndMs3 = dtMs3 + mins * 60000;
     const np3 = n => String(n).padStart(2,'0');
 
-    // 翌日分も取得（深夜帯の重複チェック用）
+    // 深夜0〜2時台は前日クエリ+当日、通常時は当日+翌日を取得（27時ルール対応）
+    const prevDt3a = new Date(dt); prevDt3a.setDate(prevDt3a.getDate() - 1);
+    const prevDateStr3a = prevDt3a.getFullYear() + '-' + np3(prevDt3a.getMonth()+1) + '-' + np3(prevDt3a.getDate());
     const nextDt3 = new Date(dt); nextDt3.setDate(nextDt3.getDate() + 1);
     const nextDateStr3 = nextDt3.getFullYear() + '-' + np3(nextDt3.getMonth()+1) + '-' + np3(nextDt3.getDate());
     const [resvToday3, resvNext3] = await Promise.all([
-      apiGet('getReservations', { date: dateStr }),
-      apiGet('getReservations', { date: nextDateStr3 })
+      apiGet('getReservations', { date: dtH3 < 3 ? prevDateStr3a : dateStr }),
+      apiGet('getReservations', { date: dtH3 < 3 ? dateStr : nextDateStr3 })
     ]);
     // インターバル取得（therapistsキャッシュが未ロード時はDB直接取得）
     let interval = (therapists.find(t => t.name === therapistName) || {}).interval;
@@ -14065,15 +14067,17 @@ async function submitReservation() {
     }
 
 
-    // 予約重複チェック（27時ルール対応：翌日分も取得）
+    // 予約重複チェック（27時ルール対応）
+    // 深夜0〜2時台は当日dateStrのクエリ範囲(T03:00〜翌T02:59)に自分の時間帯が含まれないため
+    // 前日クエリ(prevDateStr2)と当日クエリを取得する。通常時は当日+翌日を取得。
     const nextDateObj2 = new Date(dt); nextDateObj2.setDate(nextDateObj2.getDate() + 1);
     const nextPad2 = n => String(n).padStart(2,'0');
     const nextDateStr2 = nextDateObj2.getFullYear() + '-' + nextPad2(nextDateObj2.getMonth()+1) + '-' + nextPad2(nextDateObj2.getDate());
-    const [resvToday2, resvNext2] = await Promise.all([
-      apiGet('getReservations', { date: dateStr }),
-      apiGet('getReservations', { date: nextDateStr2 })
+    const [resvA2, resvB2] = await Promise.all([
+      apiGet('getReservations', { date: dtH2 < 3 ? prevDateStr2 : dateStr }),
+      apiGet('getReservations', { date: dtH2 < 3 ? dateStr : nextDateStr2 })
     ]);
-    const allResvForConflict = [...resvToday2, ...resvNext2];
+    const allResvForConflict = [...resvA2, ...resvB2];
     // インターバル取得（therapistsキャッシュが未ロード時はDB直接取得）
     let interval = (therapists.find(t => t.name === therapistName) || {}).interval;
     if (interval === undefined || interval === null) {
@@ -14379,7 +14383,16 @@ async function saveAndSendLine() {
       }
     } catch(esl) { console.warn('シフト超過チェックエラー:', esl); }
 
-    const reservations = await apiGet('getReservations', { date: dateStr });
+    // 深夜0〜2時台は前日クエリ+当日、通常時は当日+翌日を取得（27時ルール対応）
+    const prevDt_sl2 = new Date(dt); prevDt_sl2.setDate(prevDt_sl2.getDate() - 1);
+    const prevDateStr_sl2 = prevDt_sl2.getFullYear() + '-' + np_sl(prevDt_sl2.getMonth()+1) + '-' + np_sl(prevDt_sl2.getDate());
+    const nextDt_sl2 = new Date(dt); nextDt_sl2.setDate(nextDt_sl2.getDate() + 1);
+    const nextDateStr_sl2 = nextDt_sl2.getFullYear() + '-' + np_sl(nextDt_sl2.getMonth()+1) + '-' + np_sl(nextDt_sl2.getDate());
+    const [resvA_sl, resvB_sl] = await Promise.all([
+      apiGet('getReservations', { date: dtH_sl < 3 ? prevDateStr_sl2 : dateStr }),
+      apiGet('getReservations', { date: dtH_sl < 3 ? dateStr : nextDateStr_sl2 })
+    ]);
+    const reservations = [...resvA_sl, ...resvB_sl];
     // インターバル取得（therapistsキャッシュが未ロード時はDB直接取得）
     let interval = (therapists.find(t => t.name === therapistName) || {}).interval;
     if (interval === undefined || interval === null) {
@@ -14391,15 +14404,26 @@ async function saveAndSendLine() {
       }
     }
     if (interval === undefined || interval === null) interval = 30;
-    
+
+    const dtMs_sl = dt.getTime();
+    const newEndMs_sl = dtMs_sl + (mins + interval) * 60000;
     const conflict = reservations.find(r => {
       if (r.therapist !== therapistName) return false;
       if (r.status === 'cancelled') return false;
-      const rIso = r.rawDate || r.date.replace(/\//g,'-').replace(' ','T');
-      const rDt  = new Date(rIso);
-      const rEnd = new Date(rDt.getTime() + (Number(r.course) + interval) * 60000);
-      const newEnd = new Date(dt.getTime() + (mins + interval) * 60000);
-      return dt < rEnd && newEnd > rDt;
+      // r.date（_fmtDatetimeJp済みのJST表示文字列）を手動パース（rawDate直接渡しのTZずれを回避）
+      const rParts = (r.date || '').split(' ');
+      const rDP = (rParts[0] || '').replace(/\//g, '-');
+      const [rH, rM] = (rParts[1] || '00:00').split(':').map(Number);
+      let rDt;
+      if (rH >= 24) {
+        rDt = new Date(rDP + 'T00:00:00');
+        rDt.setDate(rDt.getDate() + 1);
+        rDt.setHours(rH - 24, rM, 0, 0);
+      } else {
+        rDt = new Date(rDP + 'T' + String(rH).padStart(2,'0') + ':' + String(rM).padStart(2,'0') + ':00');
+      }
+      const rEndMs = rDt.getTime() + (Number(r.course) + interval) * 60000;
+      return dtMs_sl < rEndMs && newEndMs_sl > rDt.getTime();
     });
     if (conflict) {
       hideOverlay();
