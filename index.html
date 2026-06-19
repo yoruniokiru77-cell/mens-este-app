@@ -3540,14 +3540,14 @@ async function apiGet(action, params = {}) {
 
     case 'getExpenseTemplates': {
       const { data, error } = await _sb.from('store_expense_templates')
-        .select('*').eq('store_id', STORE_ID).eq('active', true).order('category').order('name');
+        .select('*').eq('active', true).order('category').order('name');
       if (error) throw new Error(error.message);
       return data;
     }
     case 'saveExpenseTemplate': {
       const { id, name, category, amount, paymentDestId } = params;
       const row = {
-        store_id: STORE_ID, name, category: category || 'その他',
+        name, category: category || 'その他',
         amount: amount != null && amount !== '' ? Number(amount) : null,
         payment_destination_id: paymentDestId || null
       };
