@@ -7523,8 +7523,18 @@ async function openEditShiftModal(row, date, startTime, endTime, roomName, thera
     if (h >= 0 && h < 3) return String(h + 24).padStart(2,'0') + ':' + t.split(':')[1];
     return t.substring(0, 5);
   }
-  document.getElementById('shift-edit-start').innerHTML = _buildTimeOptions(_to26(startTime));
-  document.getElementById('shift-edit-end').innerHTML   = _buildTimeOptions(_to26(endTime));
+  document.getElementById('shift-edit-start').innerHTML    = _buildTimeOptions(_to26(startTime));
+  document.getElementById('shift-edit-end').innerHTML      = _buildTimeOptions(_to26(endTime));
+  const coSelEdit = document.getElementById('shift-edit-checkout');
+  coSelEdit.innerHTML = '<option value="">-（未設定）</option>' + _buildTimeOptions('');
+  try {
+    const { data: sd2 } = await _sb.from('shifts').select('checkout_time').eq('id', row).maybeSingle();
+    if (sd2 && sd2.checkout_time) {
+      const ct = _fmtTimeJp(sd2.checkout_time);
+      const opt = coSelEdit.querySelector('option[value="' + ct + '"]');
+      if (opt) opt.selected = true;
+    }
+  } catch(e) {}
 
   // ルームマスタ読み込み
   const sel = document.getElementById('shift-edit-room');
@@ -7566,7 +7576,8 @@ async function confirmEditShift() {
 
   try {
     showOverlay();
-    await apiGet('updateShift', { row, date: date.replace(/-/g,'/'), startTime: normalizedStart, endTime: normalizedEnd, roomId, roomName });
+    const checkoutTime = document.getElementById('shift-edit-checkout')?.value || null;
+    await apiGet('updateShift', { row, date: date.replace(/-/g,'/'), startTime: normalizedStart, endTime: normalizedEnd, roomId, roomName, checkoutTime });
 
     // 承認済みシフトの変更時はセラピストにLINE通知
     if (_editShiftOriginal) {
@@ -17526,6 +17537,12 @@ window.addEventListener('DOMContentLoaded', init);
           <label>終了時間</label>
           <select id="shift-edit-end"></select>
         </div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>退室予定時間（任意）</label>
+        <select id="shift-edit-checkout" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+          <option value="">-（未設定）</option>
+        </select>
       </div>
       <input type="hidden" id="shift-edit-row">
       <div id="shift-edit-warning" style="display:none;background:#fff3cd;border-left:4px solid #ffc107;border-radius:6px;padding:10px 12px;font-size:13px;color:#856404;margin-bottom:12px"></div>
