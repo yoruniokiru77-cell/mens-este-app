@@ -861,10 +861,6 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
           <label>終了</label>
           <select id="shift-end"></select>
         </div>
-        <div class="form-group" style="margin-bottom:0;width:110px">
-          <label>退室予定（任意）</label>
-          <select id="shift-checkout"><option value="">-</option></select>
-        </div>
         <div class="form-group" style="margin-bottom:0;flex:1;min-width:120px">
           <label>メモ（任意）</label>
           <input type="text" id="shift-memo" placeholder="例：午前のみ">
@@ -3596,7 +3592,6 @@ async function apiGet(action, params = {}) {
         end_time:       item.endTime,
         status:         'pending',
         memo:           item.memo || null,
-        checkout_time:  item.checkoutTime || null,
         submitted_at:   new Date().toISOString()
       }));
       const { error } = await _sb.from('shifts').insert(rows);
@@ -6231,9 +6226,8 @@ async function initShiftSubmit() {
   document.getElementById('shift-date').value = todayStr;
 
   // 時刻selectに選択肢を設定（10:00〜26:00）
-  document.getElementById('shift-start').innerHTML    = _buildTimeOptions('09:00');
-  document.getElementById('shift-end').innerHTML      = _buildTimeOptions('20:00');
-  document.getElementById('shift-checkout').innerHTML = '<option value="">-</option>' + _buildTimeOptions('20:00');
+  document.getElementById('shift-start').innerHTML = _buildTimeOptions('09:00');
+  document.getElementById('shift-end').innerHTML   = _buildTimeOptions('20:00');
 
   // 追加待ちリストをリセット
   pendingShifts = [];
@@ -6255,11 +6249,10 @@ async function initShiftSubmit() {
 
 // 「＋ 追加」ボタン押下
 function addShiftItem() {
-  const date         = document.getElementById('shift-date').value;
-  const startTime    = document.getElementById('shift-start').value;
-  const endTime      = document.getElementById('shift-end').value;
-  const checkoutTime = document.getElementById('shift-checkout').value;
-  const memo         = document.getElementById('shift-memo').value;
+  const date      = document.getElementById('shift-date').value;
+  const startTime = document.getElementById('shift-start').value;
+  const endTime   = document.getElementById('shift-end').value;
+  const memo      = document.getElementById('shift-memo').value;
 
   if (!date) { alert('出勤希望日を選択してください'); return; }
   if (!startTime || !endTime) { alert('開始・終了時間を入力してください'); return; }
@@ -6277,7 +6270,7 @@ function addShiftItem() {
     if (!confirm(date + ' はすでに追加されています。続けて追加しますか？')) return;
   }
 
-  pendingShifts.push({ date, startTime: _normalizeTime(startTime), endTime: _normalizeTime(endTime), checkoutTime: checkoutTime ? _normalizeTime(checkoutTime) : '', memo });
+  pendingShifts.push({ date, startTime: _normalizeTime(startTime), endTime: _normalizeTime(endTime), memo });
   pendingShifts.sort((a, b) => a.date.localeCompare(b.date));
   renderPendingList();
 
@@ -6311,7 +6304,6 @@ function renderPendingList() {
           <tr style="background:var(--bg)">
             <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">日付</th>
             <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">時間</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">退室予定</th>
             <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">メモ</th>
             <th style="padding:8px;width:40px"></th>
           </tr>
@@ -6325,7 +6317,6 @@ function renderPendingList() {
             <tr style="border-top:1px solid var(--border)">
               <td style="padding:8px;font-weight:600;${isHol ? 'color:var(--accent)' : ''}">${s.date}（${dow}）</td>
               <td style="padding:8px">${s.startTime} 〜 ${s.endTime}</td>
-              <td style="padding:8px;color:var(--muted)">${s.checkoutTime || '-'}</td>
               <td style="padding:8px;color:var(--muted)">${s.memo || '-'}</td>
               <td style="padding:8px;text-align:center">
                 <button onclick="removePendingItem(${i})"
