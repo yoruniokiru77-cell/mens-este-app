@@ -861,6 +861,10 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
           <label>終了</label>
           <select id="shift-end"></select>
         </div>
+        <div class="form-group" style="margin-bottom:0;width:110px">
+          <label>退室予定（任意）</label>
+          <select id="shift-checkout"><option value="">-</option></select>
+        </div>
         <div class="form-group" style="margin-bottom:0;flex:1;min-width:120px">
           <label>メモ（任意）</label>
           <input type="text" id="shift-memo" placeholder="例：午前のみ">
@@ -3592,6 +3596,7 @@ async function apiGet(action, params = {}) {
         end_time:       item.endTime,
         status:         'pending',
         memo:           item.memo || null,
+        checkout_time:  item.checkoutTime || null,
         submitted_at:   new Date().toISOString()
       }));
       const { error } = await _sb.from('shifts').insert(rows);
@@ -3632,6 +3637,7 @@ async function apiGet(action, params = {}) {
         changeRequestEnd:   r.change_request_end   || '',
         changeRequestMemo:  r.change_request_memo  || '',
         isDayoffRequest:    r.is_dayoff_request || false,
+        checkoutTime:       r.checkout_time ? _fmtTimeJp(r.checkout_time) : '',
         _id:           r.id
       }));
     }
@@ -3792,8 +3798,9 @@ async function apiGet(action, params = {}) {
       if (params.startTime) upd.start_time = params.startTime;
       if (params.endTime)   upd.end_time   = params.endTime;
       if (params.memo !== undefined) upd.memo = params.memo || null;
-      if (params.roomId !== undefined)   upd.room_id   = params.roomId   || null;
-      if (params.roomName !== undefined) upd.room_name = params.roomName || null;
+      if (params.roomId !== undefined)       upd.room_id       = params.roomId       || null;
+      if (params.roomName !== undefined)     upd.room_name     = params.roomName     || null;
+      if (params.checkoutTime !== undefined) upd.checkout_time = params.checkoutTime || null;
       const { error } = await _sb.from('shifts').update(upd).eq('id', params.row);
       if (error) throw new Error(error.message);
       return { ok: true };
@@ -6224,8 +6231,9 @@ async function initShiftSubmit() {
   document.getElementById('shift-date').value = todayStr;
 
   // 時刻selectに選択肢を設定（10:00〜26:00）
-  document.getElementById('shift-start').innerHTML = _buildTimeOptions('09:00');
-  document.getElementById('shift-end').innerHTML   = _buildTimeOptions('20:00');
+  document.getElementById('shift-start').innerHTML    = _buildTimeOptions('09:00');
+  document.getElementById('shift-end').innerHTML      = _buildTimeOptions('20:00');
+  document.getElementById('shift-checkout').innerHTML = '<option value="">-</option>' + _buildTimeOptions('20:00');
 
   // 追加待ちリストをリセット
   pendingShifts = [];
@@ -6247,10 +6255,11 @@ async function initShiftSubmit() {
 
 // 「＋ 追加」ボタン押下
 function addShiftItem() {
-  const date      = document.getElementById('shift-date').value;
-  const startTime = document.getElementById('shift-start').value;
-  const endTime   = document.getElementById('shift-end').value;
-  const memo      = document.getElementById('shift-memo').value;
+  const date         = document.getElementById('shift-date').value;
+  const startTime    = document.getElementById('shift-start').value;
+  const endTime      = document.getElementById('shift-end').value;
+  const checkoutTime = document.getElementById('shift-checkout').value;
+  const memo         = document.getElementById('shift-memo').value;
 
   if (!date) { alert('出勤希望日を選択してください'); return; }
   if (!startTime || !endTime) { alert('開始・終了時間を入力してください'); return; }
@@ -6268,7 +6277,7 @@ function addShiftItem() {
     if (!confirm(date + ' はすでに追加されています。続けて追加しますか？')) return;
   }
 
-  pendingShifts.push({ date, startTime: _normalizeTime(startTime), endTime: _normalizeTime(endTime), memo });
+  pendingShifts.push({ date, startTime: _normalizeTime(startTime), endTime: _normalizeTime(endTime), checkoutTime: checkoutTime ? _normalizeTime(checkoutTime) : '', memo });
   pendingShifts.sort((a, b) => a.date.localeCompare(b.date));
   renderPendingList();
 
@@ -6302,6 +6311,7 @@ function renderPendingList() {
           <tr style="background:var(--bg)">
             <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">日付</th>
             <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">時間</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">退室予定</th>
             <th style="padding:8px;text-align:left;font-weight:600;color:var(--muted)">メモ</th>
             <th style="padding:8px;width:40px"></th>
           </tr>
@@ -6315,6 +6325,7 @@ function renderPendingList() {
             <tr style="border-top:1px solid var(--border)">
               <td style="padding:8px;font-weight:600;${isHol ? 'color:var(--accent)' : ''}">${s.date}（${dow}）</td>
               <td style="padding:8px">${s.startTime} 〜 ${s.endTime}</td>
+              <td style="padding:8px;color:var(--muted)">${s.checkoutTime || '-'}</td>
               <td style="padding:8px;color:var(--muted)">${s.memo || '-'}</td>
               <td style="padding:8px;text-align:center">
                 <button onclick="removePendingItem(${i})"
@@ -6491,6 +6502,7 @@ function renderApprovedShifts(el, data) {
             ${r.hasChangeRequest ? '<span style="font-size:11px;color:var(--warning);font-weight:600">⏳申請中</span>' : ''}
             ${!r.hasChangeRequest ? `<button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="openShiftChangeRequest('${r.row}','${r.date}','${r.startTime}','${r.endTime}')">✏️ 変更申請</button>` : ''}
           </div>
+          ${r.checkoutTime ? `<div style="padding:6px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)">🚪 退室予定 ${r.checkoutTime}</div>` : ''}
           ${r.memo ? `<div style="padding:6px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--accent2)">📝 ${r.memo}</div>` : ''}
         </div>`;
       }).join('')}
@@ -7248,14 +7260,21 @@ async function openRoomApproveModal(row, therapist, date, startTime, endTime, cu
   document.getElementById('room-approve-shift-info').textContent =
     therapist + ' / ' + dateDisp + ' ' + startTime + '〜' + endTime;
 
-  // メモ表示（DBから最新を取得）
+  // メモ・退室時間をDBから取得
   const memoWrap = document.getElementById('room-approve-memo-wrap');
   memoWrap.style.display = 'none';
+  const coSel = document.getElementById('room-approve-checkout');
+  coSel.innerHTML = '<option value="">-（未設定）</option>' + _buildTimeOptions('');
   try {
-    const { data: sd } = await _sb.from('shifts').select('memo').eq('id', row).maybeSingle();
+    const { data: sd } = await _sb.from('shifts').select('memo,checkout_time').eq('id', row).maybeSingle();
     if (sd && sd.memo) {
       memoWrap.style.display = '';
       memoWrap.textContent = '📝 メモ: ' + sd.memo;
+    }
+    if (sd && sd.checkout_time) {
+      const ct = _fmtTimeJp(sd.checkout_time);
+      const opt = coSel.querySelector('option[value="' + ct + '"]');
+      if (opt) opt.selected = true;
     }
   } catch(e) {}
 
@@ -7472,9 +7491,10 @@ async function confirmApproveShift() {
   try {
     showOverlay();
     // 管理者メモを取得
-    const adminMemo = (document.getElementById('room-approve-admin-memo')?.value || '').trim() || null;
-    // 日時・ルーム・管理者メモを更新してから承認
-    await apiGet('updateShift', { row, date: newDateSlash, startTime: newStart, endTime: newEnd, roomId, roomName, memo: adminMemo });
+    const adminMemo    = (document.getElementById('room-approve-admin-memo')?.value || '').trim() || null;
+    const checkoutTime = document.getElementById('room-approve-checkout')?.value || null;
+    // 日時・ルーム・管理者メモ・退室予定を更新してから承認
+    await apiGet('updateShift', { row, date: newDateSlash, startTime: newStart, endTime: newEnd, roomId, roomName, memo: adminMemo, checkoutTime });
     await apiGet('approveShift', { row });
 
     closeRoomApproveModal();
@@ -16844,7 +16864,8 @@ async function notifyAllApprovedShifts() {
       if (!t || !t.userId) { skipped++; continue; }
       const lines = slist.map(s =>
         s.date.slice(5).replace('/','/') + ' ' + s.startTime + '〜' + s.endTime +
-        (s.roomName ? '（' + s.roomName + '）' : '')
+        (s.roomName ? '（' + s.roomName + '）' : '') +
+        (s.checkoutTime ? '　退室予定 ' + s.checkoutTime : '')
       );
       const msg = '【シフト承認のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
         '\n' + weekLabel + ' のシフト\n\n' + lines.join('\n');
@@ -17825,6 +17846,13 @@ window.addEventListener('DOMContentLoaded', init);
         <label>終了時間</label>
         <select id="room-approve-end"></select>
       </div>
+    </div>
+
+    <div class="form-group" style="margin-top:12px;margin-bottom:0">
+      <label>退室予定時間（任意）</label>
+      <select id="room-approve-checkout" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+        <option value="">-（未設定）</option>
+      </select>
     </div>
 
     <div class="form-group" style="margin-top:12px;margin-bottom:0">
