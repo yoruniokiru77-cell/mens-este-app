@@ -5825,12 +5825,22 @@ async function sendPayrollLine(uid, name, dateLabel) {
 
   // 店落ち・繰越・合計請求
   const storeNum = parseInt(store.replace(/[^0-9-]/g,'')) || 0;
+  const bal = _storeDropBalances[name] || 0;
+  let applyCarryover = false;
+  if (bal !== 0 && sendStore) {
+    const balLabel = bal < 0
+      ? '前回' + Math.abs(bal).toLocaleString() + '円不足があります。'
+      : '前回' + bal.toLocaleString() + '円過払いがあります。';
+    applyCarryover = await _confirm(
+      balLabel + '\n前回繰越を給料に反映しますか？\n\n（いいえの場合は今の額が送信されます）',
+      'はい', 'いいえ'
+    );
+  }
   if (sendStore) {
-    const bal      = _storeDropBalances[name] || 0;
     const tInfoLine = therapists.find(th => th.name === name);
     message += '\n店落ち：' + store;
     if (tInfoLine && tInfoLine.parkingFee > 0) message += '（パーキング代含む）';
-    if (bal !== 0) {
+    if (applyCarryover && bal !== 0) {
       if (bal < 0) {
         message += '\n前回' + Math.abs(bal).toLocaleString() + '円不足';
       } else {
@@ -6000,6 +6010,17 @@ async function sendPayrollLine(uid, name, dateLabel) {
     const confEl = document.getElementById('payconf-' + uid);
     if (confEl) confEl.innerHTML = '<span style="font-size:11px;color:var(--warning);font-weight:600">⏳ 未確認</span>';
     _payrollConfirmations[name] = { sent_at: new Date().toISOString(), confirmed_at: null };
+
+    // 繰越を反映した場合はDB・メモリ・UIを0リセット
+    if (applyCarryover && bal !== 0) {
+      await _sb.from('store_drop_balance').upsert({
+        store_id: STORE_ID, therapist_name: name, balance: 0,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'store_id,therapist_name' });
+      _storeDropBalances[name] = 0;
+      const sdbEl = document.getElementById('sdb-' + uid);
+      if (sdbEl) sdbEl.value = '0';
+    }
 
     showToast('LINEを送信しました');
   } catch(e) { alert('送信エラー: ' + e.message); }
