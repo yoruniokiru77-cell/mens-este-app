@@ -3632,6 +3632,7 @@ async function apiGet(action, params = {}) {
         changeRequestEnd:   r.change_request_end   || '',
         changeRequestMemo:  r.change_request_memo  || '',
         isDayoffRequest:    r.is_dayoff_request || false,
+        checkinTime:        r.checkin_time  ? _fmtTimeJp(r.checkin_time)  : '',
         checkoutTime:       r.checkout_time ? _fmtTimeJp(r.checkout_time) : '',
         _id:           r.id
       }));
@@ -3795,6 +3796,7 @@ async function apiGet(action, params = {}) {
       if (params.memo !== undefined) upd.memo = params.memo || null;
       if (params.roomId !== undefined)       upd.room_id       = params.roomId       || null;
       if (params.roomName !== undefined)     upd.room_name     = params.roomName     || null;
+      if (params.checkinTime  !== undefined) upd.checkin_time  = params.checkinTime  || null;
       if (params.checkoutTime !== undefined) upd.checkout_time = params.checkoutTime || null;
       const { error } = await _sb.from('shifts').update(upd).eq('id', params.row);
       if (error) throw new Error(error.message);
@@ -6493,6 +6495,7 @@ function renderApprovedShifts(el, data) {
             ${r.hasChangeRequest ? '<span style="font-size:11px;color:var(--warning);font-weight:600">⏳申請中</span>' : ''}
             ${!r.hasChangeRequest ? `<button class="btn btn-secondary btn-sm" style="margin-left:auto" onclick="openShiftChangeRequest('${r.row}','${r.date}','${r.startTime}','${r.endTime}')">✏️ 変更申請</button>` : ''}
           </div>
+          ${r.checkinTime  ? `<div style="padding:6px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)">🚶 入室予定 ${r.checkinTime}</div>`  : ''}
           ${r.checkoutTime ? `<div style="padding:6px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)">🚪 退室予定 ${r.checkoutTime}</div>` : ''}
           ${r.memo ? `<div style="padding:6px 12px;border-top:1px solid var(--border);font-size:12px;color:var(--accent2)">📝 ${r.memo}</div>` : ''}
         </div>`;
@@ -7254,13 +7257,20 @@ async function openRoomApproveModal(row, therapist, date, startTime, endTime, cu
   // メモ・退室時間をDBから取得
   const memoWrap = document.getElementById('room-approve-memo-wrap');
   memoWrap.style.display = 'none';
+  const ciSel = document.getElementById('room-approve-checkin');
   const coSel = document.getElementById('room-approve-checkout');
+  ciSel.innerHTML = '<option value="">-（未設定）</option>' + _buildTimeOptions('');
   coSel.innerHTML = '<option value="">-（未設定）</option>' + _buildTimeOptions('');
   try {
-    const { data: sd } = await _sb.from('shifts').select('memo,checkout_time').eq('id', row).maybeSingle();
+    const { data: sd } = await _sb.from('shifts').select('memo,checkin_time,checkout_time').eq('id', row).maybeSingle();
     if (sd && sd.memo) {
       memoWrap.style.display = '';
       memoWrap.textContent = '📝 メモ: ' + sd.memo;
+    }
+    if (sd && sd.checkin_time) {
+      const ci = _fmtTimeJp(sd.checkin_time);
+      const opt = ciSel.querySelector('option[value="' + ci + '"]');
+      if (opt) opt.selected = true;
     }
     if (sd && sd.checkout_time) {
       const ct = _fmtTimeJp(sd.checkout_time);
@@ -7483,9 +7493,9 @@ async function confirmApproveShift() {
     showOverlay();
     // 管理者メモを取得
     const adminMemo    = (document.getElementById('room-approve-admin-memo')?.value || '').trim() || null;
+    const checkinTime  = document.getElementById('room-approve-checkin')?.value  || null;
     const checkoutTime = document.getElementById('room-approve-checkout')?.value || null;
-    // 日時・ルーム・管理者メモ・退室予定を更新してから承認
-    await apiGet('updateShift', { row, date: newDateSlash, startTime: newStart, endTime: newEnd, roomId, roomName, memo: adminMemo, checkoutTime });
+    await apiGet('updateShift', { row, date: newDateSlash, startTime: newStart, endTime: newEnd, roomId, roomName, memo: adminMemo, checkinTime, checkoutTime });
     await apiGet('approveShift', { row });
 
     closeRoomApproveModal();
@@ -7525,10 +7535,17 @@ async function openEditShiftModal(row, date, startTime, endTime, roomName, thera
   }
   document.getElementById('shift-edit-start').innerHTML    = _buildTimeOptions(_to26(startTime));
   document.getElementById('shift-edit-end').innerHTML      = _buildTimeOptions(_to26(endTime));
+  const ciSelEdit = document.getElementById('shift-edit-checkin');
   const coSelEdit = document.getElementById('shift-edit-checkout');
+  ciSelEdit.innerHTML = '<option value="">-（未設定）</option>' + _buildTimeOptions('');
   coSelEdit.innerHTML = '<option value="">-（未設定）</option>' + _buildTimeOptions('');
   try {
-    const { data: sd2 } = await _sb.from('shifts').select('checkout_time').eq('id', row).maybeSingle();
+    const { data: sd2 } = await _sb.from('shifts').select('checkin_time,checkout_time').eq('id', row).maybeSingle();
+    if (sd2 && sd2.checkin_time) {
+      const ci = _fmtTimeJp(sd2.checkin_time);
+      const opt = ciSelEdit.querySelector('option[value="' + ci + '"]');
+      if (opt) opt.selected = true;
+    }
     if (sd2 && sd2.checkout_time) {
       const ct = _fmtTimeJp(sd2.checkout_time);
       const opt = coSelEdit.querySelector('option[value="' + ct + '"]');
@@ -7576,8 +7593,9 @@ async function confirmEditShift() {
 
   try {
     showOverlay();
+    const checkinTime  = document.getElementById('shift-edit-checkin')?.value  || null;
     const checkoutTime = document.getElementById('shift-edit-checkout')?.value || null;
-    await apiGet('updateShift', { row, date: date.replace(/-/g,'/'), startTime: normalizedStart, endTime: normalizedEnd, roomId, roomName, checkoutTime });
+    await apiGet('updateShift', { row, date: date.replace(/-/g,'/'), startTime: normalizedStart, endTime: normalizedEnd, roomId, roomName, checkinTime, checkoutTime });
 
     // 承認済みシフトの変更時はセラピストにLINE通知
     if (_editShiftOriginal) {
@@ -16867,6 +16885,7 @@ async function notifyAllApprovedShifts() {
       const lines = slist.map(s =>
         s.date.slice(5).replace('/','/') + ' ' + s.startTime + '〜' + s.endTime +
         (s.roomName ? '（' + s.roomName + '）' : '') +
+        (s.checkinTime  ? '　入室予定 ' + s.checkinTime  : '') +
         (s.checkoutTime ? '　退室予定 ' + s.checkoutTime : '')
       );
       const msg = '【シフト承認のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
@@ -17538,11 +17557,19 @@ window.addEventListener('DOMContentLoaded', init);
           <select id="shift-edit-end"></select>
         </div>
       </div>
-      <div class="form-group" style="margin-bottom:12px">
-        <label>退室予定時間（任意）</label>
-        <select id="shift-edit-checkout" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
-          <option value="">-（未設定）</option>
-        </select>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <div class="form-group" style="flex:1;margin-bottom:0">
+          <label>入室予定時間（任意）</label>
+          <select id="shift-edit-checkin" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+            <option value="">-（未設定）</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1;margin-bottom:0">
+          <label>退室予定時間（任意）</label>
+          <select id="shift-edit-checkout" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+            <option value="">-（未設定）</option>
+          </select>
+        </div>
       </div>
       <input type="hidden" id="shift-edit-row">
       <div id="shift-edit-warning" style="display:none;background:#fff3cd;border-left:4px solid #ffc107;border-radius:6px;padding:10px 12px;font-size:13px;color:#856404;margin-bottom:12px"></div>
@@ -17856,11 +17883,19 @@ window.addEventListener('DOMContentLoaded', init);
       </div>
     </div>
 
-    <div class="form-group" style="margin-top:12px;margin-bottom:0">
-      <label>退室予定時間（任意）</label>
-      <select id="room-approve-checkout" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
-        <option value="">-（未設定）</option>
-      </select>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label>入室予定時間（任意）</label>
+        <select id="room-approve-checkin" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+          <option value="">-（未設定）</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label>退室予定時間（任意）</label>
+        <select id="room-approve-checkout" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+          <option value="">-（未設定）</option>
+        </select>
+      </div>
     </div>
 
     <div class="form-group" style="margin-top:12px;margin-bottom:0">
