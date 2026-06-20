@@ -12086,6 +12086,7 @@ function _openCalShiftMenu(e, row, status, therapist, date, startTime, endTime, 
   // ステータスによってボタン表示切替
   const isPending    = status === 'pending';
   const isApproved   = status === 'approved';
+  const isRejected   = status === 'rejected';
   const hasChgReq    = !!hasChangeRequest;
   const isInterview  = therapist.startsWith('[面接]');
   const isDayoff     = !!isDayoffReq;
@@ -12100,7 +12101,9 @@ function _openCalShiftMenu(e, row, status, therapist, date, startTime, endTime, 
   document.getElementById('cal-menu-change-approve').style.display  = !isInterview && !isDayoff && hasChgReq  ? '' : 'none';
   document.getElementById('cal-menu-change-reject').style.display   = !isInterview && !isDayoff && hasChgReq  ? '' : 'none';
   document.getElementById('cal-menu-att').style.display             = !isInterview && !isDayoff && isApproved ? '' : 'none';
-  document.getElementById('cal-menu-edit').style.display            = !isInterview && !isDayoff ? '' : 'none';
+  document.getElementById('cal-menu-edit').style.display            = !isInterview && !isDayoff && !isRejected ? '' : 'none';
+  document.getElementById('cal-menu-restore').style.display         = !isInterview && !isDayoff && isRejected ? '' : 'none';
+  document.getElementById('cal-menu-approve-from-rejected').style.display = !isInterview && !isDayoff && isRejected ? '' : 'none';
   document.getElementById('cal-menu-delete').style.display          = !isDayoff ? '' : 'none';
 
   // 位置調整
@@ -12416,6 +12419,27 @@ async function _calMenuReject() {
     loadShiftCalendar();
   } catch(e) { alert('エラー: ' + e.message); }
   finally { hideOverlay(); }
+}
+
+async function _calMenuRestore() {
+  _closeCalMenu();
+  const s = _calMenuShift;
+  if (!confirm('このシフトを「申請済み」に戻しますか？')) return;
+  try {
+    showOverlay();
+    await apiGet('restoreShiftToPending', { row: s.row });
+    showToast('申請済みに戻しました');
+    loadShiftCalendar();
+  } catch(e) { alert('エラー: ' + e.message); }
+  finally { hideOverlay(); }
+}
+
+async function _calMenuApproveFromRejected() {
+  _closeCalMenu();
+  const s = _calMenuShift;
+  setTimeout(async () => {
+    await openRoomApproveModal(s.row, s.therapist, s.date, s.startTime, s.endTime, s.roomName);
+  }, 50);
 }
 
 async function _calMenuDayoffApprove() {
@@ -17586,6 +17610,8 @@ window.addEventListener('DOMContentLoaded', init);
   <button id="cal-menu-room"           onclick="_calMenuRoom()"          style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px">🚪 ルーム変更・承認</button>
   <button id="cal-menu-change-approve" onclick="_calMenuChangeApprove()" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 変更申請を承認</button>
   <button id="cal-menu-change-reject"  onclick="_calMenuChangeReject()"  style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ 変更申請を却下</button>
+  <button id="cal-menu-restore"               onclick="_calMenuRestore()"             style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:#d97706;font-weight:600">↩️ 申請に戻す</button>
+  <button id="cal-menu-approve-from-rejected" onclick="_calMenuApproveFromRejected()"  style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 承認する</button>
   <button id="cal-menu-edit"           onclick="_calMenuEdit()"          style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px">✏️ 日時・ルーム変更</button>
   <button id="cal-menu-att"            onclick="_calMenuAtt()"           style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px">📋 勤怠記録</button>
   <button id="cal-menu-delete"         onclick="_calMenuDelete()"        style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--muted)">🗑 削除</button>
