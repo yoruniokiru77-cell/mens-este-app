@@ -3662,6 +3662,16 @@ async function apiGet(action, params = {}) {
       return { ok: true };
     }
 
+    case 'restoreShiftToPending': {
+      const { error } = await _sb.from('shifts').update({
+        status: 'pending',
+        approved_at: null,
+        memo: null
+      }).eq('id', params.row).eq('store_id', STORE_ID);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
     case 'deleteShift': {
       const { error } = await _sb.from('shifts').delete().eq('id', params.row).eq('store_id', STORE_ID);
       if (error) throw new Error(error.message);
@@ -7674,6 +7684,20 @@ async function rejectShift(row) {
   }
 }
 
+async function restoreShiftToPending(row) {
+  if (!confirm('このシフトを「申請済み」に戻しますか？')) return;
+  try {
+    showOverlay();
+    await apiGet('restoreShiftToPending', { row });
+    showToast('申請済みに戻しました');
+    loadAdminShifts();
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
 async function deleteShiftRow(row) {
   if (!confirm('このシフト申請を削除しますか？')) return;
   try {
@@ -7815,6 +7839,15 @@ function renderShiftList(el, data, isAdmin) {
                         data-start="${r.startTime}" data-end="${r.endTime}" data-room="${r.roomName||''}"
                         onclick="openRoomApproveModal(this.dataset.row,this.dataset.therapist,this.dataset.date,this.dataset.start,this.dataset.end,this.dataset.room)">承認</button>
                       <button class="btn btn-danger btn-sm" onclick="rejectShift('${r.row}')">却下</button>
+                    </div>
+                  ` : r.status === 'rejected' ? `
+                    <div style="display:flex;gap:4px;flex-wrap:wrap">
+                      <button class="btn btn-warning btn-sm" onclick="restoreShiftToPending('${r.row}')">申請に戻す</button>
+                      <button class="btn btn-primary btn-sm"
+                        data-row="${r.row}" data-therapist="${r.therapist}" data-date="${r.date}"
+                        data-start="${r.startTime}" data-end="${r.endTime}" data-room="${r.roomName||''}"
+                        onclick="openRoomApproveModal(this.dataset.row,this.dataset.therapist,this.dataset.date,this.dataset.start,this.dataset.end,this.dataset.room)">承認</button>
+                      <button class="btn btn-secondary btn-sm" onclick="deleteShiftRow('${r.row}')">削除</button>
                     </div>
                   ` : `
                     <div style="display:flex;gap:4px">
