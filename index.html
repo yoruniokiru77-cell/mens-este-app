@@ -14586,6 +14586,7 @@ async function saveAndSendLine() {
       if (discount > 0) {
         msg += `\n割引: -¥${discount.toLocaleString()}\n適用後金額: ¥${finalPrice.toLocaleString()}`;
       }
+      msg += '\n\n予約確認したらログインして確認ボタンをタップしてください。';
       try {
         await apiGet('sendLineMessage', { userId: tLine.userId, message: msg });
         showBanner('✅ LINE送信完了しました', 'success');
