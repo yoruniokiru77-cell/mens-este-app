@@ -14256,7 +14256,7 @@ async function submitReservation() {
     _logOperation('reservation_create', null, { therapist: therapistName, date: dateVal, course: mins, customer: customerName, nomination });
 
     // 予約完了モーダル表示
-    await showResvCompleteModal({ therapistName, dateVal, mins, coursePrice, nomFee, nomination, customerName, customerNo, myShift });
+    await showResvCompleteModal({ therapistName, dateVal, mins, coursePrice, nomFee, discount, nomination, customerName, customerNo, myShift });
 
     loadReservations();
     resetResvForm();
@@ -14290,11 +14290,11 @@ function _confirm(message, okLabel = 'OK', cancelLabel = 'キャンセル') {
 // ============================================================
 const NEVERLAND_STORE_ID = '44444444-0000-0000-0000-000000000004';
 
-function buildGuideText({ dateDisp, mins, price, nomFee, therapistDisp, guideText, includeCustomer, customerName }) {
+function buildGuideText({ dateDisp, mins, price, nomFee, discount, therapistDisp, guideText, includeCustomer, customerName }) {
   const isNeverland = STORE_ID === NEVERLAND_STORE_ID;
   if (isNeverland) {
     // NEVERLANDフォーマット
-    const totalPrice = (price || 0) + (nomFee || 0);
+    const totalPrice = (price || 0) + (nomFee || 0) - (discount || 0);
     // 日付と時刻を分離（例: 5/13（水） 14:50 → 5/13 と 14:50）
     const datePart  = dateDisp.replace(/（.）.*/, '').trim();   // 5/13
     const timePart  = dateDisp.replace(/.*） /, '').trim();     // 14:50
@@ -14334,14 +14334,14 @@ function buildGuideText({ dateDisp, mins, price, nomFee, therapistDisp, guideTex
   }
 }
 
-function buildGuideInfo({ dateDisp, mins, price, nomFee, therapistDisp, guideText, customerName }) {
+function buildGuideInfo({ dateDisp, mins, price, nomFee, discount, therapistDisp, guideText, customerName }) {
   const isNeverland = STORE_ID === NEVERLAND_STORE_ID;
-  const copyText = buildGuideText({ dateDisp, mins, price, nomFee, therapistDisp, guideText });
+  const copyText = buildGuideText({ dateDisp, mins, price, nomFee, discount, therapistDisp, guideText });
   if (isNeverland) {
     // ヘッダー情報（表示用：お客様名含む）
     const datePart = dateDisp.replace(/（.）.*/, '').trim();
     const timePart = dateDisp.replace(/.*） /, '').trim();
-    const totalPrice = (price || 0) + (nomFee || 0);
+    const totalPrice = (price || 0) + (nomFee || 0) - (discount || 0);
     const infoLines = [
       '★ご予約日：' + datePart,
       '★時間：' + timePart + '〜',
@@ -14410,6 +14410,7 @@ async function showResvCompleteModal(p) {
     mins:          p.mins,
     price:         p.coursePrice,
     nomFee:        p.nomFee,
+    discount:      p.discount || 0,
     therapistDisp: therapistDispM,
     guideText:     guideTextM,
     customerName:  p.customerName || '',
@@ -14655,6 +14656,7 @@ async function saveAndSendLine() {
         mins:          mins,
         price:         price,
         nomFee:        nomFee,
+        discount:      discount || 0,
         therapistDisp: therapistDisp,
         guideText:     guideText,
         customerName:  params.customer || '',
