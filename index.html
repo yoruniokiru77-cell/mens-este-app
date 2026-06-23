@@ -2891,18 +2891,10 @@ async function apiGet(action, params = {}) {
         .order('date');
       if (error) throw new Error(error.message);
 
-      // customer_tel が空の行について customers テーブルから電話番号を補完
       const rows = data || [];
-      const missingTelNos = [...new Set(rows.filter(r => !r.customer_tel && r.customer_no).map(r => r.customer_no))];
-      const telMap = {};
-      if (missingTelNos.length) {
-        const { data: custs } = await _sb.from('customers').select('customer_no,tel')
-          .eq('store_id', STORE_ID).in('customer_no', missingTelNos);
-        (custs || []).forEach(c => { if (c.tel) telMap[c.customer_no] = c.tel; });
-      }
 
       // 来店回数を取得（reservationsテーブルベース・顧客詳細と同じ基準）
-      const allTels = [...new Set(rows.map(r => r.customer_tel || telMap[r.customer_no]).filter(Boolean))];
+      const allTels = [...new Set(rows.map(r => r.customer_tel).filter(Boolean))];
       const visitByTherapist = {};
       const visitByTherapistMonth = {};
       const visitTotalByTel = {}; // 店舗全体の総来店回数（NEW判定用）
@@ -2949,21 +2941,20 @@ async function apiGet(action, params = {}) {
         discount:   r.discount || 0,
         nomination: r.nomination || 'free',
         customerNo: r.customer_no || '',
-        tel:        r.customer_tel || telMap[r.customer_no] || '',
+        tel:        r.customer_tel || '',
         coursePrice:r.course_price || 0,
         optionPrice:r.option_price || 0,
         nominationFee: r.nomination_fee || 0,
         status:        r.status || 'active',
         isNewCustomer: (() => {
-          const tel = r.customer_tel || telMap[r.customer_no] || '';
-          // DBフラグ OR 店舗全体の総来店回数が1（初来店）
+          const tel = r.customer_tel || '';
           return r.is_new_customer || (tel ? (visitTotalByTel[tel] || 0) === 1 : false);
         })(),
         isHime:             r.is_hime || false,
         isHimeApproved:     r.is_hime_approved || false,
         therapistConfirmed: r.therapist_confirmed || false,
-        visitCount:      (() => { const t = r.customer_tel || telMap[r.customer_no] || ''; return t ? (visitByTherapist[t + '_' + r.therapist_name] || 0) : 0; })(),
-        monthlyVisitCount: (() => { const t = r.customer_tel || telMap[r.customer_no] || ''; return t ? (visitByTherapistMonth[t + '_' + r.therapist_name] || 0) : 0; })(),
+        visitCount:      (() => { const t = r.customer_tel || ''; return t ? (visitByTherapist[t + '_' + r.therapist_name] || 0) : 0; })(),
+        monthlyVisitCount: (() => { const t = r.customer_tel || ''; return t ? (visitByTherapistMonth[t + '_' + r.therapist_name] || 0) : 0; })(),
         memo:          r.memo || '',
         isUnassigned:  r.is_unassigned || false,
         id:            r.id,
@@ -3053,10 +3044,6 @@ async function apiGet(action, params = {}) {
       let cust = null;
       if (tel) {
         const { data } = await _sb.from('customers').select('id,cancel_count').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
-        cust = data;
-      }
-      if (!cust && no) {
-        const { data } = await _sb.from('customers').select('id,cancel_count').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
         cust = data;
       }
       if (cust) {
@@ -3976,26 +3963,14 @@ case 'sendReminderToOne': {
         }
       }
 
-      // 新規: C+4桁連番を自動採番（全件取得して数値最大値を取得）
-      const { data: allRows } = await _sb.from('customers')
-        .select('customer_no')
-        .eq('store_id', STORE_ID);
-      let maxNum = 0;
-      (allRows || []).forEach(r => {
-        const n = parseInt(String(r.customer_no).replace(/\D/g, '')) || 0;
-        if (n > maxNum) maxNum = n;
-      });
-      const MITO_STORE_ID = '22222222-0000-0000-0000-000000000002';
-      const prefix = STORE_ID === MITO_STORE_ID ? 'A' : 'C';
-      const newNo = prefix + String(maxNum + 1).padStart(4, '0');
+      // 新規登録（customer_noは採番しない）
       const { error: insErr } = await _sb.from('customers').insert({
-        store_id:    STORE_ID,
-        customer_no: newNo,
+        store_id: STORE_ID,
         name,
-        tel:         tel || null
+        tel: tel || null
       });
       if (insErr) throw new Error('顧客登録エラー: ' + insErr.message);
-      return { ok: true, customerNo: newNo, updated: false };
+      return { ok: true, customerNo: '', updated: false };
     }
 
     case 'updateCustomer': {
@@ -4033,7 +4008,7 @@ case 'sendReminderToOne': {
         const { data: d, error: e, count: c } = await _sb.from('customers')
           .select('*', { count: 'exact' })
           .eq('store_id', STORE_ID)
-          .or(`name.ilike.%${search}%,customer_no.ilike.%${search}%,tel.ilike.%${search}%`)
+          .or(`name.ilike.%${search}%,tel.ilike.%${search}%`)
           .order('name');
         data = d; error = e; count = c;
       } else {
@@ -4072,12 +4047,7 @@ case 'sendReminderToOne': {
         const { data } = await _sb.from('customers').select('*').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
         custData = data;
       }
-      if (!custData && no) {
-        const { data } = await _sb.from('customers').select('*').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
-        custData = data;
-      }
-
-      // 来店履歴：電話番号ベース（なければcustomer_noで検索）
+      // 来店履歴：電話番号ベース
       const lookupTel = custData?.tel || tel;
       const [histRes, memoRes] = await Promise.all([
         (async () => {
@@ -4085,14 +4055,6 @@ case 'sendReminderToOne': {
             let q = _sb.from('reservations').select('*')
               .eq('store_id', STORE_ID)
               .ilike('customer_tel', lookupTel)
-              .neq('status', 'cancelled')
-              .order('date', { ascending: false }).limit(30);
-            if (therapist) q = q.eq('therapist_name', therapist);
-            return q;
-          } else if (no) {
-            let q = _sb.from('reservations').select('*')
-              .eq('store_id', STORE_ID)
-              .eq('customer_no', no)
               .neq('status', 'cancelled')
               .order('date', { ascending: false }).limit(30);
             if (therapist) q = q.eq('therapist_name', therapist);
@@ -4148,12 +4110,8 @@ case 'sendReminderToOne': {
       // キャンセル履歴（管理者向け・お客様都合含む全件）
       let cancelHistory = [];
       if (params.includeCancel) {
-        const cancelQ = lookupTel
-          ? _sb.from('reservations').select('date,course_min,therapist_name,cancel_reason,memo')
+        const cancelQ = _sb.from('reservations').select('date,course_min,therapist_name,cancel_reason,memo')
               .eq('store_id', STORE_ID).ilike('customer_tel', lookupTel)
-              .eq('status', 'cancelled').order('date', { ascending: false }).limit(20)
-          : _sb.from('reservations').select('date,course_min,therapist_name,cancel_reason,memo')
-              .eq('store_id', STORE_ID).eq('customer_no', no)
               .eq('status', 'cancelled').order('date', { ascending: false }).limit(20);
         const { data: cancelData } = await cancelQ;
         const CANCEL_REASON_LABEL = { customer: 'お客様都合', therapist: 'セラピスト都合', other: 'その他' };
@@ -4182,10 +4140,6 @@ case 'sendReminderToOne': {
       let custId = customerId || null;
       if (!custId && tel) {
         const { data: c } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
-        if (c) custId = c.id;
-      }
-      if (!custId && no) {
-        const { data: c } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
         if (c) custId = c.id;
       }
       // 顧客マスタ未登録（tel有り）→ 自動登録してIDを取得
@@ -4287,10 +4241,6 @@ case 'sendReminderToOne': {
       let custData = null;
       if (tel) {
         const { data } = await _sb.from('customers').select('status,ng_therapists').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
-        custData = data;
-      }
-      if (!custData && no && no !== '0000') {
-        const { data } = await _sb.from('customers').select('status,ng_therapists').eq('store_id', STORE_ID).eq('customer_no', no).maybeSingle();
         custData = data;
       }
       if (!custData) return { allowed: true, reason: '' };
@@ -9744,24 +9694,6 @@ async function saveCustomerIfNeeded() {
   if (!name) { console.log('[saveCustomerIfNeeded] skip: name empty'); return; }
 
   try {
-    // お客様名にC番号/A番号が含まれている場合、顧客マスタからcustomer_noで検索
-    // ただし電話番号がある場合はtel検索を優先（C番号と実際のcustomer_noがズレることがあるため）
-    const noMatch = name.match(/([CA]\d{3,4})/);
-    if (noMatch && !tel) {
-      const custNo = noMatch[1];
-      const { data: custByNo, error: custByNoErr } = await _sb.from('customers').select('customer_no, name, tel')
-        .eq('store_id', STORE_ID).eq('customer_no', custNo).maybeSingle();
-      console.log('[saveCustomerIfNeeded] noMatch', { custNo, custByNo, custByNoErr });
-      if (custByNo) {
-        document.getElementById('resv-customer-no').value = custByNo.customer_no;
-        console.log('[saveCustomerIfNeeded] early return: C/A番号で既存顧客見つかった');
-        if (custByNo.name !== name) {
-          showToast('📋 ' + custNo + ' の既存顧客（' + custByNo.name + '様）に紐付けました');
-        }
-        return;
-      }
-    }
-
     // 電話番号で既存検索
     const existing = tel
       ? await apiGet('getCustomer', { tel })
