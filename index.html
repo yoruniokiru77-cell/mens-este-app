@@ -9745,8 +9745,9 @@ async function saveCustomerIfNeeded() {
 
   try {
     // お客様名にC番号/A番号が含まれている場合、顧客マスタからcustomer_noで検索
+    // ただし電話番号がある場合はtel検索を優先（C番号と実際のcustomer_noがズレることがあるため）
     const noMatch = name.match(/([CA]\d{3,4})/);
-    if (noMatch) {
+    if (noMatch && !tel) {
       const custNo = noMatch[1];
       const { data: custByNo, error: custByNoErr } = await _sb.from('customers').select('customer_no, name, tel')
         .eq('store_id', STORE_ID).eq('customer_no', custNo).maybeSingle();
