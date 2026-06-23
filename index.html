@@ -9760,18 +9760,26 @@ async function saveCustomerIfNeeded() {
       ? await apiGet('getCustomer', { tel })
       : await apiGet('getCustomer', { name });
 
+    console.log('[saveCustomerIfNeeded]', { name, tel, existing });
+
     if (!existing.found) {
       // 名前と電話番号の両方がある場合のみ新規登録
       if (!tel) return;
       const res = await apiGet('saveCustomer', { name, tel });
+      console.log('[saveCustomerIfNeeded] saveCustomer result:', res);
       if (res.customerNo) {
         document.getElementById('resv-customer-no').value = res.customerNo;
       }
       if (!res.existed) {
         showToast('顧客マスタに新規登録しました（' + name + '様）');
+      } else {
+        showToast('⚠️ 同じ電話番号の既存顧客（' + res.customerNo + '）に紐付けました（' + name + '様は未登録）');
       }
     } else {
       document.getElementById('resv-customer-no').value = existing.customerNo;
+      if (existing.name !== name) {
+        showToast('⚠️ 同じ電話番号の既存顧客（' + existing.customerNo + '：' + existing.name + '）に紐付けました');
+      }
     }
   } catch(e) {
     console.warn('saveCustomer error:', e);
