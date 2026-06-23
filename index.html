@@ -9754,6 +9754,9 @@ async function saveCustomerIfNeeded() {
       if (custByNo) {
         document.getElementById('resv-customer-no').value = custByNo.customer_no;
         console.log('[saveCustomerIfNeeded] early return: C/A番号で既存顧客見つかった');
+        if (custByNo.name !== name) {
+          showToast('📋 ' + custNo + ' の既存顧客（' + custByNo.name + '様）に紐付けました');
+        }
         return;
       }
     }
