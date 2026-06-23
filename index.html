@@ -9740,17 +9740,20 @@ async function saveCustomerIfNeeded() {
   const telFull   = document.getElementById('resv-customer-tel-full').value.trim();
   const telHidden = document.getElementById('resv-customer-tel').value.trim();
   const tel = telFull || telHidden; // どちらかあれば使う
-  if (!name) return;
+  console.log('[saveCustomerIfNeeded] start', { name, telFull, telHidden, tel, STORE_ID });
+  if (!name) { console.log('[saveCustomerIfNeeded] skip: name empty'); return; }
 
   try {
     // お客様名にC番号/A番号が含まれている場合、顧客マスタからcustomer_noで検索
     const noMatch = name.match(/([CA]\d{3,4})/);
     if (noMatch) {
       const custNo = noMatch[1];
-      const { data: custByNo } = await _sb.from('customers').select('customer_no, name, tel')
+      const { data: custByNo, error: custByNoErr } = await _sb.from('customers').select('customer_no, name, tel')
         .eq('store_id', STORE_ID).eq('customer_no', custNo).maybeSingle();
+      console.log('[saveCustomerIfNeeded] noMatch', { custNo, custByNo, custByNoErr });
       if (custByNo) {
         document.getElementById('resv-customer-no').value = custByNo.customer_no;
+        console.log('[saveCustomerIfNeeded] early return: C/A番号で既存顧客見つかった');
         return;
       }
     }
