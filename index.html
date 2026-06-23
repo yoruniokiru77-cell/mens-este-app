@@ -641,8 +641,9 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
           </select>
         </div>
         <div class="form-group">
-          <label>コース時間を入力（分）</label>
-          <input type="number" id="resv-custom-minutes" placeholder="例: 210" style="display:none" oninput="calcCustomPrice()">
+          <label id="resv-course-input-label">料金</label>
+          <input type="number" id="resv-custom-minutes" placeholder="時間（分）例: 70" style="display:none;margin-bottom:6px" oninput="calcCustomPrice()">
+          <input type="number" id="resv-custom-price" placeholder="料金（円）例: 17000" style="display:none">
           <div id="course-price-display"></div>
         </div>
       </div>
@@ -2470,22 +2471,33 @@ function calcPrice(minutes) {
 function calcCoursePrice() {
   const sel   = document.getElementById('resv-course');
   const val   = sel ? sel.value : '';
-  const customWrap = document.getElementById('resv-custom-minutes');
+  const customMinEl   = document.getElementById('resv-custom-minutes');
+  const customPriceEl = document.getElementById('resv-custom-price');
+  const priceDisplay  = document.getElementById('course-price-display');
+  const labelEl       = document.getElementById('resv-course-input-label');
   if (val === 'custom') {
-    customWrap.style.display = '';
-    document.getElementById('course-price-display').textContent = '¥0';
+    customMinEl.style.display   = '';
+    customPriceEl.style.display = '';
+    priceDisplay.style.display  = 'none';
+    if (labelEl) labelEl.textContent = '時間（分）/ 料金';
+    customMinEl.value   = '';
+    customPriceEl.value = '';
   } else {
-    customWrap.style.display = 'none';
+    customMinEl.style.display   = 'none';
+    customPriceEl.style.display = 'none';
+    priceDisplay.style.display  = '';
+    if (labelEl) labelEl.textContent = '料金';
     const opt   = sel ? sel.options[sel.selectedIndex] : null;
     const price = opt && opt.dataset.price ? Number(opt.dataset.price) : calcPrice(Number(val));
-    document.getElementById('course-price-display').textContent = '¥' + price.toLocaleString();
+    priceDisplay.textContent = '¥' + price.toLocaleString();
   }
 }
 
 function calcCustomPrice() {
   const mins  = Number(document.getElementById('resv-custom-minutes').value);
   const price = mins ? calcPrice(mins) : 0;
-  document.getElementById('course-price-display').textContent = mins ? '¥' + price.toLocaleString() : '¥0';
+  const priceEl = document.getElementById('resv-custom-price');
+  if (priceEl) priceEl.value = mins ? price : '';
 }
 
 function calcSalesCoursePrice() {
@@ -2520,6 +2532,12 @@ function getCourseMinutes(prefix) {
 
 function getCoursePrice(prefix) {
   const sel = document.getElementById(prefix + '-course');
+  if (sel && sel.value === 'custom') {
+    const customPriceEl = document.getElementById(prefix + '-custom-price');
+    if (customPriceEl && customPriceEl.value) return Number(customPriceEl.value) || 0;
+    const mins = getCourseMinutes(prefix);
+    return mins ? calcPrice(mins) : 0;
+  }
   if (sel && sel.value !== 'custom') {
     const opt = sel.options[sel.selectedIndex];
     if (opt && opt.dataset.price) return Number(opt.dataset.price);
