@@ -1,60 +1,199 @@
-import './style.css'
-import typescriptLogo from './assets/typescript.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import { setupCounter } from './counter.ts'
+import './style.css';
+import { ctx, sb } from './lib/supabase';
+import { renderPayrollPage, initPayroll } from './pages/payroll';
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-<section id="center">
-  <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
-    <img src="${typescriptLogo}" class="framework" alt="TypeScript logo"/>
-    <img src="${viteLogo}" class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/main.ts</code> and save to test <code>HMR</code></p>
-  </div>
-  <button id="counter" type="button" class="counter"></button>
-</section>
+// ── 認証状態 ──────────────────────────────────────────
+let storeName = '';
 
-<div class="ticks"></div>
+export function showPage(name: string) {
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  const page = document.getElementById('page-' + name);
+  if (page) page.classList.add('active');
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#documentation-icon"></use></svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank">
-          <img class="logo" src="${viteLogo}" alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://www.typescriptlang.org" target="_blank">
-          <img class="button-icon" src="${typescriptLogo}" alt="">
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#social-icon"></use></svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li><a href="https://github.com/vitejs/vite" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#github-icon"></use></svg>GitHub</a></li>
-      <li><a href="https://chat.vite.dev/" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#discord-icon"></use></svg>Discord</a></li>
-      <li><a href="https://x.com/vite_js" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#x-icon"></use></svg>X.com</a></li>
-      <li><a href="https://bsky.app/profile/vite.dev" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#bluesky-icon"></use></svg>Bluesky</a></li>
-    </ul>
-  </div>
-</section>
+  document.querySelectorAll('#nav button').forEach(el => el.classList.remove('active'));
+  const tab = document.getElementById('tab-' + name);
+  if (tab) tab.classList.add('active');
 
-<div class="ticks"></div>
-<section id="spacer"></section>
-`
+  document.querySelectorAll('#bottom-nav button').forEach(el => el.classList.remove('active'));
+  const bnav = document.getElementById('bnav-' + name);
+  if (bnav) bnav.classList.add('active');
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+  // ページ初期化
+  if (name === 'payroll') initPayroll();
+}
+
+// ── シェルHTML ──────────────────────────────────────
+function renderShell() {
+  const app = document.getElementById('app')!;
+  app.innerHTML = `
+    <div id="overlay"><div class="spinner"></div><span>送信中...</span></div>
+
+    <div id="login-page" style="display:none">
+      <div style="max-width:360px;margin:60px auto;padding:16px">
+        <div class="card" style="padding:32px;text-align:center">
+          <div style="width:64px;height:64px;background:#06c755;border-radius:16px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center">
+            <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+              <path d="M30 15.5C30 10.2 24.6 6 18 6S6 10.2 6 15.5c0 4.7 4.2 8.7 9.8 9.4.4.1.9.3 1 .6.1.3.1.7 0 1l-.2 1c0 .3-.2 1.2 1.1.7C19.1 27.6 27 22.5 27 15.5H30z" fill="white"/>
+            </svg>
+          </div>
+          <div style="font-size:18px;font-weight:700;margin-bottom:12px">セラピスト用ログイン</div>
+          <div style="color:var(--muted);font-size:13px;line-height:1.8;margin-bottom:24px">
+            LINEで <strong style="color:var(--text)">「ログイン」</strong> と送信すると<br>ログイン用URLが届きます
+          </div>
+          <div id="login-status" style="font-size:13px;color:var(--accent);min-height:20px;white-space:pre-wrap;line-height:1.6"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="main-app" style="display:none">
+      <div id="bottom-nav">
+        <button id="bnav-my-reservations" onclick="window._app.showPage('my-reservations')">
+          <span class="icon">📋</span>予約確認
+        </button>
+        <button id="bnav-shift-submit" onclick="window._app.showPage('shift-submit')">
+          <span class="icon">📆</span>シフト
+        </button>
+        <button id="bnav-customer-list" onclick="window._app.showPage('customer-list')">
+          <span class="icon">👥</span>顧客リスト
+        </button>
+        <button id="bnav-sales-input" onclick="window._app.showPage('sales-input')" style="display:none">
+          <span class="icon">📝</span>売上入力
+        </button>
+        <button id="bnav-manual-view" onclick="window._app.showPage('manual-view')">
+          <span class="icon">📖</span>マニュアル
+        </button>
+        <button id="bnav-checkout" onclick="window._app.showPage('checkout')">
+          <span class="icon">🏁</span>退勤
+        </button>
+      </div>
+
+      <div id="nav">
+        <div id="store-name-badge" style="display:flex;align-items:center;padding:0 12px;font-size:11px;font-weight:700;color:#fff;background:var(--accent);white-space:nowrap;flex-shrink:0;height:var(--nav-h);border-right:1px solid rgba(255,255,255,0.15)">読込中...</div>
+        <button id="tab-payroll" onclick="window._app.showPage('payroll')">💰 給料</button>
+        <button id="tab-sales-report" onclick="window._app.showPage('sales-report')">📊 売上確認</button>
+        <button id="tab-reservation" onclick="window._app.showPage('reservation')">📅 予約</button>
+        <button id="tab-shift-calendar" onclick="window._app.showPage('shift-calendar')">📅 シフト表</button>
+        <button id="tab-therapist-profile" onclick="window._app.showPage('therapist-profile')" style="display:none">👩 セラピスト情報</button>
+        <button id="tab-customer-master" onclick="window._app.showPage('customer-master')">👥 顧客マスタ</button>
+        <button id="tab-master-mgmt" onclick="window._app.showPage('master-mgmt')">⚙ マスタ管理</button>
+        <button id="tab-line-mgmt" onclick="window._app.showPage('line-mgmt')" style="display:none">💬 LINE管理</button>
+        <button id="tab-scout" onclick="window._app.showPage('scout')" style="display:none">🔍 スカウト</button>
+        <button id="tab-shift-submit" style="display:none">📆 シフト提出</button>
+        <button id="tab-my-reservations" style="display:none">📋 予約確認</button>
+        <button id="tab-sales-input" style="display:none">📝 売上入力</button>
+      </div>
+
+      <!-- ページコンテナ -->
+      <div id="page-payroll" class="page">${renderPayrollPage()}</div>
+      <div id="page-reservation" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">予約管理（実装中）</div></div>
+      <div id="page-sales-report" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">売上確認（実装中）</div></div>
+      <div id="page-shift-calendar" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">シフト表（実装中）</div></div>
+      <div id="page-customer-master" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">顧客マスタ（実装中）</div></div>
+      <div id="page-master-mgmt" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">マスタ管理（実装中）</div></div>
+      <div id="page-line-mgmt" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">LINE管理（実装中）</div></div>
+      <div id="page-scout" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">スカウト（実装中）</div></div>
+      <div id="page-my-reservations" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">予約確認（実装中）</div></div>
+      <div id="page-shift-submit" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">シフト提出（実装中）</div></div>
+      <div id="page-customer-list" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">顧客リスト（実装中）</div></div>
+      <div id="page-sales-input" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">売上入力（実装中）</div></div>
+      <div id="page-manual-view" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">マニュアル（実装中）</div></div>
+      <div id="page-checkout" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">退勤（実装中）</div></div>
+      <div id="page-therapist-profile" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">セラピスト情報（実装中）</div></div>
+    </div>
+  `;
+}
+
+// ── 管理者モード起動 ──────────────────────────────────
+async function startAdminMode(storeId: string) {
+  ctx.storeId = storeId;
+  document.getElementById('main-app')!.style.display = 'block';
+  document.getElementById('login-page')!.style.display = 'none';
+
+  // 店舗名取得
+  try {
+    const { data: store } = await sb.from('stores').select('name').eq('id', storeId).maybeSingle();
+    storeName = store?.name || '店舗';
+    const badge = document.getElementById('store-name-badge');
+    if (badge) badge.textContent = storeName;
+  } catch { /* ignore */ }
+
+  // 管理者ナビ表示
+  document.getElementById('nav')!.style.display = 'flex';
+  const bNav = document.getElementById('bottom-nav')!;
+  bNav.classList.remove('show');
+
+  // LINE管理・スカウトタブの表示制御
+  const KAMISU = '33333333-0000-0000-0000-000000000003';
+  if (storeId === KAMISU) {
+    document.getElementById('tab-scout')!.style.display = '';
+  }
+  const lineTab = document.getElementById('tab-line-mgmt')!;
+  lineTab.style.display = '';
+  const profileTab = document.getElementById('tab-therapist-profile')!;
+  profileTab.style.display = '';
+
+  showPage('payroll');
+}
+
+// ── セラピストモード起動 ──────────────────────────────
+async function startTherapistMode(storeId: string, _name: string) {
+  ctx.storeId = storeId;
+  document.body.classList.add('therapist-mode');
+  document.getElementById('main-app')!.style.display = 'block';
+  document.getElementById('login-page')!.style.display = 'none';
+  document.getElementById('nav')!.style.display = 'none';
+  document.getElementById('bottom-nav')!.classList.add('show');
+
+  // 店舗名取得
+  try {
+    const { data: store } = await sb.from('stores').select('name').eq('id', storeId).maybeSingle();
+    storeName = store?.name || '店舗';
+  } catch { /* ignore */ }
+
+  showPage('my-reservations');
+}
+
+// ── 初期化 ──────────────────────────────────────────
+async function init() {
+  renderShell();
+
+  const params = new URLSearchParams(location.search);
+  const token   = params.get('token');
+  const storeParam = params.get('store');
+  const adminParam = params.get('admin');
+
+  // 管理者: ?admin=1&store=xxx
+  if (adminParam) {
+    const storeId = storeParam || '11111111-0000-0000-0000-000000000001';
+    await startAdminMode(storeId);
+    return;
+  }
+
+  // セラピスト: ?token=xxx
+  if (token) {
+    document.getElementById('login-page')!.style.display = 'block';
+    const statusEl = document.getElementById('login-status')!;
+    statusEl.textContent = '確認中...';
+    try {
+      const { data: row } = await sb.from('tokens')
+        .select('store_id, therapist_name, expires_at')
+        .eq('token', token)
+        .maybeSingle();
+      if (!row) { statusEl.textContent = 'URLが無効または期限切れです'; return; }
+      if (new Date(row.expires_at) < new Date()) { statusEl.textContent = 'URLの有効期限が切れています\nもう一度LINEで「ログイン」と送信してください'; return; }
+      await startTherapistMode(row.store_id, row.therapist_name);
+    } catch (e: any) {
+      document.getElementById('login-status')!.textContent = 'エラー: ' + e.message;
+    }
+    return;
+  }
+
+  // デフォルト: 管理者（いわき店）
+  const storeId = storeParam || '11111111-0000-0000-0000-000000000001';
+  await startAdminMode(storeId);
+}
+
+// グローバル公開（onclick用）
+(window as any)._app = { showPage };
+
+init();
