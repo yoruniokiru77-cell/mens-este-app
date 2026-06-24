@@ -1,58 +1,6 @@
 ﻿// @ts-nocheck
 import * as supabaseJs from '@supabase/supabase-js';
-// ============================================================
-// iOS対応モーダル表示
-function _showModal(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  // iOS Safari対応: display:blockで表示し、内部をflexで中央寄せ
-  el.style.cssText = el.style.cssText.replace('display:none','display:block');
-  el.style.display = 'block';
-  // 内部の最初のdivをmargin:auto + display:blockで中央寄せ
-  const inner = el.querySelector(':scope > div');
-  if (inner) {
-    inner.style.margin = 'auto';
-    inner.style.position = 'relative';
-  }
-  // スクロールをトップに戻す
-  el.scrollTop = 0;
-  // iOS Safari: position:fixedをトリガーするためにforceReflow
-  void el.getBoundingClientRect();
-}
-function _hideModal(id) {
-  const el = document.getElementById(id);
-  if (el) el.style.display = 'none';
-}
-
-// iOS対応クリップボードコピー
-// ============================================================
-async function _copyToClipboard(text) {
-  // 方法1: Clipboard API（Chrome/Safari 13.4+）
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch(e) { /* fallthrough */ }
-  }
-  // 方法2: textarea + execCommand（iOS Safari旧バージョン対応）
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.cssText = 'position:fixed;top:0;left:0;width:2em;height:2em;opacity:0;';
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  // iOS Safari用
-  const range = document.createRange();
-  range.selectNodeContents(ta);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-  ta.setSelectionRange(0, 999999);
-  let ok = false;
-  try { ok = document.execCommand('copy'); } catch(e) {}
-  document.body.removeChild(ta);
-  return ok;
-}
+import { _showModal, _hideModal, _copyToClipboard, _confirm } from './lib/ui';
 
 // ============================================================
 // Supabase設定（★ここを環境ごとに変更してください★）
@@ -11942,23 +11890,6 @@ async function submitReservation() {
 // ============================================================
 // LINE WebView対応 カスタムconfirm
 // ============================================================
-function _confirm(message, okLabel = 'OK', cancelLabel = 'キャンセル') {
-  return new Promise(resolve => {
-    const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
-    overlay.innerHTML = `
-      <div style="background:var(--surface);border-radius:14px;padding:24px;max-width:320px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
-        <div style="font-size:14px;color:var(--text);margin-bottom:20px;line-height:1.6;white-space:pre-line">${message}</div>
-        <div style="display:flex;gap:10px">
-          <button id="_confirm-ok" style="flex:1;padding:10px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer">${okLabel}</button>
-          <button id="_confirm-cancel" style="flex:1;padding:10px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer">${cancelLabel}</button>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    overlay.querySelector('#_confirm-ok').onclick     = () => { document.body.removeChild(overlay); resolve(true);  };
-    overlay.querySelector('#_confirm-cancel').onclick  = () => { document.body.removeChild(overlay); resolve(false); };
-  });
-}
 
 // ============================================================
 // 店舗別案内文フォーマット生成
