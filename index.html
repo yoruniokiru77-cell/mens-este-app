@@ -10558,20 +10558,26 @@ async function saveCustomerEdit() {
 
   try {
     showOverlay();
-    // customer_noで直接更新（数値・文字列両対応）
-    // customer_noは数値型のカラムの可能性があるので両方試す
-    let cust = null, findErr = null;
-    const tryNum = Number(no);
-    if (!isNaN(tryNum)) {
-      const r1 = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', tryNum).maybeSingle();
-      cust = r1.data; findErr = r1.error;
+    // telで検索（customer_noは廃止済みのためtelを主キーとして使用）
+    let cust = null;
+    if (telOrig) {
+      const r = await _sb.from('customers').select('id').eq('store_id', STORE_ID).ilike('tel', telOrig).maybeSingle();
+      if (r.error) throw new Error(r.error.message);
+      cust = r.data;
     }
-    if (!cust) {
-      const r2 = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', String(no)).maybeSingle();
-      if (!findErr) { cust = r2.data; findErr = r2.error; }
+    // telがない場合はcustomer_noで試みる（旧データ互換）
+    if (!cust && no) {
+      const tryNum = Number(no);
+      if (!isNaN(tryNum)) {
+        const r1 = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', tryNum).maybeSingle();
+        cust = r1.data;
+      }
+      if (!cust) {
+        const r2 = await _sb.from('customers').select('id').eq('store_id', STORE_ID).eq('customer_no', String(no)).maybeSingle();
+        cust = r2.data;
+      }
     }
-    if (findErr) throw new Error(findErr.message);
-    if (!cust) { alert('顧客が見つかりません（No: ' + no + '）'); hideOverlay(); return; }
+    if (!cust) { alert('顧客が見つかりません（tel: ' + telOrig + '）'); hideOverlay(); return; }
 
     const ngArr = ngRaw ? ngRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
     const { error: updErr } = await _sb.from('customers').update({
