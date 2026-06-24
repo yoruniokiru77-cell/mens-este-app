@@ -2746,7 +2746,7 @@ function _calcPayroll(row, storeSettings, opts = {}) {
         const extFixed = isHon
           ? (extBackHon != null ? extBackHon : extBack)
           : (extBack    != null ? extBack    : extBackHon);
-        const extPay = extFixed != null ? Number(extFixed) : Math.round(opt.amount * optionBack);
+        const extPay = extFixed != null ? Number(extFixed) : Math.round(opt.amount * courseBack);
         therapistExtPay += extPay;
         therapistOptPay += extPay;
         return;
