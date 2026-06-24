@@ -541,6 +541,89 @@ NEVERLAND は cash.html で「退勤時の釣銭残高」「投函額」「残�
 
 ---
 
+## セッション24（2026/6/24）で実施した主な修正
+
+| # | 内容 |
+|---|---|
+| 1 | 給料明細モーダル（`openPayrollPreviewModal`）に「指名料」列を追加（OPT給料と延長給料の間） |
+| 2 | 桃々のOPT給料が¥8,000になる原因を特定（`sale_options`に古いデータが残存）→ 売上編集で再保存することで解決 |
+
+---
+
+## `_calcPayroll` 関数の完全仕様（index.html:2689）
+
+**この関数は唯一の給料計算ロジック。絶対に変更前に全仕様を確認すること。**
+
+### 引数
+```javascript
+_calcPayroll(row, storeSettings, opts)
+// row:          salesレコード相当のオブジェクト
+// storeSettings: store_settingsレコード（nullの場合window._cachedStoreSettingsを使用）
+// opts:         { miscFee, accomFee, optItems, menuBackMap, therapistId,
+//                extensionBack, extensionBackHon }
+```
+
+### 不変条件（変更禁止）
+```
+totalAmount      = coursePrice + actualOptPrice + nomFee - discount
+baseTherapistPay = therapistCoursePay + therapistOptPay + nomFee
+storeDrop        = totalAmount - baseTherapistPay
+therapistPay     = baseTherapistPay - miscFee - accomFee
+```
+⚠ **miscFee/accomFeeはUI層（recalcPayroll）でstoreDropに加算される。`_calcPayroll`内では除外すること（二重計上防止）。**
+
+### コース給料（therapistCoursePay）の計算順序
+| 条件 | 計算式 |
+|---|---|
+| 固定バックあり × 按分モード（deduct_then_back） | `fixedBack - round(discount / 2)` |
+| 固定バックあり × 店舗負担 or デフォルト | `fixedBack`（割引全額店舗負担） |
+| 固定バックなし × store_bears | `round(coursePrice × courseBack)` |
+| 固定バックなし × deduct_then_back or デフォルト | `round((coursePrice - discount) × courseBack)` |
+
+### オプション給料（therapistOptPay）の計算順序
+1. `optItems`（sale_optionsレコード）+ `menuBackMap` + `therapistId` が全て揃っている場合 → 1件ずつ固定バックを参照
+2. それ以外 → `optPrice × optionBack` で一括計算
+
+#### optItemsの各件の判定
+- `menuId=null` かつ `name.includes('延長')` → 延長バック（`therapistExtPay`に加算・表示分離用）
+  - `extensionBack` / `extensionBackHon` が設定されていれば固定額を使用
+  - 未設定の場合 → **`courseBack`（コースバック率）で計算**（`optionBack`ではない・重要）
+- それ以外 → `menuBackMap[therapistId + '_' + menuId]` で固定バックを検索
+  - 固定バックあり → その額
+  - 固定バックなし → `amount × optionBack`
+
+### 割引モードの優先順位
+`row.therapist_discount_mode` → `storeSettings.discount_mode` → `DISCOUNT_MODE`（グローバルデフォルト）
+
+### バック率のデフォルト値
+- `courseBack`: セラピスト未設定時は `ss.default_course_back || 0.5`
+- `optionBack`: セラピスト未設定時は `ss.default_option_back ?? 1.0`
+
+### 戻り値
+```javascript
+{ storeDrop, therapistPay, therapistCoursePay, therapistOptPay, therapistExtPay, courseBack, optionBack, fixedBack }
+```
+
+### 給料明細モーダル（openPayrollPreviewModal: line 5644）の列構成
+| 列 | 内容 |
+|---|---|
+| 時刻 | 予約時刻 |
+| コース | 分数 + 指名種別 |
+| お客様 | 顧客名 |
+| 合計金額 | 会計金額（割引・指名料の内訳付き） |
+| コースバック | therapistCoursePay（固定=青太字、率=グレー） |
+| OPT給料 | therapistOptPay - therapistExtPay |
+| 指名料 | nominationFee（セラピスト受取分） |
+| 延長給料 | therapistExtPay |
+| 店落ち | storeDrop |
+
+### sale_optionsとoption_priceの整合性
+- `sale_options`テーブルが古い/欠損データの場合、OPT給料が正しく計算されない
+- 症状: 固定バックが参照されず `amount × optionBack` にフォールバックしてOPT給料がズレる
+- 対処: 売上編集モーダルで正しいオプションを選択して再保存 → `saveSaleOptions`が `sale_options`を DELETE→INSERT で更新する
+
+---
+
 ## 過去の作業ログ（参照先）
 
 詳細な作業履歴はdocsフォルダを参照してください。
