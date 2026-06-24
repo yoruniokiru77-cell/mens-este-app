@@ -11,7 +11,7 @@ import {
   _timeToMin27,
 } from './lib/helpers';
 import { _calcPayroll } from './lib/calc';
-import { apiGet } from './lib/api';
+import { apiGet, apiGetCached, clearCache } from './lib/api';
 
 // 現在の店舗ID（URLパラメータで上書き・init処理で再代入あり）
 const _storeParam = new URLSearchParams(location.search).get('store') || new URLSearchParams(location.search).get('s') || '';
@@ -272,34 +272,7 @@ async function loadStoreSettings() {
 // ============================================================
 // クライアントキャッシュ（速度改善）
 // ============================================================
-const _cache = {};
-const CACHE_TTL = {
-  getInitialData:  5 * 60 * 1000,
-  getTherapists:   5 * 60 * 1000,
-  getRoomMaster:   5 * 60 * 1000,
-  getMenuMaster:   5 * 60 * 1000,
-  getTherapistMaster: 5 * 60 * 1000,
-};
-
-function apiGetCached(action, params = {}) {
-  const ttl = CACHE_TTL[action];
-  if (!ttl) return apiGet(action, params);
-  const key = action + '_' + STORE_ID + JSON.stringify(params);
-  const cached = _cache[key];
-  if (cached && Date.now() - cached.at < ttl) return Promise.resolve(cached.data);
-  return apiGet(action, params).then(data => {
-    _cache[key] = { data, at: Date.now() };
-    return data;
-  });
-}
-
-function clearCache(action) {
-  if (action) {
-    Object.keys(_cache).filter(k => k.startsWith(action)).forEach(k => delete _cache[k]);
-  } else {
-    Object.keys(_cache).forEach(k => delete _cache[k]);
-  }
-}
+// apiGetCached / clearCache / _cache は src/lib/api.ts に移動済み
 // ============================================================
 // ページ切替
 // ============================================================

@@ -2143,3 +2143,35 @@ case 'sendLineMessage': {
       return null;
   }
 }
+
+// ============================================================
+// クライアントキャッシュ（速度改善）
+// ============================================================
+const _cache = {};
+const CACHE_TTL = {
+  getInitialData:  5 * 60 * 1000,
+  getTherapists:   5 * 60 * 1000,
+  getRoomMaster:   5 * 60 * 1000,
+  getMenuMaster:   5 * 60 * 1000,
+  getTherapistMaster: 5 * 60 * 1000,
+};
+
+export function apiGetCached(action, params = {}) {
+  const ttl = CACHE_TTL[action];
+  if (!ttl) return apiGet(action, params);
+  const key = action + '_' + window.STORE_ID + JSON.stringify(params);
+  const cached = _cache[key];
+  if (cached && Date.now() - cached.at < ttl) return Promise.resolve(cached.data);
+  return apiGet(action, params).then(data => {
+    _cache[key] = { data, at: Date.now() };
+    return data;
+  });
+}
+
+export function clearCache(action) {
+  if (action) {
+    Object.keys(_cache).filter(k => k.startsWith(action)).forEach(k => delete _cache[k]);
+  } else {
+    Object.keys(_cache).forEach(k => delete _cache[k]);
+  }
+}
