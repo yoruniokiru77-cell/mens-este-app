@@ -5,6 +5,11 @@ import {
   DEFAULT_STORE_ID, STORE_CODE_MAP, STORE_ID_TO_CODE,
   VPS_BASE_URL, VPS_API_KEY, STORE_KEY_MAP, STORE_SITES,
 } from './lib/config';
+import {
+  _normalizeTime, _timeToMinutes, _timeLabel,
+  _fmtDatetimeJp, _fmtLocalDatetimeJp, _fmtDateJp, _fmtTimeJp,
+  _timeToMin27,
+} from './lib/helpers';
 
 // 現在の店舗ID（URLパラメータで上書き・init処理で再代入あり）
 const _storeParam = new URLSearchParams(location.search).get('store') || new URLSearchParams(location.search).get('s') || '';
@@ -191,84 +196,8 @@ function _buildTimeOptions(selectedVal) {
 }
 
 // 26時表記(例:26:00)をHH:MM(02:00)に変換してDBに保存
-function _normalizeTime(timeStr) {
-  if (!timeStr) return '';
-  const [h, m] = timeStr.split(':').map(Number);
-  if (h >= 24) return String(h - 24).padStart(2,'0') + ':' + String(m).padStart(2,'0');
-  return timeStr.substring(0, 5);
-}
-
-// 26時表記の数値比較（10:00〜26:00を正しく比較）
-function _timeToMinutes(timeStr) {
-  if (!timeStr) return 0;
-  const [h, m] = timeStr.split(':').map(Number);
-  return h * 60 + (m || 0);
-}
-
-// 時刻文字列(HH:MM)が26時表示かを判定して表示ラベルを返す
-function _timeLabel(timeStr, dateStr) {
-  if (!timeStr) return '';
-  const [h] = timeStr.split(':').map(Number);
-  // 00:xx〜02:xxの場合、前日の24+h時として扱う可能性がある
-  // dateStrがあれば前日チェック（シフト登録時の日付ロジックはそのまま）
-  return timeStr.substring(0, 5);
-}
-
-function _fmtDatetimeJp(isoStr) {
-  if (!isoStr) return '';
-  // Supabase(timestamptz)はタイムゾーン情報なしの文字列を返すことがある
-  // ("2026-05-31T01:00:00" 形式)。タイムゾーンなしの場合ブラウザがローカル時刻と
-  // 解釈しgetHours()がUTC時刻を返してしまうため、末尾にZを付けてUTC強制する。
-  let normalized = isoStr;
-  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(isoStr)) {
-    normalized = isoStr.replace(' ', 'T') + 'Z';
-  }
-  const d = new Date(normalized);
-  if (isNaN(d)) return isoStr;
-  const pad = n => String(n).padStart(2,'0');
-  const h = d.getHours();
-  // 3時未満は前日の24+h時として表示（例: 1:30 → 25:30）
-  if (h < 3) {
-    const dPrev = new Date(d);
-    dPrev.setDate(dPrev.getDate() - 1);
-    return dPrev.getFullYear() + '/' + pad(dPrev.getMonth()+1) + '/' + pad(dPrev.getDate())
-      + ' ' + (24 + h) + ':' + pad(d.getMinutes());
-  }
-  return d.getFullYear() + '/' + pad(d.getMonth()+1) + '/' + pad(d.getDate())
-    + ' ' + pad(h) + ':' + pad(d.getMinutes());
-}
-
-// ローカル日時文字列（"2026-05-30T00:15"形式）を27時ルール対応でフォーマット
-// new Date()はTZなし文字列をUTCとして解釈する場合があるため手動パース
-function _fmtLocalDatetimeJp(localStr) {
-  if (!localStr) return '';
-  const [datePart, timePart] = localStr.split('T');
-  const [y, mo, dd] = (datePart || '').split('-').map(Number);
-  const [h, mi] = (timePart || '').split(':').map(Number);
-  if (!y || isNaN(h)) return localStr;
-  const pad = n => String(n).padStart(2,'0');
-  if (h < 3) {
-    const prev = new Date(y, mo - 1, dd - 1);
-    return prev.getFullYear() + '/' + pad(prev.getMonth()+1) + '/' + pad(prev.getDate())
-      + ' ' + (24 + h) + ':' + pad(mi);
-  }
-  return y + '/' + pad(mo) + '/' + pad(dd) + ' ' + pad(h) + ':' + pad(mi);
-}
-function _fmtDateJp(isoStr) {
-  if (!isoStr) return '';
-  const s = isoStr.substring(0,10);
-  return s.replace(/-/g, '/');
-}
-function _fmtTimeJp(timeStr) {
-  return (timeStr || '').substring(0,5);
-}
-
-// 時間文字列を分数に変換（27時ルール：00〜02時台は24+hとして扱う）
-function _timeToMin27(t) {
-  if (!t) return 0;
-  const [h, m] = t.split(':').map(Number);
-  return (h < 3 ? h + 24 : h) * 60 + (m || 0);
-}
+// _normalizeTime / _timeToMinutes / _timeLabel / _fmt* / _timeToMin27
+// → src/lib/helpers.ts に移動済み
 
 // ======================================================
 // 給料計算ロジック（唯一の正規実装）
