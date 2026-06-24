@@ -1835,5 +1835,801 @@
   <div id="scout-summary-list"><p style="color:var(--muted)">読み込み中...</p></div>
 </div>
 <script type="module" src="/src/main.ts"></script>
+
+<!-- 顧客詳細モーダル -->
+<div id="customer-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9000;overflow-y:auto;padding:20px">
+  <div style="background:var(--surface);border-radius:var(--radius);max-width:520px;margin:0 auto;padding:20px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div class="sec-title">👤 顧客詳細 — <span id="customer-modal-title-name" style="color:var(--accent)"></span></div>
+      <button onclick="closeCustomerModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted)">×</button>
+    </div>
+    <!-- 顧客情報 -->
+    <div id="customer-modal-info" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:16px;font-size:14px"></div>
+    <!-- メモ入力 -->
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;color:var(--muted);font-weight:500">メモを追加</label>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <input type="text" id="customer-memo-input" placeholder="メモを入力..." style="flex:1">
+        <button class="btn btn-primary btn-sm" onclick="saveCustomerMemo()">保存</button>
+      </div>
+    </div>
+    <!-- メモ一覧 -->
+    <div style="margin-bottom:16px">
+      <div class="memo-title" style="font-size:13px;font-weight:600;margin-bottom:8px">📝 自分のメモ</div>
+      <div id="customer-modal-memos"></div>
+    </div>
+    <!-- NG管理（管理者のみ） -->
+    <div id="customer-modal-ng"></div>
+    <!-- 来店履歴 -->
+    <div>
+      <div class="hist-title" style="font-size:13px;font-weight:600;margin-bottom:8px">📅 来店履歴</div>
+      <div id="customer-modal-history"></div>
+    </div>
+    <!-- キャンセル履歴（管理者のみ） -->
+    <div id="customer-modal-cancel-wrap" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--accent)">🚫 キャンセル履歴</div>
+      <div id="customer-modal-cancel"></div>
+    </div>
+  </div>
+</div>
+
+  <!-- シフト変更モーダル -->
+  <div id="shift-edit-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9000;padding:20px">
+    <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:420px;padding:20px">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">✏️ シフト変更</div>
+      <div id="shift-edit-info" style="font-size:13px;color:var(--muted);margin-bottom:14px"></div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>日付</label>
+          <input type="date" id="shift-edit-date">
+        </div>
+        <div class="form-group">
+          <label>ルーム</label>
+          <select id="shift-edit-room">
+            <option value="">割り当てなし</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>開始時間</label>
+          <select id="shift-edit-start"></select>
+        </div>
+        <div class="form-group">
+          <label>終了時間</label>
+          <select id="shift-edit-end"></select>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <div class="form-group" style="flex:1;margin-bottom:0">
+          <label>入室予定時間（任意）</label>
+          <select id="shift-edit-checkin" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+            <option value="">-（未設定）</option>
+          </select>
+        </div>
+        <div class="form-group" style="flex:1;margin-bottom:0">
+          <label>退室予定時間（任意）</label>
+          <select id="shift-edit-checkout" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+            <option value="">-（未設定）</option>
+          </select>
+        </div>
+      </div>
+      <input type="hidden" id="shift-edit-row">
+      <div id="shift-edit-warning" style="display:none;background:#fff3cd;border-left:4px solid #ffc107;border-radius:6px;padding:10px 12px;font-size:13px;color:#856404;margin-bottom:12px"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1" onclick="confirmEditShift()">変更を保存</button>
+        <button class="btn btn-secondary" onclick="document.getElementById('shift-edit-modal').style.display='none'">キャンセル</button>
+      </div>
+    </div>
+  </div>
+<!-- シフトカレンダー シフト追加モーダル -->
+<div id="cal-add-shift-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9200;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:400px;padding:24px;max-height:90vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">➕ シフト追加</div>
+    <div id="cal-add-shift-info" style="font-size:13px;color:var(--muted);margin-bottom:14px"></div>
+
+    <!-- 種別 -->
+    <div class="form-group" style="margin-bottom:12px">
+      <label>種別</label>
+      <div style="display:flex;gap:6px">
+        <button id="cal-add-type-shift"     onclick="setCalAddType('shift')"     style="flex:1;padding:8px;border-radius:8px;border:1.5px solid var(--primary);background:var(--primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600">📅 シフト</button>
+        <button id="cal-add-type-interview" onclick="setCalAddType('interview')" style="flex:1;padding:8px;border-radius:8px;border:1.5px solid var(--border);background:none;color:var(--text);cursor:pointer;font-size:13px">🤝 面接</button>
+        <button id="cal-add-type-special"   onclick="setCalAddType('special')"   style="flex:1;padding:8px;border-radius:8px;border:1.5px solid var(--border);background:none;color:var(--text);cursor:pointer;font-size:13px">📌 特別</button>
+      </div>
+    </div>
+
+    <!-- シフト：セラピスト選択 -->
+    <div id="cal-add-field-therapist" class="form-group" style="margin-bottom:12px">
+      <label>セラピスト</label>
+      <select id="cal-add-therapist" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px"></select>
+    </div>
+
+    <!-- 面接・特別：名前入力 -->
+    <div id="cal-add-field-name" class="form-group" style="display:none;margin-bottom:12px">
+      <!-- 面接のみ: 過去の面接名プルダウン -->
+      <div id="cal-add-interview-history-wrap" style="display:none;margin-bottom:8px">
+        <label style="font-size:12px;color:var(--muted);margin-bottom:4px;display:block">過去の面接から選ぶ</label>
+        <select id="cal-add-interview-history" onchange="if(this.value){document.getElementById('cal-add-name').value=this.value;this.value=''}"
+          style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <option value="">── 選択してください ──</option>
+        </select>
+      </div>
+      <label id="cal-add-name-label">名前（仮名可）</label>
+      <input type="text" id="cal-add-name" placeholder="例: 面接A / さくら" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+    </div>
+
+    <div class="form-group" style="margin-bottom:12px">
+      <label>日付</label>
+      <input type="date" id="cal-add-date" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+    </div>
+    <div class="grid2" style="margin-bottom:12px">
+      <div class="form-group" style="margin-bottom:0">
+        <label>開始時間</label>
+        <select id="cal-add-start" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px"></select>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>終了時間</label>
+        <select id="cal-add-end" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px"></select>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>ルーム（省略可）</label>
+      <select id="cal-add-room" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+        <option value="">ルームを選択してください（必須）</option>
+      </select>
+    </div>
+    <!-- シフトのみ：ステータス -->
+    <div id="cal-add-field-status" class="form-group" style="margin-bottom:12px">
+      <label>ステータス</label>
+      <select id="cal-add-status" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+        <option value="approved">✅ 承認済み（即反映）</option>
+        <option value="pending">⏳ 未承認（確認後に承認）</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>メモ（省略可）</label>
+      <input type="text" id="cal-add-memo" placeholder="備考など" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="confirmCalAddShift()">追加</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('cal-add-shift-modal').style.display='none'">キャンセル</button>
+    </div>
+  </div>
+</div>
+<!-- シフトカレンダー アクションメニュー -->
+<div id="cal-shift-menu" style="display:none;position:fixed;z-index:9300;background:var(--surface);border-radius:var(--radius);box-shadow:0 4px 24px rgba(0,0,0,0.18);min-width:220px;padding:8px 0">
+  <div id="cal-shift-menu-info" style="padding:8px 14px 6px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--border);margin-bottom:4px"></div>
+  <button id="cal-menu-interview-info" onclick="_calMenuInterviewInfo()" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:#7c3aed;font-weight:600">📝 面接情報を入力</button>
+  <button id="cal-menu-hire"           onclick="_calMenuHire()"          style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 採用</button>
+  <button id="cal-menu-reject-hire"    onclick="_calMenuRejectHire()"    style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ 不採用</button>
+  <button id="cal-menu-dayoff-approve" onclick="_calMenuDayoffApprove()" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ お休み承認</button>
+  <button id="cal-menu-dayoff-reject"  onclick="_calMenuDayoffReject()"  style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ お休み却下</button>
+  <button id="cal-menu-approve"        onclick="_calMenuApprove()"       style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 承認</button>
+  <button id="cal-menu-reject"         onclick="_calMenuReject()"        style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ 却下</button>
+  <button id="cal-menu-room"           onclick="_calMenuRoom()"          style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px">🚪 ルーム変更・承認</button>
+  <button id="cal-menu-change-approve" onclick="_calMenuChangeApprove()" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 変更申請を承認</button>
+  <button id="cal-menu-change-reject"  onclick="_calMenuChangeReject()"  style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--accent);font-weight:600">❌ 変更申請を却下</button>
+  <button id="cal-menu-restore"               onclick="_calMenuRestore()"             style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:#d97706;font-weight:600">↩️ 申請に戻す</button>
+  <button id="cal-menu-approve-from-rejected" onclick="_calMenuApproveFromRejected()"  style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--success);font-weight:600">✅ 承認する</button>
+  <button id="cal-menu-edit"           onclick="_calMenuEdit()"          style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px">✏️ 日時・ルーム変更</button>
+  <button id="cal-menu-att"            onclick="_calMenuAtt()"           style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px">📋 勤怠記録</button>
+  <button id="cal-menu-delete"         onclick="_calMenuDelete()"        style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--muted)">🗑 削除</button>
+  <button onclick="document.getElementById('cal-shift-menu').style.display='none'" style="width:100%;text-align:left;padding:9px 14px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--muted)">✕ 閉じる</button>
+</div>
+<!-- 勤怠記録モーダル -->
+<div id="attendance-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9200;padding:20px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:380px;padding:24px">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">📋 勤怠記録</div>
+    <div id="attendance-shift-info" style="font-size:13px;color:var(--muted);margin-bottom:16px"></div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>勤怠ステータス</label>
+      <select id="attendance-type" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+        <option value="normal">✅ 正常出勤</option>
+        <option value="late">⏰ 遅刻</option>
+        <option value="early_leave">🚪 早退</option>
+        <option value="absent">❌ 欠勤</option>
+        <option value="noshow">🚫 無断欠勤</option>
+      </select>
+    </div>
+    <div id="attendance-warning" style="display:none;background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:13px;color:var(--accent)">
+      ⚠ 欠勤・無断欠勤を選択するとその日の予約が自動でキャンセルされます。
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="confirmAttendance()">保存</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('attendance-modal').style.display='none'">キャンセル</button>
+    </div>
+  </div>
+</div>
+<!-- シフト変更申請モーダル（セラピスト用） -->
+<!-- 管理者: シフト変更申請承認モーダル -->
+<div id="shift-change-approve-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9500;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:440px;padding:20px;margin:auto">
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px">✏️ シフト変更申請 承認</div>
+
+    <!-- 変更前→変更後表示 -->
+    <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px">
+      <div style="margin-bottom:8px">
+        <span style="color:var(--muted);font-size:12px">変更前</span><br>
+        <span id="sca-before" style="font-weight:500"></span>
+      </div>
+      <div style="text-align:center;font-size:18px;color:var(--muted);margin-bottom:8px">↓</div>
+      <div>
+        <span style="color:#7c3aed;font-size:12px">変更希望</span><br>
+        <span id="sca-request" style="font-weight:500;color:#7c3aed"></span>
+      </div>
+    </div>
+
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">承認する時間・ルームを確認・調整してください</div>
+
+    <!-- 時間調整 -->
+    <div class="grid2" style="margin-bottom:12px">
+      <div class="form-group">
+        <label>開始時間</label>
+        <select id="sca-start"></select>
+      </div>
+      <div class="form-group">
+        <label>終了時間</label>
+        <select id="sca-end"></select>
+      </div>
+    </div>
+
+    <!-- ルーム選択 -->
+    <div class="form-group" style="margin-bottom:16px">
+      <label>ルーム</label>
+      <select id="sca-room"></select>
+    </div>
+
+    <!-- 変更申請メモ -->
+    <div id="sca-memo-wrap" style="display:none;background:#fff3cd;border-left:3px solid var(--warning);border-radius:6px;padding:10px 12px;font-size:12px;color:#856404;margin-bottom:14px">
+      <span style="font-weight:600">申請理由: </span><span id="sca-memo"></span>
+    </div>
+
+    <div id="sca-conflict-msg" style="display:none;background:#fee2e2;border-left:3px solid #ef4444;border-radius:6px;padding:10px 12px;font-size:12px;color:#b91c1c;margin-bottom:14px"></div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="submitShiftChangeApprove()">承認して保存</button>
+      <button class="btn btn-danger btn-sm" onclick="submitShiftChangeReject()">却下</button>
+      <button class="btn btn-secondary btn-sm" onclick="_hideModal('shift-change-approve-modal')">閉じる</button>
+    </div>
+    <input type="hidden" id="sca-row">
+    <input type="hidden" id="sca-therapist">
+  </div>
+</div>
+
+<div id="shift-change-request-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9400;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:420px;padding:20px">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">✏️ シフト変更申請</div>
+    <div id="shift-change-current" style="font-size:13px;color:var(--muted);margin-bottom:16px"></div>
+    <div class="grid2">
+      <div class="form-group">
+        <label>変更後 開始時間</label>
+        <select id="shift-change-start"></select>
+      </div>
+      <div class="form-group">
+        <label>変更後 終了時間</label>
+        <select id="shift-change-end"></select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>変更理由（任意）</label>
+      <input type="text" id="shift-change-memo" placeholder="例: 通院のため早退したい">
+    </div>
+    <div style="background:#fff3cd;border-left:3px solid var(--warning);border-radius:6px;padding:10px 12px;font-size:12px;color:#856404;margin-bottom:14px">
+      ⚠ 申請後、管理者の承認が必要です。承認されるまで現在のシフトが有効です。
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="submitShiftChangeRequest()">申請する</button>
+      <button class="btn btn-secondary" onclick="closeShiftChangeRequest()">キャンセル</button>
+    </div>
+    <input type="hidden" id="shift-change-row">
+  </div>
+</div>
+
+<!-- 🌸 姫予約 入力モーダル（セラピスト用） -->
+<div id="hime-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9400;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:460px;padding:20px;max-height:92vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <span style="font-size:22px">🌸</span>
+      <div style="font-size:17px;font-weight:700">姫予約申請</div>
+    </div>
+
+    <div class="grid2">
+      <div class="form-group">
+        <label>日時</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input type="date" id="hime-date-part" style="flex:1.2" onchange="_syncHimeDatetime()">
+          <select id="hime-time-sel" style="flex:1" onchange="_syncHimeDatetime()"></select>
+        </div>
+        <input type="hidden" id="hime-date">
+      </div>
+      <div class="form-group">
+        <label>コース（分）</label>
+        <select id="hime-course" onchange="document.getElementById('hime-custom-wrap').style.display=this.value==='custom'?'':'none'">
+        </select>
+      </div>
+    </div>
+    <div class="form-group" id="hime-custom-wrap" style="display:none">
+      <label>コース時間（分）</label>
+      <input type="number" id="hime-custom-minutes" placeholder="例: 210" min="10" step="10">
+    </div>
+    <div class="grid2">
+      <div class="form-group">
+        <label>指名種別</label>
+        <select id="hime-nomination">
+        </select>
+      </div>
+      <div class="form-group">
+        <label>割引（円）</label>
+        <input type="number" id="hime-discount" value="0" min="0">
+      </div>
+    </div>
+    <div style="background:#fdf4ff;border:1.5px solid #f0abfc;border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px">👤 お客様情報</div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label>お客様名</label>
+        <input type="text" id="hime-customer-name" placeholder="例: C0041サカバ" oninput="himeLookupByName(this.value)">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label id="hime-tel-label">電話番号</label>
+        <input type="text" id="hime-customer-tel" placeholder="例: 09012341234"
+          oninput="this.value=this.value.replace(/[^0-9]/g,'');himeLookupByTel(this.value)">
+      </div>
+      <div id="hime-customer-info" style="font-size:12px;margin-top:6px;display:none;padding:6px 10px;border-radius:6px"></div>
+    </div>
+
+    <div class="form-group">
+      <label>メモ（任意）</label>
+      <input type="text" id="hime-memo" placeholder="例: ホテル◯◯で待ち合わせ">
+    </div>
+
+    <div style="background:#fff5f5;border-left:3px solid #f9a8d4;border-radius:6px;padding:10px 12px;font-size:12px;color:var(--muted);margin-bottom:14px">
+      ⚠ 申請後、管理者の承認が必要です。承認されるとLINEで通知が届きます。
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1;background:linear-gradient(135deg,#f9a8d4,#ec4899)" onclick="submitHimeReservation()">🌸 申請する</button>
+      <button class="btn btn-secondary" onclick="closeHimeModal()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- シフト承認・ルーム変更モーダル -->
+<div id="room-approve-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.55);z-index:9400;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:440px;padding:20px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:20px">✅</span>
+      <div style="font-size:16px;font-weight:700">シフト承認 / ルーム設定</div>
+    </div>
+    <div id="room-approve-shift-info" style="background:var(--bg);border-radius:8px;padding:10px 12px;margin:12px 0;font-size:13px;color:var(--muted)"></div>
+    <div id="room-approve-memo-wrap" style="display:none;background:#fef3cd;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#856404"></div>
+
+    <div class="form-group">
+      <label>ルーム</label>
+      <select id="room-approve-select">
+        <option value="">ルームを選択してください（必須）</option>
+      </select>
+    </div>
+    <div id="room-approve-warning" style="display:none;background:#fff1f2;border-radius:8px;padding:8px 12px;font-size:12px;color:#be123c;margin-bottom:12px"></div>
+
+    <div class="form-group">
+      <label>日付</label>
+      <input type="date" id="room-approve-date">
+    </div>
+    <div class="grid2">
+      <div class="form-group" style="margin-bottom:0">
+        <label>開始時間</label>
+        <select id="room-approve-start"></select>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>終了時間</label>
+        <select id="room-approve-end"></select>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label>入室予定時間（任意）</label>
+        <select id="room-approve-checkin" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+          <option value="">-（未設定）</option>
+        </select>
+      </div>
+      <div class="form-group" style="flex:1;margin-bottom:0">
+        <label>退室予定時間（任意）</label>
+        <select id="room-approve-checkout" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+          <option value="">-（未設定）</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:12px;margin-bottom:0">
+      <label>管理者メモ（セラピストへ）</label>
+      <input type="text" id="room-approve-admin-memo" placeholder="例：ルーム変更あり・時間注意など（省略可）"
+        style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px">
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1;background:var(--success);border-color:var(--success)" onclick="confirmApproveShift()">✅ 承認する</button>
+      <button class="btn btn-secondary" onclick="closeRoomApproveModal()">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- 🌸 姫予約 承認モーダル（管理者用） -->
+<div id="hime-approve-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9400;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:440px;padding:20px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-size:20px">🌸</span>
+      <div style="font-size:16px;font-weight:700">姫予約 承認</div>
+    </div>
+    <div id="hime-approve-info" style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px;line-height:1.9"></div>
+
+    <!-- 顧客情報（常に表示） -->
+    <div id="hime-approve-new-customer" style="display:none;background:#fdf4ff;border:1.5px solid #f0abfc;border-radius:10px;padding:14px;margin-bottom:14px">
+      <div id="hime-approve-customer-label" style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px">👤 お客様情報</div>
+      <div class="form-group" style="margin-bottom:10px">
+        <label>お客様名</label>
+        <input type="text" id="hime-approve-name" placeholder="例: サカバ">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>電話番号</label>
+        <input type="text" id="hime-approve-tel" readonly style="background:var(--bg);color:var(--muted)">
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">※ 電話番号は申請時のものを使用します</div>
+    </div>
+
+    <input type="hidden" id="hime-approve-resv-id">
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1;background:var(--success)" onclick="confirmHimeApprove()">✅ 承認する</button>
+      <button class="btn btn-danger" style="flex:1" onclick="confirmHimeReject()">❌ 却下する</button>
+      <button class="btn btn-secondary" onclick="closeHimeApproveModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- 売上編集モーダル（管理者用） -->
+<!-- 顧客マスタ編集モーダル -->
+<div id="customer-edit-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9400;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:460px;padding:20px;max-height:92vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px">👤 顧客情報編集</div>
+    <div id="ce-customer-no" style="display:none"></div>
+
+    <div class="grid2">
+      <div class="form-group">
+        <label>お客様名</label>
+        <input type="text" id="ce-name" placeholder="例: タナカ タロウ">
+      </div>
+      <div class="form-group">
+        <label>電話番号</label>
+        <input type="tel" id="ce-tel" placeholder="例: 09012345678">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>ステータス</label>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px" id="ce-status-group">
+        <button type="button" class="ce-status-btn" data-value="normal"
+          onclick="selectCEStatus('normal')"
+          style="padding:10px 4px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);transition:all .15s">
+          ✅ 通常
+        </button>
+        <button type="button" class="ce-status-btn" data-value="注意"
+          onclick="selectCEStatus('注意')"
+          style="padding:10px 4px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);transition:all .15s">
+          ⚠️ 注意
+        </button>
+        <button type="button" class="ce-status-btn" data-value="NG"
+          onclick="selectCEStatus('NG')"
+          style="padding:10px 4px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);transition:all .15s">
+          🚷 NG
+        </button>
+        <button type="button" class="ce-status-btn" data-value="出禁"
+          onclick="selectCEStatus('出禁')"
+          style="padding:10px 4px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);transition:all .15s">
+          🚫 出禁
+        </button>
+      </div>
+      <input type="hidden" id="ce-status-val" value="normal">
+    </div>
+
+    <div class="form-group">
+      <label>NGセラピスト</label>
+      <div id="ce-ng-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;padding:10px;border:1.5px solid var(--border);border-radius:10px;min-height:44px">
+        <span style="color:var(--muted);font-size:12px">読み込み中...</span>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">予約登録時にアラートが表示されます</div>
+      <input type="hidden" id="ce-ng-therapists">
+    </div>
+
+    <div class="form-group">
+      <label>メモ</label>
+      <textarea id="ce-memo" rows="3" placeholder="例: リピーター / 施術の注意点など"></textarea>
+    </div>
+
+    <div class="grid2">
+      <div class="form-group">
+        <label>キャンセル回数</label>
+        <input type="number" id="ce-cancel-count" min="0" step="1">
+      </div>
+      <div class="form-group">
+        <label>最終キャンセル日</label>
+        <input type="date" id="ce-last-cancel-date">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveCustomerEdit()">保存</button>
+      <button class="btn btn-secondary" onclick="closeCustomerEditModal()">キャンセル</button>
+    </div>
+    <input type="hidden" id="ce-customer-no-val">
+    <input type="hidden" id="ce-tel-original">
+  </div>
+</div>
+
+<div id="sales-edit-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9400;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:460px;padding:20px;max-height:92vh;overflow-y:auto">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">✏️ 売上編集</div>
+    <div id="sales-edit-customer" style="font-size:13px;color:var(--muted);margin-bottom:14px"></div>
+    <div id="sales-edit-cache-warning" style="display:none;font-size:12px;color:#92400e;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;padding:8px 10px;margin-bottom:12px">⚠ 固定バック・店舗設定の読み込みに失敗しました。給料プレビューが不正確な可能性があります。保存前に給料計算ページを開いて再確認してください。</div>
+
+    <!-- コース選択（マスタから） -->
+    <div class="grid2">
+      <div class="form-group">
+        <label>コース</label>
+        <select id="sales-edit-course" onchange="updateCurrentExtensionPrice('sales-edit');calcSalesEditTotal()">
+          <option value="">選択してください</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>指名種別</label>
+        <select id="sales-edit-nomination" onchange="calcSalesEditTotal()">
+          <option value="free">フリー</option>
+          <option value="nomination">指名</option>
+          <option value="honshimei">本指名</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 割引 -->
+    <div class="form-group">
+      <label>割引（円）</label>
+      <input type="number" id="sales-edit-discount" value="0" min="0" step="100" oninput="calcSalesEditTotal()">
+    </div>
+
+    <!-- オプション -->
+    <div style="border:1.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px">オプション</div>
+      <div id="se-opt-dynamic-list" style="display:flex;flex-direction:column;gap:8px"></div>
+    </div>
+
+    <!-- 合計プレビュー -->
+    <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="color:var(--muted)">コース料金</span>
+        <span id="se-course-price-display">¥0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="color:var(--muted)">指名料</span>
+        <span id="se-nom-fee-display">¥0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="color:var(--muted)">オプション</span>
+        <span id="se-opt-display">¥0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="color:var(--muted)">割引</span>
+        <span id="se-discount-display" style="color:var(--accent)">-¥0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px;margin-top:4px">
+        <span style="font-weight:700">合計</span>
+        <span id="se-total-display" style="font-size:16px;font-weight:700;color:var(--text)">¥0</span>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px">
+        <div style="color:var(--success)">給料: <strong id="se-pay-display">¥0</strong></div>
+        <div style="color:var(--accent2)">店落ち: <strong id="se-drop-display">¥0</strong></div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>メモ</label>
+      <input type="text" id="sales-edit-memo" placeholder="例: ディープリンパ30分 / 極液">
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:4px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveSalesEdit()">保存</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteSalesRow()">削除</button>
+      <button class="btn btn-secondary" onclick="closeSalesEditModal()">キャンセル</button>
+    </div>
+    <input type="hidden" id="sales-edit-therapist">
+  </div>
+</div>
+
+<!-- サイト自動連携モーダル -->
+<div id="site-sync-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9400;align-items:flex-end;justify-content:center">
+  <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;max-width:480px;max-height:92vh;display:flex;flex-direction:column">
+    <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-weight:700;font-size:16px">🌐 サイト自動連携</div>
+      <button onclick="_hideModal('site-sync-modal')" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">×</button>
+    </div>
+    <div style="padding:16px;overflow-y:auto;flex:1">
+      <!-- 対象期間 -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted)">対象期間</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="date" id="sync-date-from" class="ts" style="flex:1">
+          <span style="color:var(--muted)">〜</span>
+          <input type="date" id="sync-date-to" class="ts" style="flex:1">
+        </div>
+      </div>
+      <!-- 連携サイト選択 -->
+      <div style="margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:var(--muted)">連携サイト</div>
+        <div style="display:flex;flex-direction:column;gap:8px" id="sync-site-checkboxes">
+          <label id="sync-site-tamashii-wrap" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:10px;cursor:pointer">
+            <input type="checkbox" id="sync-site-tamashii" checked style="width:18px;height:18px;cursor:pointer">
+            <span style="font-size:14px">エステ魂</span>
+          </label>
+          <label id="sync-site-ranking-wrap" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:10px;cursor:pointer">
+            <input type="checkbox" id="sync-site-ranking" checked style="width:18px;height:18px;cursor:pointer">
+            <span style="font-size:14px">エステランキング</span>
+          </label>
+          <label id="sync-site-homepage-wrap" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:10px;cursor:pointer">
+            <input type="checkbox" id="sync-site-homepage" checked style="width:18px;height:18px;cursor:pointer">
+            <span style="font-size:14px">HP管理画面</span>
+          </label>
+        </div>
+      </div>
+      <!-- 実行ボタン -->
+      <button id="btn-sync-execute" class="btn" style="width:100%;background:#7c3aed;color:#fff;border-color:#7c3aed;margin-bottom:14px" onclick="executeSiteSync()">🚀 連携実行</button>
+      <!-- ログ -->
+      <div id="sync-log-area" style="display:none">
+        <div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--muted)">実行ログ</div>
+        <div id="sync-log-content" style="background:#1a1a2e;color:#a5f3fc;border-radius:10px;padding:12px;font-size:12px;font-family:monospace;max-height:200px;overflow-y:auto;white-space:pre-wrap;line-height:1.6"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 予約完了・案内文モーダル -->
+<div id="resv-complete-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9500;align-items:flex-end;justify-content:center">
+  <div style="background:var(--surface);border-radius:16px 16px 0 0;width:100%;max-width:480px;max-height:92vh;display:flex;flex-direction:column">
+    <!-- 固定ヘッダー -->
+    <div style="padding:20px 20px 14px;border-bottom:1px solid var(--border);flex-shrink:0">
+      <div style="font-size:15px;font-weight:700;color:var(--success);margin-bottom:12px">✅ 予約登録完了</div>
+      <div id="resv-complete-info" style="font-size:14px;line-height:1.9;white-space:pre-wrap"></div>
+    </div>
+    <!-- スクロールエリア（案内文） -->
+    <div id="resv-complete-guide-wrap" style="display:none;flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px 20px">
+      <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">🗺 お客様案内文</div>
+      <div id="resv-complete-guide" style="background:#f0f9ff;border-left:4px solid var(--accent2);border-radius:6px;padding:12px;font-size:13px;line-height:1.8;white-space:pre-wrap"></div>
+    </div>
+    <!-- 固定フッター -->
+    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
+      <button class="btn btn-primary" style="flex:1" onclick="_hideModal('resv-complete-modal')">閉じる</button>
+      <button id="resv-complete-copy-btn" class="btn btn-secondary" style="display:none;flex:1" onclick="copyResvGuide()">📋 コピー</button>
+    </div>
+  </div>
+</div>
+
+<!-- 固定バックモーダル -->
+<div id="menu-back-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9500;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:440px;max-height:90vh;display:flex;flex-direction:column">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-size:15px;font-weight:700">固定バック設定</div>
+        <div id="menu-back-name" style="font-size:13px;color:var(--muted);margin-top:2px"></div>
+      </div>
+      <button onclick="closeMenuBackModal()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">×</button>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:16px 20px">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px">空欄のメニューはコースバック率で計算されます</div>
+      <div id="menu-back-list"></div>
+    </div>
+    <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;flex-shrink:0">
+      <button class="btn btn-primary" style="flex:1" onclick="saveMenuBacks()">保存</button>
+      <button class="btn btn-secondary" style="flex:1" onclick="closeMenuBackModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- チェックリスト詳細モーダル -->
+<div id="checklist-detail-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9500;padding:20px">
+  <div style="background:var(--surface);border-radius:var(--radius);width:100%;max-width:480px;padding:24px;max-height:90vh;overflow-y:auto;margin:auto">
+    <div id="checklist-detail-content"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:16px" onclick="_hideModal('checklist-detail-modal')">閉じる</button>
+  </div>
+</div>
+
+<!-- 給料計算確認モーダル -->
+<div id="payroll-preview-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);z-index:9600;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:560px;padding:20px;max-height:92vh;overflow-y:auto;margin:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div style="font-size:16px;font-weight:700">📊 給料計算確認</div>
+      <div id="payroll-preview-title" style="font-size:13px;color:var(--muted)"></div>
+    </div>
+    <div id="payroll-preview-body"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="sendPayrollLineFromPreview()">📨 LINEで送信する</button>
+      <button class="btn btn-secondary" onclick="closePayrollPreviewModal()">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 予約キャンセルモーダル ===== -->
+<div id="cancel-resv-modal" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.55);z-index:9700;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:420px;padding:20px;margin:auto">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">🚫 予約キャンセル</div>
+    <div id="cancel-resv-info" style="font-size:13px;color:var(--muted);margin-bottom:16px"></div>
+    <!-- 理由選択 -->
+    <div style="margin-bottom:12px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">キャンセル理由</div>
+      <input type="radio" name="cancel-reason-radio" id="cancel-reason-customer"  value="customer"  style="display:none">
+      <input type="radio" name="cancel-reason-radio" id="cancel-reason-therapist" value="therapist" style="display:none">
+      <input type="radio" name="cancel-reason-radio" id="cancel-reason-other"     value="other"     style="display:none">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button type="button" id="cancel-reason-btn-customer"
+          onclick="_selectCancelReason('customer')"
+          style="padding:12px;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-size:14px;font-weight:600;cursor:pointer;text-align:left">
+          お客様都合
+        </button>
+        <button type="button" id="cancel-reason-btn-therapist"
+          onclick="_selectCancelReason('therapist')"
+          style="padding:12px;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-size:14px;font-weight:600;cursor:pointer;text-align:left">
+          セラピスト都合
+        </button>
+        <button type="button" id="cancel-reason-btn-other"
+          onclick="_selectCancelReason('other')"
+          style="padding:12px;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-size:14px;font-weight:600;cursor:pointer;text-align:left">
+          その他
+        </button>
+      </div>
+    </div>
+    <!-- 自由記述メモ -->
+    <div class="form-group" style="margin-bottom:16px">
+      <label>詳細メモ（LINE通知に添えられます・任意）</label>
+      <input type="text" id="cancel-resv-memo" placeholder="例：体調不良のため" style="width:100%">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-danger" style="flex:1" onclick="confirmCancelResv()">キャンセルを実行</button>
+      <button class="btn btn-secondary" onclick="_hideModal('cancel-resv-modal')">戻る</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 姫予約変更モーダル（セラピスト用・承認前） ===== -->
+<div id="modal-hime-pending-edit" style="display:none;position:fixed;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.55);z-index:9700;padding:16px">
+  <div style="background:var(--surface);border-radius:var(--radius-lg);width:100%;max-width:420px;padding:20px;margin:auto">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">✏️ 姫予約変更</div>
+    <div id="hpe-info" style="font-size:13px;color:var(--muted);margin-bottom:16px"></div>
+    <div class="form-group">
+      <label>日付</label>
+      <input type="date" id="hpe-date" style="width:100%">
+    </div>
+    <div class="form-group">
+      <label>時刻</label>
+      <select id="hpe-time" style="width:100%"></select>
+    </div>
+    <div class="form-group">
+      <label>コース</label>
+      <select id="hpe-course" style="width:100%" onchange="document.getElementById('hpe-custom-min').style.display=this.value==='custom'?'':'none'">
+        <option value="60">60分</option>
+        <option value="90">90分</option>
+        <option value="120">120分</option>
+        <option value="150">150分</option>
+        <option value="180">180分</option>
+        <option value="custom">カスタム</option>
+      </select>
+      <input type="number" id="hpe-custom-min" placeholder="分数を入力" style="width:100%;margin-top:6px;display:none">
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>割引（円）</label>
+      <input type="number" id="hpe-discount" value="0" min="0" style="width:100%">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="submitHimePendingEdit()">変更を保存</button>
+      <button class="btn btn-secondary" onclick="_hideModal('modal-hime-pending-edit')">戻る</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
