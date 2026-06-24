@@ -13,6 +13,9 @@ import {
 import { _calcPayroll } from './lib/calc';
 import { apiGet, apiGetCached, clearCache } from './lib/api';
 
+// インポート関数を window に公開（onclick属性から呼べるようにする）
+Object.assign(window, { _showModal, _hideModal, _copyToClipboard, _confirm });
+
 // 現在の店舗ID（URLパラメータで上書き・init処理で再代入あり）
 const _storeParam = new URLSearchParams(location.search).get('store') || new URLSearchParams(location.search).get('s') || '';
 let STORE_ID = STORE_CODE_MAP[_storeParam] || _storeParam || DEFAULT_STORE_ID;
