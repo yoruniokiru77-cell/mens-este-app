@@ -9634,19 +9634,39 @@ function lookupCustomerByTel(tel) {
   }, 600);
 }
 
-function _fillCustomerFields(res) {
-  document.getElementById('resv-customer-no').value       = res.customerNo || '';
-  document.getElementById('resv-customer-tel').value      = res.tel        || '';
-  // 名前・電話番号は空の場合のみ補完（入力中の値を上書きしない）
+async function _fillCustomerFields(res) {
   const nameEl = document.getElementById('resv-customer-name');
   const telEl  = document.getElementById('resv-customer-tel-full');
-  if (!nameEl.value) nameEl.value = res.name || '';
-  if (!telEl.value)  telEl.value  = res.tel  || '';
-
   const infoEl = document.getElementById('resv-customer-info');
-  infoEl.textContent    = '✓ 顧客データを取得できました';
-  infoEl.style.color    = 'var(--success)';
-  infoEl.style.display  = '';
+
+  const currentName = nameEl.value.trim();
+  const currentTel  = telEl.value.trim();
+  const newName     = res.name || '';
+  const newTel      = res.tel  || '';
+
+  // 既存の入力と取得データが異なる場合は確認ダイアログ
+  const nameConflict = currentName && newName && currentName !== newName;
+  const telConflict  = currentTel  && newTel  && currentTel  !== newTel;
+
+  if (nameConflict || telConflict) {
+    const lines = ['顧客情報が見つかりました。現在の入力と異なります。', ''];
+    if (nameConflict) lines.push('名前: ' + currentName + ' → ' + newName);
+    if (telConflict)  lines.push('電話: ' + currentTel  + ' → ' + newTel);
+    lines.push('', '上書きしますか？');
+    const ok = await _confirm(lines.join('\n'), '上書き', 'キャンセル');
+    if (!ok) return;
+  }
+
+  // 隠しフィールドは常に更新
+  document.getElementById('resv-customer-no').value  = res.customerNo || '';
+  document.getElementById('resv-customer-tel').value = res.tel        || '';
+  // 表示フィールドは空の場合 or 確認済みの場合に更新
+  if (!currentName || nameConflict) nameEl.value = newName;
+  if (!currentTel  || telConflict)  telEl.value  = newTel;
+
+  infoEl.textContent   = '✓ 顧客データを取得できました';
+  infoEl.style.color   = 'var(--success)';
+  infoEl.style.display = '';
   checkAutoHonshimei(res.customerNo, null);
   setTimeout(() => { infoEl.style.display = 'none'; }, 4000);
 }
