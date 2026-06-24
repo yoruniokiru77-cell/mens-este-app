@@ -175,7 +175,7 @@ function renderCards(data: any[]) {
   cardsEl.className = '';
   cardsEl.innerHTML = Object.keys(byDate).sort().map(dateLabel => {
     const list = byDate[dateLabel];
-    const [y, mo, d] = dateLabel.split('-').map(Number);
+    const [y, mo, d] = dateLabel.replace(/-/g, '/').split('/').map(Number);
     const dt   = new Date(y, mo - 1, d);
     const dow  = days[dt.getDay()];
     const dateDisp = dateLabel.replace(/-/g, '/') + '(' + dow + ')';
