@@ -5672,6 +5672,7 @@ function openPayrollPreviewModal(uid, name, dateLabel) {
 
   const totExt  = details.reduce((s, d) => s + (d.therapistExtPay || 0), 0);
   const totOptOnly = details.reduce((s, d) => s + ((d.therapistOptPay || 0) - (d.therapistExtPay || 0)), 0);
+  const totNom  = details.reduce((s, d) => s + (d.nominationFee || 0), 0);
 
   const rows = details.map(d => {
     const nomLabel  = d.nomination === 'honshimei' ? '本指名' : d.nomination === 'nomination' ? '指名' : 'フリー';
@@ -5689,6 +5690,7 @@ function openPayrollPreviewModal(uid, name, dateLabel) {
         <td style="padding:7px 6px;font-size:13px;text-align:right">¥${d.price.toLocaleString()}${discStr}${nomStr}</td>
         <td style="padding:7px 6px;font-size:13px;text-align:right;color:${backColor};font-weight:${fixedBack ? '600' : '400'}">¥${(d.therapistCoursePay || 0).toLocaleString()}${backLabel}</td>
         <td style="padding:7px 6px;font-size:13px;text-align:right;color:var(--success)">${optOnly > 0 ? '¥' + optOnly.toLocaleString() : '-'}</td>
+        <td style="padding:7px 6px;font-size:13px;text-align:right;color:var(--muted)">${d.nominationFee > 0 ? '¥' + d.nominationFee.toLocaleString() : '-'}</td>
         <td style="padding:7px 6px;font-size:13px;text-align:right;color:var(--success)">${d.therapistExtPay ? '¥' + d.therapistExtPay.toLocaleString() : '-'}</td>
         <td style="padding:7px 6px;font-size:13px;text-align:right;font-weight:600">¥${d.storeDrop.toLocaleString()}</td>
       </tr>`;
@@ -5718,17 +5720,19 @@ function openPayrollPreviewModal(uid, name, dateLabel) {
             <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">合計金額</th>
             <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">コースバック</th>
             <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">OPT給料</th>
+            <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">指名料</th>
             <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">延長給料</th>
             <th style="padding:7px 6px;text-align:right;font-size:11px;color:var(--muted);font-weight:600">店落ち</th>
           </tr>
         </thead>
-        <tbody>${rows || '<tr><td colspan="6" style="padding:16px;text-align:center;color:var(--muted)">明細なし</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="9" style="padding:16px;text-align:center;color:var(--muted)">明細なし</td></tr>'}</tbody>
         <tfoot>
           <tr style="border-top:2px solid var(--border);background:var(--bg)">
             <td colspan="3" style="padding:8px 6px;font-size:12px;font-weight:700;color:var(--muted)">${details.length}件合計</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700">¥${totPrice.toLocaleString()}</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--muted)">¥${totCBack.toLocaleString()}</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--success)">${totOptOnly > 0 ? '¥' + totOptOnly.toLocaleString() : '-'}</td>
+            <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--muted)">${totNom > 0 ? '¥' + totNom.toLocaleString() : '-'}</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700;color:var(--success)">${totExt > 0 ? '¥' + totExt.toLocaleString() : '-'}</td>
             <td style="padding:8px 6px;text-align:right;font-weight:700">¥${totStore.toLocaleString()}</td>
           </tr>
