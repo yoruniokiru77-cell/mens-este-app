@@ -1,72 +1,12 @@
 ﻿// @ts-nocheck
-import * as supabaseJs from '@supabase/supabase-js';
 import { _showModal, _hideModal, _copyToClipboard, _confirm } from './lib/ui';
+import {
+  _sb,
+  DEFAULT_STORE_ID, STORE_CODE_MAP, STORE_ID_TO_CODE,
+  VPS_BASE_URL, VPS_API_KEY, STORE_KEY_MAP, STORE_SITES,
+} from './lib/config';
 
-// ============================================================
-// Supabase設定（★ここを環境ごとに変更してください★）
-// ============================================================
-const SUPABASE_URL  = 'https://rzfprialypdoyklfwpyg.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ6ZnByaWFseXBkb3lrbGZ3cHlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMzQ3NzAsImV4cCI6MjA5MDkxMDc3MH0.qRzCmMetxe3tvSlIJx-HX_SHRG5Evos4D9KOEnarNfE';
-
-// 店舗ID（URLパラメータ ?store=UUID で上書き可能）
-// いわき店: '11111111-0000-0000-0000-000000000001'
-// 水戸店:   '22222222-0000-0000-0000-000000000002'
-// 神栖店:   '33333333-0000-0000-0000-000000000003'
-const DEFAULT_STORE_ID = '11111111-0000-0000-0000-000000000001';
-
-// 店舗コード → store_id 対応表
-// ブランド名・地名・番号のいずれでもアクセス可能（後方互換のためUUID直指定も維持）
-const STORE_CODE_MAP = {
-  // ブランド名（既存）
-  'herroom':   '11111111-0000-0000-0000-000000000001',
-  'remens':    '22222222-0000-0000-0000-000000000002',
-  'premium':   '33333333-0000-0000-0000-000000000003',
-  'neverland': '44444444-0000-0000-0000-000000000004',
-  // 地名エイリアス
-  'iwaki':     '11111111-0000-0000-0000-000000000001',
-  'mito':      '22222222-0000-0000-0000-000000000002',
-  'kamisu':    '33333333-0000-0000-0000-000000000003',
-  // 番号エイリアス（?store=4 / ?s=4 でも可）
-  '1':         '11111111-0000-0000-0000-000000000001',
-  '2':         '22222222-0000-0000-0000-000000000002',
-  '3':         '33333333-0000-0000-0000-000000000003',
-  '4':         '44444444-0000-0000-0000-000000000004'
-};
-// store_id → 代表コード（地名を優先・UUID重複は後勝ちを避けるため明示マップ）
-const STORE_ID_TO_CODE = {
-  '11111111-0000-0000-0000-000000000001': 'iwaki',
-  '22222222-0000-0000-0000-000000000002': 'mito',
-  '33333333-0000-0000-0000-000000000003': 'kamisu',
-  '44444444-0000-0000-0000-000000000004': 'neverland'
-};
-
-// ============================================================
-// シフト自動連携 VPS 設定
-// VPS契約後にIPアドレスとAPIキーを設定する
-// ============================================================
-const VPS_BASE_URL = ''; // 例: 'http://123.456.789.0'  ← VPS IPを入力
-const VPS_API_KEY  = ''; // VPS の .env の API_KEY と同じ値を入力
-
-// store_id → shift-sync-tool の store_key 対応表
-const STORE_KEY_MAP = {
-  '11111111-0000-0000-0000-000000000001': 'herroom',
-  '22222222-0000-0000-0000-000000000002': 're_mens',
-  '33333333-0000-0000-0000-000000000003': 'premium',
-  '44444444-0000-0000-0000-000000000004': 'neverland',
-};
-
-// 店舗ごとの対応サイト
-const STORE_SITES = {
-  'herroom':   { tamashii: true,  ranking: false, homepage: true },
-  're_mens':   { tamashii: true,  ranking: true,  homepage: true },
-  'premium':   { tamashii: true,  ranking: true,  homepage: false },
-  'neverland': { tamashii: true,  ranking: true,  homepage: false },
-};
-
-// Supabaseクライアント初期化
-const _sb = supabaseJs.createClient(SUPABASE_URL, SUPABASE_ANON);
-
-// 現在の店舗ID（URLパラメータで上書き）
+// 現在の店舗ID（URLパラメータで上書き・init処理で再代入あり）
 const _storeParam = new URLSearchParams(location.search).get('store') || new URLSearchParams(location.search).get('s') || '';
 let STORE_ID = STORE_CODE_MAP[_storeParam] || _storeParam || DEFAULT_STORE_ID;
 
