@@ -15205,6 +15205,10 @@ Object.assign(window, {
   openSiteSyncModal, executeSiteSync,
   // ブロードキャスト
   sendBroadcastMessage, broadcastSelectAll,
+  // 顧客検索（oninput）
+  lookupCustomerByName, lookupCustomerByTel, himeLookupByName,
+  calcCustomPrice, calcSalesCustomPrice, calcOptionsTotal,
+  _menuBackDirty,
   // その他
   calcCoursePrice, uncheckOptNone, selectOptType,
   toggleSalesDetail, toggleScoutRow,
