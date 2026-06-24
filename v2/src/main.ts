@@ -69,6 +69,7 @@ function renderShell() {
 
       <div id="nav">
         <div id="store-name-badge" style="display:flex;align-items:center;padding:0 12px;font-size:11px;font-weight:700;color:#fff;background:var(--accent);white-space:nowrap;flex-shrink:0;height:var(--nav-h);border-right:1px solid rgba(255,255,255,0.15)">読込中...</div>
+        <div id="line-usage-badge" style="display:none;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;margin:auto 4px;flex-shrink:0"></div>
         <button id="tab-payroll" onclick="window._app.showPage('payroll')">💰 給料</button>
         <button id="tab-sales-report" onclick="window._app.showPage('sales-report')">📊 売上確認</button>
         <button id="tab-reservation" onclick="window._app.showPage('reservation')">📅 予約</button>
@@ -76,8 +77,11 @@ function renderShell() {
         <button id="tab-therapist-profile" onclick="window._app.showPage('therapist-profile')" style="display:none">👩 セラピスト情報</button>
         <button id="tab-customer-master" onclick="window._app.showPage('customer-master')">👥 顧客マスタ</button>
         <button id="tab-master-mgmt" onclick="window._app.showPage('master-mgmt')">⚙ マスタ管理</button>
+        <button id="tab-interview-mgmt" onclick="window._app.showPage('interview-mgmt')" style="display:none">🤝 面接管理</button>
         <button id="tab-line-mgmt" onclick="window._app.showPage('line-mgmt')" style="display:none">💬 LINE管理</button>
+        <button id="tab-broadcast" onclick="window._app.showPage('broadcast')" style="display:none">📢 アナウンス</button>
         <button id="tab-scout" onclick="window._app.showPage('scout')" style="display:none">🔍 スカウト</button>
+        <button onclick="location.href='supply.html'">📦 備品</button>
         <button id="tab-shift-submit" style="display:none">📆 シフト提出</button>
         <button id="tab-my-reservations" style="display:none">📋 予約確認</button>
         <button id="tab-sales-input" style="display:none">📝 売上入力</button>
@@ -99,6 +103,8 @@ function renderShell() {
       <div id="page-manual-view" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">マニュアル（実装中）</div></div>
       <div id="page-checkout" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">退勤（実装中）</div></div>
       <div id="page-therapist-profile" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">セラピスト情報（実装中）</div></div>
+      <div id="page-interview-mgmt" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">面接管理（実装中）</div></div>
+      <div id="page-broadcast" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">アナウンス（実装中）</div></div>
     </div>
   `;
 }
@@ -122,15 +128,32 @@ async function startAdminMode(storeId: string) {
   const bNav = document.getElementById('bottom-nav')!;
   bNav.classList.remove('show');
 
-  // LINE管理・スカウトタブの表示制御
-  const KAMISU = '33333333-0000-0000-0000-000000000003';
-  if (storeId === KAMISU) {
-    document.getElementById('tab-scout')!.style.display = '';
-  }
-  const lineTab = document.getElementById('tab-line-mgmt')!;
-  lineTab.style.display = '';
-  const profileTab = document.getElementById('tab-therapist-profile')!;
-  profileTab.style.display = '';
+  // 管理者タブ表示制御（現行と同じロジック）
+  const show = (id: string) => { const el = document.getElementById(id); if (el) el.style.display = ''; };
+  const KAMISU    = '33333333-0000-0000-0000-000000000003';
+
+  show('tab-line-mgmt');
+  show('tab-therapist-profile');
+  show('tab-interview-mgmt');
+  show('tab-broadcast');
+  if (storeId === KAMISU) show('tab-scout');
+
+  // LINE使用量バッジ
+  try {
+    const { data: tokenRow } = await sb.from('tokens')
+      .select('line_message_count, line_message_limit')
+      .eq('store_id', storeId).maybeSingle();
+    if (tokenRow?.line_message_limit) {
+      const badge = document.getElementById('line-usage-badge')!;
+      const count = tokenRow.line_message_count || 0;
+      const limit = tokenRow.line_message_limit;
+      const pct   = count / limit;
+      badge.textContent = `${count.toLocaleString()}/${limit.toLocaleString()}通`;
+      badge.style.display = '';
+      badge.style.background = pct >= 0.9 ? '#fef2f2' : pct >= 0.7 ? '#fef3c7' : '#f0fdf4';
+      badge.style.color      = pct >= 0.9 ? '#dc2626' : pct >= 0.7 ? '#d97706' : '#16a34a';
+    }
+  } catch { /* ignore */ }
 
   showPage('payroll');
 }
