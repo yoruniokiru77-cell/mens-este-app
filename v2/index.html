@@ -1,13 +1,1839 @@
-<!doctype html>
+﻿<!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <title>サロン管理</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="/manifest.json">
+<title>サロン管理システム</title>
+<link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+</head>
+<body>
+
+<!-- 初期ローディング（JS読み込み前に表示） -->
+<div id="init-loading" style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:16px;color:#6b7280;font-size:14px;padding:20px">
+  <div style="width:32px;height:32px;border:3px solid #e5e7eb;border-top-color:#e94560;border-radius:50%;animation:spin .7s linear infinite"></div>
+  読み込み中...
+  <div id="debug-url" style="font-size:11px;color:#aaa;word-break:break-all;text-align:center;max-width:320px"></div>
+</div>
+
+<!-- オーバーレイ -->
+<div id="overlay"><div class="spinner"></div><span>送信中...</span></div>
+
+<!-- ログイン画面（トークン方式） -->
+<div id="login-page" style="display:none">
+  <div style="max-width:360px;margin:60px auto;padding:16px">
+    <div class="card" style="padding:32px;text-align:center">
+      <div style="width:64px;height:64px;background:#06c755;border-radius:16px;margin:0 auto 20px;display:flex;align-items:center;justify-content:center">
+        <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+          <path d="M30 15.5C30 10.2 24.6 6 18 6S6 10.2 6 15.5c0 4.7 4.2 8.7 9.8 9.4.4.1.9.3 1 .6.1.3.1.7 0 1l-.2 1c0 .3-.2 1.2 1.1.7C19.1 27.6 27 22.5 27 15.5H30z" fill="white"/>
+        </svg>
+      </div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:12px">セラピスト用ログイン</div>
+      <div style="color:var(--muted);font-size:13px;line-height:1.8;margin-bottom:24px">
+        LINEで <strong style="color:var(--text)">「ログイン」</strong> と送信すると<br>
+        ログイン用URLが届きます
+      </div>
+      <div id="login-status" style="font-size:13px;color:var(--accent);min-height:20px;white-space:pre-wrap;line-height:1.6"></div>
+      <div id="login-loading" style="display:none;align-items:center;justify-content:center;gap:10px;color:var(--muted);font-size:13px;margin-top:12px">
+        <div class="spinner" style="width:20px;height:20px;border-width:2px"></div>
+        確認中...
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- メイン -->
+<div id="main-app" style="display:none">
+  <!-- ボトムナビ（セラピストモード時のみ表示） -->
+  <div id="bottom-nav">
+    <button onclick="showPage('my-reservations')" id="bnav-my-reservations">
+      <span class="icon">📋</span>予約確認
+    </button>
+    <button onclick="showPage('shift-submit')" id="bnav-shift-submit">
+      <span class="icon">📆</span>シフト
+    </button>
+    <button onclick="showPage('customer-list')" id="bnav-customer-list">
+      <span class="icon">👥</span>顧客リスト
+    </button>
+    <button onclick="showPage('sales-input')" id="bnav-sales-input" style="display:none">
+      <span class="icon">📝</span>売上入力
+    </button>
+    <button onclick="showPage('manual-view')" id="bnav-manual-view">
+      <span class="icon">📖</span>マニュアル
+    </button>
+    <button onclick="showPage('checkout')" id="bnav-checkout">
+      <span class="icon">🏁</span>退勤
+    </button>
+  </div>
+<div id="nav">
+    <div id="store-name-badge" style="
+      display:flex;
+      align-items:center;
+      padding:0 12px;
+      font-size:11px;
+      font-weight:700;
+      color:#fff;
+      background:var(--accent);
+      white-space:nowrap;
+      flex-shrink:0;
+      height:var(--nav-h);
+      border-right:1px solid rgba(255,255,255,0.15);
+    ">読込中...</div>
+    <div id="line-usage-badge" style="display:none;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;margin:auto 4px;flex-shrink:0"></div>
+    <button onclick="showPage('payroll')" id="tab-payroll">💰 給料</button>
+    <button onclick="showPage('sales-report')" id="tab-sales-report">📊 売上確認</button>
+    <button onclick="showPage('reservation')" id="tab-reservation">📅 予約</button>
+
+
+    <button onclick="showPage('shift-calendar')" id="tab-shift-calendar">📅 シフト表</button>
+    <button onclick="showPage('therapist-profile')" id="tab-therapist-profile" style="display:none">👩 セラピスト情報</button>
+    <button onclick="showPage('customer-master')" id="tab-customer-master">👥 顧客マスタ</button>
+    <button onclick="showPage('master-mgmt')" id="tab-master-mgmt">⚙ マスタ管理</button>
+    <button onclick="showPage('interview-mgmt')" id="tab-interview-mgmt" style="display:none">🤝 面接管理</button>
+    <button onclick="showPage('line-mgmt')" id="tab-line-mgmt" style="display:none">💬 LINE管理</button>
+    <button onclick="showPage('broadcast')" id="tab-broadcast" style="display:none">📢 アナウンス</button>
+    <button onclick="showPage('scout')" id="tab-scout" style="display:none">🔍 スカウト</button>
+    <button onclick="location.href='supply.html'" id="tab-supply">📦 備品</button>
+    <button onclick="showPage('shift-submit')" id="tab-shift-submit" style="display:none">📆 シフト提出</button>
+    <button onclick="showPage('my-reservations')" id="tab-my-reservations" style="display:none">📋 予約確認</button>
+    <button onclick="showPage('sales-input')" id="tab-sales-input" style="display:none">📝 売上入力</button>
+</div>
+
+  <!-- ===== 給料計算ページ ===== -->
+  <div id="page-payroll" class="page">
+    <!-- サブタブ -->
+    <div style="display:flex;gap:0;margin-bottom:12px;border-bottom:2px solid var(--border);align-items:flex-end">
+      <button id="ptab-payroll" onclick="switchPayrollTab('payroll')"
+        style="padding:8px 18px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-2px">💰 給料計算</button>
+      <button id="ptab-collection" onclick="switchPayrollTab('collection')"
+        style="padding:8px 18px;font-size:13px;font-weight:500;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px">💵 回収管理</button>
+      <div style="flex:1"></div>
+      <button onclick="openCashManagement()" class="btn btn-secondary btn-sm" style="margin-bottom:4px;font-size:12px">🏦 金庫</button>
+    </div>
+
+    <!-- 給料計算エリア -->
+    <div id="payroll-area">
+    <div class="date-nav">
+      <button onclick="changePayrollDay(-1)">◀</button>
+      <span id="payroll-day-label"></span>
+      <button onclick="changePayrollDay(1)">▶</button>
+      <button class="btn btn-secondary btn-sm" onclick="goToday()">今日</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadPayroll()">更新</button>
+    </div>
+    <!-- LINE送信オプション -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:10px 12px;background:var(--bg);border:1.5px solid var(--border);border-radius:10px">
+      <span style="font-size:13px;font-weight:600;color:var(--muted)">LINE送信オプション</span>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+        <span class="toggle-switch" style="width:36px;height:20px">
+          <input type="checkbox" id="payroll-detail-toggle">
+          <span class="toggle-slider"></span>
+        </span>
+        明細を含める
+      </label>
+      <span id="payroll-line-flags" style="font-size:12px;color:var(--muted);margin-left:auto">読み込み中...</span>
+    </div>
+    <div id="payroll-cards" class="grid2"></div>
+    <div id="payroll-details"></div>
+    </div><!-- /payroll-area -->
+
+    <!-- 回収管理エリア -->
+    <div id="collection-area" style="display:none">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <button class="btn btn-secondary btn-sm" onclick="loadCollection()">更新</button>
+        <span id="collection-summary" style="font-size:13px;color:var(--muted)"></span>
+      </div>
+      <div id="collection-content"></div>
+    </div>
+  </div>
+
+  <!-- ===== 予約登録ページ ===== -->
+  <div id="page-reservation" class="page">
+    <div class="date-nav">
+      <button onclick="changeResvDate(-1)">◀</button>
+      <span id="resv-date-label"></span>
+      <button onclick="changeResvDate(1)">▶</button>
+      <button class="btn btn-secondary btn-sm" onclick="loadReservations()">更新</button>
+    </div>
+
+    <!-- 承認待ち姫予約バナー（日付をまたいだ分） -->
+    <div id="hime-pending-banner" style="margin-bottom:8px"></div>
+
+    <div id="resv-list" class="card" style="margin-bottom:16px">
+      <div id="resv-table-wrap">読み込み中...</div>
+    </div>
+
+    <div class="card">
+      <div class="sec-title" style="margin-bottom:14px">予約登録</div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>日時</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input type="date" id="resv-date-part" style="flex:1.2" onchange="_syncResvDatetime()">
+            <select id="resv-time-sel" style="flex:1" onchange="_syncResvDatetime()"></select>
+          </div>
+          <input type="hidden" id="resv-date">
+        </div>
+        <div class="form-group">
+          <label>セラピスト</label>
+          <select id="resv-therapist" onchange="checkInterval();populateNominationSelects(this.value)"></select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>コース（分）</label>
+          <select id="resv-course" onchange="calcCoursePrice()">
+            <option value="60">60分</option>
+            <option value="90">90分</option>
+            <option value="120">120分</option>
+            <option value="150">150分</option>
+            <option value="180">180分</option>
+            <option value="custom">その他（手入力）</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label id="resv-course-input-label">料金</label>
+          <input type="number" id="resv-custom-minutes" placeholder="時間（分）例: 70" style="display:none;margin-bottom:6px" oninput="calcCustomPrice()">
+          <input type="number" id="resv-custom-price" placeholder="料金（円）例: 17000" style="display:none">
+          <div id="course-price-display"></div>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>指名種別</label>
+          <select id="resv-nomination" onchange="checkAutoHonshimei(null,null)">
+            <option value="free">フリー ¥0</option>
+            <option value="nomination">指名 ¥1,000</option>
+            <option value="honshimei">本指名 ¥1,000</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>割引（円）</label>
+          <input type="number" id="resv-discount" value="0" min="0">
+        </div>
+      </div>
+      <!-- 隠しフィールド（内部処理用） -->
+      <input type="hidden" id="resv-customer-no" value="">
+      <input type="hidden" id="resv-customer-tel" value="">
+      <div class="grid2">
+        <div class="form-group">
+          <label>お客様名 <span style="color:var(--accent);font-size:11px">※必須</span></label>
+          <input type="text" id="resv-customer-name" placeholder="例: サカバ"
+            oninput="lookupCustomerByName(this.value)">
+        </div>
+        <div class="form-group">
+          <label>電話番号</label>
+          <input type="text" id="resv-customer-tel-full" placeholder="例: 09012341234"
+            oninput="this.value=this.value.replace(/[^0-9]/g,'');lookupCustomerByTel(this.value)">
+        </div>
+      </div>
+      <div id="resv-customer-info" style="font-size:13px;color:var(--success);margin-bottom:8px;display:none"></div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>メモ（任意）</label>
+        <textarea id="resv-memo" rows="2" placeholder="例: 首・肩を重点的に、アロマ希望" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit;resize:vertical"></textarea>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="submitReservation()">保存</button>
+        <button class="btn btn-line" onclick="saveAndSendLine()">保存 + LINE送信</button>
+        <button class="btn btn-secondary" onclick="resetResvForm()">リセット</button>
+      </div>
+      <div id="interval-warning" style="color:var(--warning);margin-top:10px;display:none">⚠ インターバル重複の可能性があります</div>
+    </div>
+  </div>
+
+  <!-- ===== 売上確認ページ ===== -->
+  <div id="page-sales-report" class="page">
+    <div class="card">
+      <div class="sec-header">
+        <div class="sec-title">売上確認</div>
+        <button class="btn btn-secondary btn-sm" onclick="loadSalesReport()">更新</button>
+      </div>
+      <div class="filter-bar" style="margin-bottom:14px">
+        <div class="form-group" style="margin-bottom:0;flex:1">
+          <label>開始日</label>
+          <input type="date" id="report-start">
+        </div>
+        <div class="form-group" style="margin-bottom:0;flex:1">
+          <label>終了日</label>
+          <input type="date" id="report-end">
+        </div>
+        <div class="form-group" style="margin-bottom:0;flex:1">
+          <label>セラピスト</label>
+          <select id="report-therapist">
+            <option value="">全員</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="loadSalesReport()">表示</button>
+      </div>
+      <!-- 合計サマリー -->
+      <div id="report-summary" style="margin-bottom:14px"></div>
+      <!-- 明細テーブル -->
+      <div id="report-table">日付を選択して「表示」を押してください</div>
+    </div>
+
+    <!-- 店舗経費セクション（タブ） -->
+    <div id="store-expense-section" class="card">
+      <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:14px">
+        <button id="se-tab-adhoc" onclick="switchSeTab('adhoc')"
+          style="flex:1;padding:9px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--accent);margin-bottom:-2px;color:var(--accent);cursor:pointer">
+          📝 都度経費
+        </button>
+        <button id="se-tab-fixed" onclick="switchSeTab('fixed')"
+          style="flex:1;padding:9px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer">
+          💴 固定費
+        </button>
+      </div>
+
+      <!-- 都度経費タブ -->
+      <div id="se-panel-adhoc">
+        <div style="background:var(--bg2);border-radius:8px;padding:12px;margin-bottom:14px">
+          <div class="form-group" style="margin-bottom:8px">
+            <label>マスタから選択</label>
+            <select id="se-template-select" class="ts" onchange="onSeTemplateChange(this.value)">
+              <option value="">-- 直接入力 --</option>
+            </select>
+          </div>
+          <div id="se-template-pd-info" style="display:none;font-size:11px;color:var(--accent);background:var(--bg);border-radius:6px;padding:6px 10px;margin-bottom:8px"></div>
+          <div class="grid2" style="gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>日付</label>
+              <input type="date" id="se-date">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>カテゴリ</label>
+              <select id="se-category-preset" onchange="onSePresetChange(this.value)" class="ts">
+                <option value="消耗品">消耗品</option>
+                <option value="広告費">広告費</option>
+                <option value="交通費">交通費</option>
+                <option value="その他">その他</option>
+                <option value="__custom">カスタム入力...</option>
+              </select>
+            </div>
+          </div>
+          <div id="se-custom-wrap" style="display:none;margin-bottom:8px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>カテゴリ名</label>
+              <input type="text" id="se-category-custom" placeholder="カテゴリ名を入力" class="ti">
+            </div>
+          </div>
+          <div class="grid2" style="gap:8px;margin-bottom:8px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>金額（円）</label>
+              <input type="number" id="se-amount" min="0" placeholder="0" class="ti">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>メモ</label>
+              <input type="text" id="se-memo" placeholder="任意" class="ti">
+            </div>
+          </div>
+          <button class="btn btn-primary" style="width:100%" onclick="saveStoreExpenseRow()">＋ 追加</button>
+        </div>
+        <div id="store-expense-list"></div>
+      </div>
+
+      <!-- 固定費タブ（店舗別） -->
+      <div id="se-panel-fixed" style="display:none">
+        <!-- サブタブ -->
+        <div style="display:flex;gap:6px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:0">
+          <button id="se-fixed-sub-store" onclick="switchSeFixedSub('store')"
+            style="padding:7px 14px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--accent);margin-bottom:-1px;color:var(--accent);cursor:pointer">
+            この店舗
+          </button>
+          <button id="se-fixed-sub-all" onclick="switchSeFixedSub('all')"
+            style="padding:7px 14px;font-size:12px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;color:var(--muted);cursor:pointer">
+            🏢 全店舗集計
+          </button>
+        </div>
+
+        <!-- この店舗パネル -->
+        <div id="se-fixed-panel-store">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <div class="form-group" style="margin-bottom:0;flex:1">
+              <label>対象月</label>
+              <input type="month" id="se-fixed-month" onchange="loadFixedCostPayments()">
+            </div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:20px" onclick="loadFixedCostPayments()">更新</button>
+          </div>
+          <div id="fixed-cost-payment-list">マスタ管理 → 固定費 で費用を登録してください</div>
+        </div>
+
+        <!-- 全店舗集計パネル -->
+        <div id="se-fixed-panel-all" style="display:none">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+            <div class="form-group" style="margin-bottom:0;flex:1">
+              <label>対象月</label>
+              <input type="month" id="se-fixed-all-month" onchange="loadAllStoreFixedSummary()">
+            </div>
+            <button class="btn btn-secondary btn-sm" style="margin-top:20px" onclick="loadAllStoreFixedSummary()">更新</button>
+          </div>
+          <div id="all-store-fixed-summary">月を選択してください</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- ===== シフト提出ページ ===== -->
+  <div id="page-shift-submit" class="page">
+    <!-- タブ切り替え -->
+    <div style="display:flex;border-bottom:2px solid var(--border);margin-bottom:14px">
+      <button id="shift-tab-submit" onclick="switchShiftTab('submit')"
+        style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid var(--accent);margin-bottom:-2px;color:var(--accent);cursor:pointer">
+        📆 シフト提出
+      </button>
+      <button id="shift-tab-dayoff" onclick="switchShiftTab('dayoff')"
+        style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer">
+        🛌 お休み申請
+      </button>
+      <button id="shift-tab-availability" onclick="switchShiftTab('availability')"
+        style="flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-2px;color:var(--muted);cursor:pointer">
+        🚪 ルーム空き状況
+      </button>
+    </div>
+
+    <!-- シフト提出タブ -->
+    <div id="shift-tab-content-submit">
+    <div class="card" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="sec-title">シフト提出</div>
+        <div style="font-size:13px;color:var(--muted)">担当: <strong id="shift-my-name">-</strong></div>
+      </div>
+      <!-- 入力行 -->
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:130px">
+          <label>出勤希望日</label>
+          <input type="date" id="shift-date">
+        </div>
+        <div class="form-group" style="margin-bottom:0;width:110px">
+          <label>開始</label>
+          <select id="shift-start"></select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;width:110px">
+          <label>終了</label>
+          <select id="shift-end"></select>
+        </div>
+        <div class="form-group" style="margin-bottom:0;flex:1;min-width:120px">
+          <label>メモ（任意）</label>
+          <input type="text" id="shift-memo" placeholder="例：午前のみ">
+        </div>
+        <button class="btn btn-secondary" style="white-space:nowrap" onclick="addShiftItem()">＋ 追加</button>
+      </div>
+      <!-- 追加リスト -->
+      <div id="shift-pending-list" style="margin-bottom:12px"></div>
+      <!-- 提出ボタン -->
+      <button class="btn btn-primary" onclick="submitAllShifts()" id="shift-submit-btn" disabled style="opacity:.4">まとめて提出</button>
+      <span id="shift-pending-count" style="margin-left:10px;font-size:13px;color:var(--muted)"></span>
+    </div>
+    <!-- 承認済みシフト -->
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-title" style="margin-bottom:12px">✅ 承認済みシフト（今日以降）</div>
+      <div id="shift-approved-list">読み込み中...</div>
+    </div>
+    <!-- 提出済みシフト（未来のみ） -->
+    <div class="card">
+      <div class="sec-title" style="margin-bottom:12px">📋 提出済みシフト（今日以降）</div>
+      <div id="shift-submit-list">読み込み中...</div>
+    </div>
+    </div><!-- /shift-tab-content-submit -->
+
+    <!-- お休み申請タブ -->
+    <div id="shift-tab-content-dayoff" style="display:none">
+      <div class="card" style="margin-bottom:14px">
+        <div class="sec-title" style="margin-bottom:14px">🛌 お休み申請</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+          <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
+            <label>お休み希望日</label>
+            <input type="date" id="dayoff-date">
+          </div>
+          <div class="form-group" style="margin-bottom:0;flex:1;min-width:140px">
+            <label>理由（任意）</label>
+            <input type="text" id="dayoff-reason" placeholder="例：体調不良">
+          </div>
+          <button class="btn btn-primary" style="white-space:nowrap" onclick="submitDayoffRequest()">申請する</button>
+        </div>
+        <p style="font-size:12px;color:var(--muted);margin:0">管理者が承認するとシフトに反映されます。</p>
+      </div>
+      <!-- 申請済み一覧 -->
+      <div class="card">
+        <div class="sec-title" style="margin-bottom:12px">📋 お休み申請一覧</div>
+        <div id="dayoff-request-list">読み込み中...</div>
+      </div>
+    </div><!-- /shift-tab-content-dayoff -->
+
+    <!-- ルーム空き状況タブ -->
+    <div id="shift-tab-content-availability" style="display:none">
+      <div class="card" style="margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div class="sec-title">🚪 ルーム空き状況</div>
+          <button class="btn btn-secondary btn-sm" onclick="loadRoomAvailability()">更新</button>
+        </div>
+        <!-- 日付選択 -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px" id="room-avail-date-btns"></div>
+        <!-- 凡例 -->
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:12px;color:var(--muted)">
+          <div style="display:flex;align-items:center;gap:4px"><span style="font-size:16px">◎</span> 3部屋以上空き</div>
+          <div style="display:flex;align-items:center;gap:4px"><span style="font-size:16px">○</span> 2部屋空き</div>
+          <div style="display:flex;align-items:center;gap:4px"><span style="font-size:16px">△</span> 1部屋空き</div>
+          <div style="display:flex;align-items:center;gap:4px"><span style="font-size:16px">✕</span> 空きなし</div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="width:20px;height:20px;border-radius:4px;border:1.5px dashed var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted)">2</div>
+            申請中（人数）
+          </div>
+        </div>
+        <!-- グリッド -->
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+          <div id="room-avail-grid">日付を選択してください</div>
+        </div>
+      </div>
+    </div><!-- /shift-tab-content-availability -->
+
+  </div>
+
+  <!-- ===== シフトカレンダーページ ===== -->
+  <div id="page-shift-calendar" class="page">
+    <!-- お休み申請承認パネル -->
+    <div id="dayoff-pending-panel" style="display:none;margin-bottom:12px"></div>
+    <!-- 未提出者パネル -->
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div>
+          <div class="sec-title" style="margin-bottom:2px;font-size:14px">翌週 未提出者</div>
+          <div id="cal-shift-week-label" style="font-size:12px;color:var(--muted)"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="loadCalUnsubmitted()">更新</button>
+          <button class="btn btn-line btn-sm" onclick="sendReminderAll()">📩 全員に送信</button>
+        </div>
+      </div>
+      <div id="cal-unsubmitted-list">読み込み中...</div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <!-- 週ナビ -->
+      <div id="cal-week-nav" style="display:flex;align-items:center;gap:8px">
+        <button onclick="changeCalendarWeek(-1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">◀</button>
+        <span id="calendar-week-label" style="font-size:15px;font-weight:700;min-width:180px;text-align:center"></span>
+        <button onclick="changeCalendarWeek(1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">▶</button>
+      </div>
+      <!-- 月ナビ（日付順・月表示時のみ） -->
+      <div id="cal-month-nav" style="display:none;align-items:center;gap:8px">
+        <button onclick="changeCalendarMonth(-1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">◀</button>
+        <span id="calendar-month-label" style="font-size:15px;font-weight:700;min-width:120px;text-align:center"></span>
+        <button onclick="changeCalendarMonth(1)" style="background:var(--border);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:16px">▶</button>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" onclick="loadShiftCalendar(true)">更新</button>
+        <button id="btn-site-sync" class="btn btn-sm" style="display:none;background:#7c3aed;color:#fff;border-color:#7c3aed" onclick="openSiteSyncModal()">🌐 サイト連携</button>
+      </div>
+    </div>
+    <!-- 来週シフト締め切りボタン・まとめて通知・バナー（管理者のみ） -->
+    <div id="shift-deadline-banner" style="display:none;background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:13px;font-weight:700;color:#b91c1c;display:none;align-items:center;justify-content:space-between;gap:8px">
+      <span id="shift-deadline-banner-text"></span>
+      <button onclick="clearShiftDeadline()" style="background:#b91c1c;color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap;font-weight:600">解除</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button class="btn btn-sm" id="btn-notify-all-shifts" style="display:none;flex:1;background:#06c755;color:#fff;border-color:#06c755" onclick="notifyAllApprovedShifts()">📨 まとめて通知</button>
+      <div id="shift-deadline-btn-wrap" style="display:none;flex:1">
+        <button class="btn btn-sm" id="btn-shift-deadline" style="width:100%;background:#dc2626;color:#fff;border-color:#dc2626" onclick="toggleShiftDeadline()">🔒 来週シフト締め切り</button>
+      </div>
+    </div>
+    <!-- 表示切替 -->
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <button id="cal-view-date" class="btn btn-secondary btn-sm" style="flex:1;font-size:12px" onclick="setCalView('date')">📅 日付順</button>
+      <button id="cal-view-therapist" class="btn btn-secondary btn-sm" style="flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)" onclick="setCalView('therapist')">👤 セラピスト縦軸</button>
+    </div>
+    <!-- 週/月切替（常時表示） -->
+    <div id="cal-date-range-toggle" style="display:flex;gap:6px;margin-bottom:10px">
+      <button id="cal-range-week" class="btn btn-sm" onclick="setDateRangeMode('week')"
+        style="flex:1;font-size:12px;background:var(--primary);color:#fff;border-color:var(--primary)">週</button>
+      <button id="cal-range-month" class="btn btn-secondary btn-sm" onclick="setDateRangeMode('month')"
+        style="flex:1;font-size:12px">月</button>
+    </div>
+    <div id="shift-calendar-content">読み込み中...</div>
+
+    <!-- 勤怠サマリ -->
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="sec-title" style="font-size:14px">📊 勤怠サマリ（当月）</div>
+        <button class="btn btn-secondary btn-sm" onclick="loadAttendanceSummary()">更新</button>
+      </div>
+      <div id="attendance-summary">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- ===== セラピスト情報ページ ===== -->
+  <div id="page-therapist-profile" class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="sec-title">👩 セラピスト情報</div>
+      <button class="btn btn-secondary btn-sm" onclick="initTherapistProfile()">更新</button>
+    </div>
+    <div id="therapist-profile-list">
+      <div style="text-align:center;padding:32px;color:var(--muted)">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- セラピスト情報編集モーダル -->
+  <div id="therapist-profile-modal" class="modal-overlay" onclick="if(event.target===this)_hideModal('therapist-profile-modal')">
+    <div class="modal-box" style="max-width:420px;background:var(--surface);border-radius:16px;padding:20px;margin:auto">
+      <div class="sec-title" style="margin-bottom:16px">👩 <span id="tp-modal-name"></span> の情報編集</div>
+      <input type="hidden" id="tp-modal-id">
+      <div class="form-group">
+        <label>年齢</label>
+        <input type="number" id="tp-modal-age" placeholder="例: 24" min="18" max="60" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)">
+      </div>
+      <div class="form-group">
+        <label>カップ数</label>
+        <div style="display:flex;flex-wrap:wrap;gap:6px" id="tp-cup-btns">
+          <input type="hidden" id="tp-modal-cup">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>本名</label>
+        <input type="text" id="tp-modal-real-name" placeholder="本名（非公開）" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text)">
+      </div>
+      <div class="form-group">
+        <label>備考</label>
+        <textarea id="tp-modal-notes" rows="10" placeholder="その他メモ" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface);color:var(--text);resize:vertical"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-secondary" style="flex:1" onclick="_hideModal('therapist-profile-modal')">キャンセル</button>
+        <button class="btn btn-primary" style="flex:1" onclick="saveTherapistProfile()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 売上入力ページ（セラピスト用） ===== -->
+  <!-- ===== セラピスト用予約確認ページ ===== -->
+  <div id="page-my-reservations" class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="sec-title">予約確認 — <span id="my-resv-therapist-name"></span></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm" style="background:linear-gradient(135deg,#f9a8d4,#ec4899);color:#fff;font-weight:700" onclick="openHimeModal()">🌸 姫予約</button>
+        <button class="btn btn-secondary btn-sm" onclick="loadMyReservations()">更新</button>
+      </div>
+    </div>
+    <div id="my-reservations-list">読み込み中...</div>
+  </div>
+
+  <!-- ===== マニュアル閲覧ページ（セラピスト用） ===== -->
+  <div id="page-manual-view" class="page">
+    <div class="sec-title" style="margin-bottom:16px">📖 マニュアル</div>
+    <div id="manual-view-cats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+    <div id="manual-view-list">
+      <div style="text-align:center;padding:32px;color:var(--muted)">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- ===== 退勤チェックページ（セラピスト用） ===== -->
+  <div id="page-checkout" class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="sec-title">🏁 退勤チェック</div>
+      <button class="btn btn-secondary btn-sm" onclick="loadCheckoutPage()">更新</button>
+    </div>
+    <div id="checkout-content">
+      <div style="text-align:center;padding:32px;color:var(--muted)">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- ===== 顧客リストページ ===== -->
+  <div id="page-customer-list" class="page">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <div class="sec-title">👥 顧客リスト</div>
+      <button class="btn btn-secondary btn-sm" onclick="loadCustomerList()">更新</button>
+    </div>
+    <div id="customer-list-content">
+      <div style="text-align:center;padding:32px;color:var(--muted)">読み込み中...</div>
+    </div>
+  </div>
+
+  <div id="page-sales-input" class="page">
+    <div id="sales-login-notice" class="card" style="display:none">
+      <p style="color:var(--muted)">このページはセラピストがLINEログイン後に使用します。</p>
+    </div>
+    <div id="sales-form-wrap">
+      <!-- 予約からの引き継ぎバナー -->
+      <div id="sales-prefilled-banner" style="display:none;background:var(--color-background-info);border-left:4px solid var(--color-border-info);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--color-text-info)">
+        予約情報を引き継ぎました
+        <button onclick="clearSalesPrefill()" style="float:right;background:none;border:none;cursor:pointer;color:var(--color-text-info);font-size:16px">✕</button>
+      </div>
+
+      <div class="card" style="margin-bottom:14px">
+        <div class="sec-title" style="margin-bottom:14px">売上入力 — <span id="sales-therapist-name"></span></div>
+        <div class="grid2">
+          <div class="form-group">
+            <label>日時</label>
+            <input type="datetime-local" id="sales-date">
+          </div>
+          <div class="form-group">
+            <label>コース（分）</label>
+            <select id="sales-course" onchange="calcSalesCoursePrice()">
+              <option value="60">60分</option>
+              <option value="90">90分</option>
+              <option value="120">120分</option>
+              <option value="150">150分</option>
+              <option value="180">180分</option>
+              <option value="custom">その他</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="form-group">
+            <label>コース時間（その他の場合）</label>
+            <input type="number" id="sales-custom-minutes" placeholder="例: 210" style="display:none" oninput="calcSalesCustomPrice()">
+            <div id="sales-price-display" style="font-size:18px;font-weight:700;color:var(--accent);margin-top:4px"></div>
+          </div>
+          <div class="form-group">
+            <label>指名種別</label>
+            <select id="sales-nomination" onchange="calcSalesTotal()">
+              <option value="free">フリー ¥0</option>
+              <option value="nomination">指名 ¥1,000</option>
+              <option value="honshimei">本指名 ¥1,000</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="form-group">
+            <label>割引（円）</label>
+            <input type="number" id="sales-discount" value="0" min="0" oninput="calcSalesTotal()">
+          </div>
+          <!-- お客様番号は内部管理用（非表示） -->
+          <input type="hidden" id="sales-customer-no">
+        </div>
+        <div class="form-group">
+          <label>お客様名</label>
+          <input type="text" id="sales-customer-name">
+        </div>
+
+        <!-- オプション選択 -->
+        <div style="border:1.5px solid var(--border);border-radius:10px;padding:14px;margin-bottom:14px">
+          <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">オプション</div>
+          <!-- マスタから動的生成 -->
+          <div id="opt-dynamic-list"></div>
+          <!-- 延長（固定・メニュー設定から） -->
+          <div class="opt-row" style="flex-direction:column;align-items:stretch">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <label class="opt-label">
+                <span class="toggle-switch" style="width:36px;height:20px">
+                  <input type="checkbox" id="opt-extension-check" onchange="uncheckOptNone();toggleExtension();calcOptionsTotal();calcSalesTotal()">
+                  <span class="toggle-slider"></span>
+                </span>
+                延長
+              </label>
+              <span id="opt-extension-price" style="color:var(--muted);font-size:13px;font-weight:600">¥0</span>
+            </div>
+            <div id="opt-extension-wrap" style="display:none;margin-top:8px;margin-left:46px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <input type="range" id="opt-extension-count" min="1" max="6" step="1" value="1"
+                  oninput="calcOptionsTotal();calcSalesTotal()" style="flex:1">
+                <span id="opt-extension-label" style="font-size:13px;min-width:70px;text-align:right">-分</span>
+              </div>
+              <div id="opt-extension-hint" style="font-size:11px;color:var(--muted);margin-top:2px"></div>
+            </div>
+          </div>
+          <!-- その他（固定） -->
+          <div class="opt-row" style="flex-direction:column;align-items:stretch;border-bottom:none">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <label class="opt-label">
+                <span class="toggle-switch" style="width:36px;height:20px">
+                  <input type="checkbox" id="opt-other-check" onchange="uncheckOptNone();toggleOtherOpt();calcOptionsTotal();calcSalesTotal()">
+                  <span class="toggle-slider"></span>
+                </span>
+                その他
+              </label>
+              <span id="opt-other-price" style="color:var(--muted);font-size:13px;font-weight:600">¥0</span>
+            </div>
+            <div id="opt-other-wrap" style="display:none;margin-top:8px;margin-left:46px">
+              <input type="number" id="opt-other-amount" placeholder="金額を入力" min="0" step="100"
+                oninput="calcOptionsTotal();calcSalesTotal()"
+                style="width:160px;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:14px">
+            </div>
+          </div>
+          <!-- オプション無し -->
+          <div class="opt-row" style="border-bottom:none">
+            <label class="opt-label">
+              <span class="toggle-switch" style="width:36px;height:20px">
+                <input type="checkbox" id="opt-none-check" onchange="if(this.checked){clearAllOptions();this.checked=true;}">
+                <span class="toggle-slider"></span>
+              </span>
+              オプション無し
+            </label>
+          </div>
+          <!-- オプション合計 -->
+          <div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:1.5px solid var(--border);margin-top:4px">
+            <span style="font-size:13px;font-weight:600">オプション合計</span>
+            <span id="opt-total-display" style="font-size:18px;font-weight:700;color:var(--accent)">¥0</span>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>メモ</label>
+          <textarea id="sales-memo" rows="2"></textarea>
+        </div>
+
+        <!-- 登録前合計 -->
+        <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:13px;color:var(--muted)">売上合計（コース＋オプション−割引）</span>
+          <span id="sales-total-display" style="font-size:20px;font-weight:700;color:var(--text)">¥0</span>
+        </div>
+
+        <button class="btn btn-primary" style="width:100%;padding:14px;font-size:15px" onclick="submitSalesEntry()">売上を登録</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ===== 顧客マスタページ ===== -->
+  <div id="page-customer-master" class="page">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div class="sec-title">👥 顧客マスタ</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="importCustomersFromSheet()">📥 既存データ取込</button>
+          <button class="btn btn-secondary btn-sm" onclick="loadCustomerMaster()">更新</button>
+        </div>
+      </div>
+      <!-- 検索 -->
+      <div class="filter-bar" style="margin-bottom:14px">
+        <div class="form-group" style="margin-bottom:0;flex:1">
+          <label>番号 or 名前 or 電話番号</label>
+          <input type="text" id="master-search" placeholder="例: 0001 / サカバ / 090...">
+        </div>
+        <button class="btn btn-primary" onclick="loadCustomerMaster()">検索</button>
+      </div>
+      <!-- 新規登録 -->
+      <details style="margin-bottom:14px">
+        <summary style="cursor:pointer;font-size:13px;color:var(--muted);padding:8px 0">＋ 新規顧客を手動登録</summary>
+        <div style="padding:12px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <div class="form-group" style="margin-bottom:0;flex:2;min-width:120px">
+            <label>お客様名</label>
+            <input type="text" id="master-new-name" placeholder="例: サカバ">
+          </div>
+          <div class="form-group" style="margin-bottom:0;flex:2;min-width:120px">
+            <label>電話番号</label>
+            <input type="text" id="master-new-tel" placeholder="例: 09012341234"
+              oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+          </div>
+          <button class="btn btn-primary" onclick="saveMasterCustomer()">登録</button>
+        </div>
+      </details>
+      <!-- 一覧 -->
+      <div id="customer-master-list">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- ===== マスタ管理ページ ===== -->
+  <div id="page-master-mgmt" class="page">
+    <!-- タブ切替 -->
+    <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:2px solid var(--border);padding-bottom:0;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none">
+      <button id="master-tab-menu" onclick="switchMasterTab('menu')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--accent);border-bottom:2px solid var(--accent);margin-bottom:-2px;white-space:nowrap">
+        🍽 メニュー
+      </button>
+      <button id="master-tab-room" onclick="switchMasterTab('room')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        🚪 ルーム
+      </button>
+      <button id="master-tab-therapist" onclick="switchMasterTab('therapist')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        👩 セラピスト
+      </button>
+      <button id="master-tab-store" onclick="switchMasterTab('store')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        ⚙ 店舗設定
+      </button>
+      <button id="master-tab-manual" onclick="switchMasterTab('manual')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        📖 マニュアル
+      </button>
+      <button id="master-tab-checklist" onclick="switchMasterTab('checklist')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        ✅ チェックリスト
+      </button>
+      <button id="master-tab-fixedcost" onclick="switchMasterTab('fixedcost')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        💴 固定費
+      </button>
+      <button id="master-tab-paymentdest" onclick="switchMasterTab('paymentdest')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        🏦 振込先
+      </button>
+      <button id="master-tab-expensetpl" onclick="switchMasterTab('expensetpl')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        📝 都度経費
+      </button>
+    </div>
+
+    <!-- メニューマスタ -->
+    <div id="master-panel-menu">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title">メニューマスタ</div>
+          <button class="btn btn-primary btn-sm" onclick="openMenuForm()">＋ 追加</button>
+        </div>
+        <div id="menu-master-list">読み込み中...</div>
+      </div>
+      <!-- メニュー追加・編集フォーム -->
+      <div id="menu-form-card" class="card" style="display:none">
+        <div class="sec-title" style="margin-bottom:14px" id="menu-form-title">メニュー追加</div>
+
+        <!-- 種別 -->
+        <div class="form-group">
+          <label>種別</label>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="menu-type-btn" data-value="course"
+              onclick="selectMenuType('course')"
+              style="flex:1;padding:8px;border:1.5px solid var(--primary);border-radius:8px;background:var(--primary);color:#fff;cursor:pointer;font-size:13px;font-weight:600">
+              📋 コース
+            </button>
+            <button type="button" class="menu-type-btn" data-value="option"
+              onclick="selectMenuType('option')"
+              style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);color:var(--muted);cursor:pointer;font-size:13px;font-weight:600">
+              ✨ オプション
+            </button>
+          </div>
+          <input type="hidden" id="menu-type" value="course">
+        </div>
+
+        <!-- 共通：名前・表示順 -->
+        <div class="grid2">
+          <div class="form-group">
+            <label id="menu-name-label">コース名</label>
+            <input type="text" id="menu-name" placeholder="例: スタンダード">
+          </div>
+          <div class="form-group">
+            <label>表示順</label>
+            <input type="number" id="menu-order" placeholder="例: 1" min="1">
+          </div>
+        </div>
+
+        <!-- コース専用：時間・料金・延長単価 -->
+        <div id="menu-course-fields">
+          <div class="grid2">
+            <div class="form-group">
+              <label>時間（分）</label>
+              <input type="number" id="menu-time" placeholder="例: 60" min="0" step="10">
+            </div>
+            <div class="form-group">
+              <label>料金（円）</label>
+              <input type="number" id="menu-price" placeholder="例: 12000" min="0" step="500">
+            </div>
+          </div>
+          <div class="form-group">
+            <label>延長単価（円）<span style="font-size:11px;color:var(--muted);margin-left:6px">※空欄の場合は店舗設定の延長単価を使用</span></label>
+            <input type="number" id="menu-extension-price" placeholder="例: 6000（空欄=店舗設定）" min="0" step="500">
+          </div>
+        </div>
+
+        <!-- オプション専用：種類・金額 -->
+        <div id="menu-option-fields" style="display:none">
+          <div class="form-group">
+            <label>入力方式</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button type="button" class="opt-type-btn" data-value="fixed"
+                onclick="selectOptType('fixed')"
+                style="padding:7px 12px;border:1.5px solid var(--primary);border-radius:8px;background:var(--primary);color:#fff;cursor:pointer;font-size:12px;font-weight:600">
+                🔘 固定金額
+              </button>
+              <button type="button" class="opt-type-btn" data-value="time_unit"
+                onclick="selectOptType('time_unit')"
+                style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);color:var(--muted);cursor:pointer;font-size:12px;font-weight:600">
+                ⏱ 時間×単価
+              </button>
+              <button type="button" class="opt-type-btn" data-value="free"
+                onclick="selectOptType('free')"
+                style="padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;background:var(--surface);color:var(--muted);cursor:pointer;font-size:12px;font-weight:600">
+                ✏️ 自由入力
+              </button>
+            </div>
+            <input type="hidden" id="menu-option-type" value="fixed">
+          </div>
+          <!-- 固定金額 -->
+          <div id="opt-field-fixed" class="form-group">
+            <label>金額（円）</label>
+            <input type="number" id="menu-opt-price" placeholder="例: 2000" min="0" step="100">
+          </div>
+          <!-- 時間×単価 -->
+          <div id="opt-field-time" style="display:none">
+            <div class="grid2">
+              <div class="form-group">
+                <label>単価（円/単位）</label>
+                <input type="number" id="menu-opt-unit-price" placeholder="例: 1000" min="0" step="100">
+              </div>
+              <div class="form-group">
+                <label>単位（分）</label>
+                <input type="number" id="menu-opt-unit-min" placeholder="例: 10" min="1" step="1" value="10">
+              </div>
+            </div>
+            <div class="form-group">
+              <label>最大（分）</label>
+              <input type="number" id="menu-opt-max-min" placeholder="例: 100" min="1" step="10" value="100">
+            </div>
+          </div>
+          <!-- 自由入力は設定不要 -->
+          <div id="opt-field-free" style="display:none">
+            <p style="font-size:12px;color:var(--muted)">金額はスタッフが手入力します</p>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-primary" onclick="saveMenuMaster()">保存</button>
+          <button class="btn btn-secondary" onclick="closeMenuForm()">キャンセル</button>
+        </div>
+        <input type="hidden" id="menu-edit-row">
+      </div>
+
+      <!-- 指名料設定 -->
+      <div class="card" style="margin-top:14px">
+        <div class="sec-title" style="margin-bottom:14px">🎯 指名料</div>
+        <div class="grid3" style="margin-bottom:4px">
+          <div class="form-group">
+            <label>フリー</label>
+            <input type="number" id="st-nom-free" min="0" step="100" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label>指名</label>
+            <input type="number" id="st-nom-nom" min="0" step="100" placeholder="1000">
+          </div>
+          <div class="form-group">
+            <label>本指名</label>
+            <input type="number" id="st-nom-hon" min="0" step="100" placeholder="2000">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">予約・売上入力の指名料に反映されます</div>
+        <button class="btn btn-primary btn-sm" onclick="saveMenuSettings()">保存</button>
+      </div>
+
+      <!-- 延長設定 -->
+      <div class="card" style="margin-top:14px">
+        <div class="sec-title" style="margin-bottom:14px">⏱ 延長設定</div>
+        <div class="grid2" style="margin-bottom:4px">
+          <div class="form-group">
+            <label>延長単位（分）</label>
+            <select id="st-extension-min">
+              <option value="10">10分</option>
+              <option value="15">15分</option>
+              <option value="20">20分</option>
+              <option value="30">30分</option>
+              <option value="60">60分</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>延長単価（円）</label>
+            <input type="number" id="st-extension-price" placeholder="例: 3000" min="0" step="500">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px">売上入力で「延長◎分 × ◎回」のスライダーで選択できます</div>
+        <button class="btn btn-primary btn-sm" onclick="saveMenuSettings()">保存</button>
+      </div>
+    </div>
+
+    <!-- ルームマスタ -->
+    <div id="master-panel-room" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title">ルームマスタ</div>
+          <button class="btn btn-primary btn-sm" onclick="openRoomForm()">＋ 追加</button>
+        </div>
+        <div id="room-master-list">読み込み中...</div>
+      </div>
+      <!-- ルーム追加・編集フォーム -->
+      <div id="room-form-card" class="card" style="display:none">
+        <div class="sec-title" style="margin-bottom:14px" id="room-form-title">ルーム追加</div>
+        <div class="grid2">
+          <div class="form-group">
+            <label>ルーム名</label>
+            <input type="text" id="room-name" placeholder="例: Aルーム">
+          </div>
+          <div class="form-group">
+            <label>表示順</label>
+            <input type="number" id="room-order" placeholder="例: 1" min="1">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>ルーム説明（セラピスト向け）</label>
+          <textarea id="room-desc" rows="3" placeholder="例: 2階左端の個室。バスタブあり。"></textarea>
+        </div>
+        <div class="form-group">
+          <label>お客様案内文</label>
+          <textarea id="room-guide" rows="3" placeholder="例: 2階のAルームにご案内します。エレベーターを..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>ルームインターバル（分）<span style="font-size:11px;color:var(--muted);margin-left:6px">※前のシフト終了後に空ける時間（10分単位）</span></label>
+          <select id="room-interval">
+            <option value="0">0分（なし）</option>
+            <option value="10">10分</option>
+            <option value="20">20分</option>
+            <option value="30">30分</option>
+            <option value="40">40分</option>
+            <option value="50">50分</option>
+            <option value="60">60分</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="saveRoomMaster()">保存</button>
+          <button class="btn btn-secondary" onclick="closeRoomForm()">キャンセル</button>
+        </div>
+        <input type="hidden" id="room-edit-row">
+      </div>
+    </div>
+
+    <!-- セラピストマスタ（LINE管理統合） -->
+    <div id="master-panel-therapist" style="display:none">
+      <!-- 手動登録 -->
+      <div class="card" style="margin-bottom:14px">
+        <div class="sec-title" style="margin-bottom:14px">手動登録</div>
+        <div class="grid2">
+          <div class="form-group">
+            <label>セラピスト名</label>
+            <input type="text" id="line-name">
+          </div>
+          <div class="form-group">
+            <label>LINE ユーザーID</label>
+            <input type="text" id="line-userid" placeholder="U...">
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="form-group">
+            <label>コースバック率（例: 0.5 = 50%）</label>
+            <input type="number" id="line-courseback" value="0.5" min="0" max="1" step="0.01">
+          </div>
+          <div class="form-group">
+            <label>インターバル（分）</label>
+            <input type="number" id="line-interval" value="0" min="0">
+          </div>
+        </div>
+        <label class="toggle-wrap" style="margin-bottom:12px">
+          <span class="toggle-switch">
+            <input type="checkbox" id="line-is-interview">
+            <span class="toggle-slider"></span>
+          </span>
+          <div>
+            <div style="font-size:14px;font-weight:600">🤝 面接候補として登録</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">ONにすると採用・不採用を後から選択できます</div>
+          </div>
+        </label>
+        <button class="btn btn-primary" onclick="saveLineEntry()">登録</button>
+      </div>
+      <div id="line-interview-panel"></div>
+      <div id="line-unlinked-panel"></div>
+      <!-- 登録済みセラピスト一覧 -->
+      <div class="card">
+        <div class="sec-title" style="margin-bottom:12px">登録済みセラピスト</div>
+        <div id="line-users-table">読み込み中...</div>
+      </div>
+    </div>
+
+    <!-- ⚙ 店舗設定パネル -->
+    <div id="master-panel-store" style="display:none">
+      <div class="card">
+        <div class="sec-title" style="margin-bottom:12px">⚙ 店舗設定</div>
+        <div id="store-info-display" style="background:var(--bg);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--muted)">読み込み中...</div>
+
+        <!-- デフォルトバック率 -->
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">📊 デフォルトバック率</div>
+        <div class="grid2" style="margin-bottom:4px">
+          <div class="form-group">
+            <label>コースバック率（%）</label>
+            <input type="number" id="st-default-back" min="0" max="100" step="1">
+          </div>
+          <div class="form-group">
+            <label>オプションバック率（%）</label>
+            <input type="number" id="st-default-option-back" min="0" max="100" step="1" placeholder="100">
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:16px">セラピスト個別にバック率が設定されている場合はそちらが優先されます</div>
+
+        <!-- 割引ロジック -->
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">✂️ 割引ロジック</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+          <button type="button" class="dm-btn" id="dm-btn-deduct" data-value="deduct_then_back"
+            onclick="selectDiscountMode('deduct_then_back')"
+            style="padding:14px 10px;border:2px solid var(--border);border-radius:10px;background:var(--surface);cursor:pointer;text-align:left;transition:all .15s">
+            <div style="font-size:18px;margin-bottom:6px">📉</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)">按分負担</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">（コース − 割引）× バック率<br>店舗・セラピスト両方で負担</div>
+          </button>
+          <button type="button" class="dm-btn" id="dm-btn-store" data-value="store_bears"
+            onclick="selectDiscountMode('store_bears')"
+            style="padding:14px 10px;border:2px solid var(--border);border-radius:10px;background:var(--surface);cursor:pointer;text-align:left;transition:all .15s">
+            <div style="font-size:18px;margin-bottom:6px">🏪</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text)">店舗全額負担</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5">コース × バック率<br>割引は店舗が全額負担</div>
+          </button>
+        </div>
+        <input type="hidden" id="dm-selected" value="deduct_then_back">
+        <div id="discount-preview" style="background:var(--bg);border-radius:8px;padding:12px;font-size:13px;margin-bottom:16px;color:var(--muted)"></div>
+
+        <!-- 本指名自動昇格 -->
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">🎯 指名自動昇格</div>
+        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:16px">
+          <label class="toggle-wrap" style="margin:0">
+            <span class="toggle-switch">
+              <input type="checkbox" id="st-auto-honshimei">
+              <span class="toggle-slider"></span>
+            </span>
+            <div>
+              <div style="font-size:14px;font-weight:600">来店履歴ありで自動本指名</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">売上履歴が1件以上あれば指名種別を自動で本指名に変更します</div>
+            </div>
+          </label>
+        </div>
+
+        <!-- 給料LINE送信設定 -->
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">💰 給料LINE送信設定</div>
+        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:8px">
+          <label class="toggle-wrap" style="margin:0">
+            <span class="toggle-switch">
+              <input type="checkbox" id="st-send-payroll-line" checked>
+              <span class="toggle-slider"></span>
+            </span>
+            <div>
+              <div style="font-size:14px;font-weight:600">給料をLINEで送信する</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">OFFの場合、LINE送信ボタンを押しても給料金額は送信されません</div>
+            </div>
+          </label>
+        </div>
+        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:8px">
+          <label class="toggle-wrap" style="margin:0">
+            <span class="toggle-switch">
+              <input type="checkbox" id="st-send-store-line" checked>
+              <span class="toggle-slider"></span>
+            </span>
+            <div>
+              <div style="font-size:14px;font-weight:600">店落ちをLINEで送信する</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">OFFの場合、LINE送信ボタンを押しても店落ち金額は送信されません</div>
+            </div>
+          </label>
+        </div>
+        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:16px">
+          <label class="toggle-wrap" style="margin:0">
+            <span class="toggle-switch">
+              <input type="checkbox" id="st-send-expense-line">
+              <span class="toggle-slider"></span>
+            </span>
+            <div>
+              <div style="font-size:14px;font-weight:600">雑費・宿泊費・その他の内訳をLINEで送信する</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">ONにすると給料LINE送信時に雑費・宿泊費・その他の内訳を追記します</div>
+            </div>
+          </label>
+        </div>
+        <button class="btn btn-primary" onclick="saveStoreSettings()">設定を保存</button>
+
+        <!-- ルーム空き状況設定 -->
+        <div style="font-size:14px;font-weight:700;margin-top:20px;margin-bottom:12px">🚪 ルーム空き状況</div>
+        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:16px">
+          <label class="toggle-wrap" style="margin:0">
+            <span class="toggle-switch">
+              <input type="checkbox" id="st-show-room-availability" checked>
+              <span class="toggle-slider"></span>
+            </span>
+            <div>
+              <div style="font-size:14px;font-weight:600">シフト提出画面にルーム空き状況を表示する</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">OFFにするとセラピストのシフト提出画面から「ルーム空き状況」タブが非表示になります</div>
+            </div>
+          </label>
+        </div>
+
+        <!-- シフトリマインド自動送信設定 -->
+        <div style="font-size:14px;font-weight:700;margin-top:20px;margin-bottom:12px">📅 シフト提出リマインド自動送信</div>
+        <div class="card" style="background:var(--bg);box-shadow:none;border:1.5px solid var(--border);margin-bottom:12px">
+          <label class="toggle-wrap" style="margin:0">
+            <span class="toggle-switch">
+              <input type="checkbox" id="st-shift-reminder-enabled">
+              <span class="toggle-slider"></span>
+            </span>
+            <div>
+              <div style="font-size:14px;font-weight:600">自動リマインドを有効にする</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">指定した曜日・時刻に未提出セラピストへ自動でLINE通知します</div>
+            </div>
+          </label>
+        </div>
+        <div id="shift-reminder-detail" style="display:none">
+          <div class="grid2" style="gap:12px;margin-bottom:12px">
+            <div class="form-group" style="margin:0">
+              <label>送信曜日</label>
+              <select id="st-shift-reminder-day" style="width:100%">
+                <option value="0">日曜日</option>
+                <option value="1">月曜日</option>
+                <option value="2">火曜日</option>
+                <option value="3">水曜日</option>
+                <option value="4">木曜日</option>
+                <option value="5" selected>金曜日</option>
+                <option value="6">土曜日</option>
+              </select>
+            </div>
+            <div class="form-group" style="margin:0">
+              <label>送信時刻</label>
+              <input type="time" id="st-shift-reminder-time" value="09:00" style="width:100%">
+            </div>
+          </div>
+          <div style="font-size:12px;color:var(--muted);background:#eff6ff;border-radius:8px;padding:8px 12px;margin-bottom:12px">
+            💡 翌週分のシフトを未提出のセラピストへ送信します
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="saveStoreSettings()">設定を保存</button>
+
+        <!-- 店舗LINE設定 -->
+        <div style="font-size:14px;font-weight:700;margin-top:20px;margin-bottom:12px">📱 店舗LINE通知</div>
+        <div class="form-group" style="margin-bottom:4px">
+          <label>店舗LINEの源氏名（セラピストマスタに登録した名前）</label>
+          <input type="text" id="st-store-line-name" placeholder="例: 店舗アカウント">
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">セラピストが売上登録時に変更があった場合、この源氏名のLINEに通知が届きます</div>
+        <button class="btn btn-primary" onclick="saveStoreSettings()">設定を保存</button>
+      </div>
+    </div>
+
+    <!-- マニュアルマスタパネル -->
+    <div id="master-panel-manual" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:600">📖 マニュアル一覧</div>
+        <button class="btn btn-primary btn-sm" onclick="openManualForm()">＋ 追加</button>
+      </div>
+      <div id="manual-master-list">読み込み中...</div>
+      <div id="manual-form-wrap" style="display:none;background:var(--bg);border-radius:10px;padding:16px;margin-top:16px">
+        <div style="font-size:14px;font-weight:700;margin-bottom:12px">📝 マニュアル編集</div>
+        <input type="hidden" id="manual-form-id">
+        <div class="form-group">
+          <label>カテゴリ</label>
+          <input type="text" id="manual-form-category" placeholder="例: エクストラルーム・防犯・伝票" list="manual-category-list">
+          <datalist id="manual-category-list"></datalist>
+        </div>
+        <div class="form-group">
+          <label>タイトル</label>
+          <input type="text" id="manual-form-title" placeholder="例: エクストラルームの使い方">
+        </div>
+        <div class="form-group">
+          <label>本文</label>
+          <textarea id="manual-form-body" rows="6" placeholder="使い方の説明を入力..." style="width:100%;resize:vertical"></textarea>
+        </div>
+        <div class="form-group">
+          <label>画像URL（任意）</label>
+          <input type="text" id="manual-form-image" placeholder="https://...">
+        </div>
+        <div class="form-group">
+          <label>表示順</label>
+          <input type="number" id="manual-form-order" value="0" min="0" style="width:80px">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-primary" style="flex:1" onclick="saveManualMaster()">保存</button>
+          <button class="btn btn-secondary" onclick="closeManualForm()">キャンセル</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- チェックリストマスタ -->
+    <div id="master-panel-checklist" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title">✅ 退勤チェックリスト</div>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>ルーム選択</label>
+          <select id="checklist-room-select" onchange="loadChecklistForRoom()">
+            <option value="">ルームを選択してください</option>
+          </select>
+        </div>
+        <div id="checklist-items-list">ルームを選択してください</div>
+        <div id="checklist-add-form" style="display:none;margin-top:14px;background:var(--bg);border-radius:10px;padding:14px">
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px">項目追加</div>
+          <input type="hidden" id="checklist-edit-id">
+          <div class="grid2" style="margin-bottom:8px">
+            <div class="form-group" style="margin-bottom:0">
+              <label>項目名</label>
+              <input type="text" id="checklist-item-name" placeholder="例: タオル補充">
+            </div>
+            <div class="form-group" style="margin-bottom:0">
+              <label>表示順</label>
+              <input type="number" id="checklist-item-order" value="0" min="0" style="width:80px">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label>詳細説明（任意）</label>
+            <textarea id="checklist-item-detail" rows="3" placeholder="手順や注意点を入力..." style="width:100%;resize:vertical"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:8px">
+            <label>画像URL（任意・1行に1URL）</label>
+            <textarea id="checklist-item-images" rows="2" placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg" style="width:100%;resize:vertical;font-size:12px"></textarea>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">画像URLを改行区切りで入力（最大5枚）</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" onclick="saveChecklistItem()">保存</button>
+            <button class="btn btn-secondary btn-sm" onclick="closeChecklistForm()">キャンセル</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- 都度経費マスタ -->
+    <div id="master-panel-expensetpl" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title">📝 都度経費マスタ</div>
+          <button class="btn btn-primary btn-sm" onclick="openExpenseTplForm()">＋ 追加</button>
+        </div>
+        <div id="expense-tpl-list">読み込み中...</div>
+      </div>
+      <div id="expense-tpl-form-card" class="card" style="display:none">
+        <div class="sec-title" style="margin-bottom:12px" id="expense-tpl-form-title">都度経費項目を追加</div>
+        <input type="hidden" id="etpl-edit-id">
+        <div class="form-group">
+          <label>項目名 <span style="color:red">*</span></label>
+          <input type="text" id="etpl-name" placeholder="例: クリーニング代・備品購入" class="ti">
+        </div>
+        <div class="grid2" style="gap:8px">
+          <div class="form-group">
+            <label>カテゴリ <span style="color:red">*</span></label>
+            <select id="etpl-category" class="ts">
+              <option value="消耗品">消耗品</option>
+              <option value="広告費">広告費</option>
+              <option value="交通費">交通費</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>金額（円）</label>
+            <input type="number" id="etpl-amount" min="0" placeholder="変動の場合は空欄" class="ti">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>振込先</label>
+          <select id="etpl-payment-dest" class="ts">
+            <option value="">未設定</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1" onclick="saveExpenseTplRow()">保存</button>
+          <button class="btn btn-secondary" onclick="closeExpenseTplForm()">キャンセル</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 振込先マスタ -->
+    <div id="master-panel-paymentdest" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title">🏦 振込先マスタ</div>
+          <button class="btn btn-primary btn-sm" onclick="openPaymentDestForm()">＋ 追加</button>
+        </div>
+        <div id="payment-dest-list">読み込み中...</div>
+      </div>
+      <div id="payment-dest-form-card" class="card" style="display:none">
+        <div class="sec-title" style="margin-bottom:12px" id="pd-form-title">振込先を追加</div>
+        <input type="hidden" id="pd-edit-id">
+        <div class="form-group">
+          <label>振込先名 <span style="color:red">*</span></label>
+          <input type="text" id="pd-name" placeholder="例: ○○不動産・東京電力" class="ti">
+        </div>
+        <div class="grid2" style="gap:8px">
+          <div class="form-group">
+            <label>銀行名</label>
+            <input type="text" id="pd-bank" placeholder="例: ○○銀行" class="ti">
+          </div>
+          <div class="form-group">
+            <label>支店名</label>
+            <input type="text" id="pd-branch" placeholder="例: 渋谷支店" class="ti">
+          </div>
+        </div>
+        <div class="grid2" style="gap:8px">
+          <div class="form-group">
+            <label>口座種別</label>
+            <select id="pd-account-type" class="ts">
+              <option value="普通">普通</option>
+              <option value="当座">当座</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>口座番号</label>
+            <input type="text" id="pd-account-number" placeholder="例: 1234567" class="ti">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>口座名義</label>
+          <input type="text" id="pd-account-holder" placeholder="例: カ）ナントカ" class="ti">
+        </div>
+        <div class="form-group">
+          <label>メモ</label>
+          <input type="text" id="pd-memo" placeholder="任意" class="ti">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1" onclick="savePaymentDestRow()">保存</button>
+          <button class="btn btn-secondary" onclick="closePaymentDestForm()">キャンセル</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 固定費マスタ -->
+    <div id="master-panel-fixedcost" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title">💴 固定費マスタ</div>
+          <button class="btn btn-primary btn-sm" onclick="openFixedCostForm()">＋ 追加</button>
+        </div>
+        <div id="fixed-cost-master-list">読み込み中...</div>
+      </div>
+      <!-- 追加・編集フォーム -->
+      <div id="fixed-cost-form-card" class="card" style="display:none">
+        <div class="sec-title" style="margin-bottom:12px" id="fixed-cost-form-title">固定費を追加</div>
+        <input type="hidden" id="fc-edit-id">
+        <div class="form-group">
+          <label>費用名 <span style="color:red">*</span></label>
+          <input type="text" id="fc-name" placeholder="例: アパートメント家賃" class="ti">
+        </div>
+        <div class="grid2" style="gap:8px">
+          <div class="form-group">
+            <label>カテゴリ <span style="color:red">*</span></label>
+            <select id="fc-category" class="ts">
+              <option value="家賃">家賃</option>
+              <option value="光熱費">光熱費</option>
+              <option value="インターネット">インターネット</option>
+              <option value="消耗品">消耗品</option>
+              <option value="保険">保険</option>
+              <option value="その他">その他</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>ルーム（任意）</label>
+            <select id="fc-room" class="ts">
+              <option value="">店舗全体</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>振込先</label>
+          <select id="fc-payment-dest" class="ts">
+            <option value="">未設定</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>金額（円）― 変動費は空欄</label>
+          <input type="number" id="fc-amount" min="0" placeholder="変動の場合は空欄" class="ti">
+        </div>
+        <div class="grid2" style="gap:8px">
+          <div class="form-group">
+            <label>支払日（毎月何日）</label>
+            <input type="number" id="fc-due-day" min="1" max="31" placeholder="例: 25" class="ti">
+          </div>
+          <div class="form-group">
+            <label>メモ</label>
+            <input type="text" id="fc-memo" placeholder="振込先・口座番号など" class="ti">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1" onclick="saveFixedCostMasterRow()">保存</button>
+          <button class="btn btn-secondary" onclick="closeFixedCostForm()">キャンセル</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 面接管理ページ ===== -->
+  <div id="page-interview-mgmt" class="page">
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-title" style="margin-bottom:12px">🔍 面接一覧</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <input type="text" id="iv-search-name" placeholder="名前で検索" style="flex:1;min-width:100px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+        <select id="iv-search-status" style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface)">
+          <option value="">すべて</option>
+          <option value="scheduled">面接予定</option>
+          <option value="interviewed">面接済</option>
+          <option value="hired">採用</option>
+          <option value="training">講習中</option>
+          <option value="confirmed">源氏名確定</option>
+          <option value="rejected">不採用</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="loadInterviewMgmt()">検索</button>
+        <button class="btn btn-success btn-sm" onclick="openInterviewModal(null)" style="margin-left:auto">＋ 新規登録</button>
+      </div>
+      <div id="interview-list">読み込み中...</div>
+    </div>
+  </div>
+
+  <!-- ===== LINE管理ページ ===== -->
+  <div id="page-line-mgmt" class="page">
+    <div class="card" style="margin-bottom:14px">
+      <div class="sec-title" style="margin-bottom:14px">手動登録</div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>セラピスト名</label>
+          <input type="text" id="line-name">
+        </div>
+        <div class="form-group">
+          <label>LINE ユーザーID</label>
+          <input type="text" id="line-userid" placeholder="U...">
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>コースバック率（例: 0.5 = 50%）</label>
+          <input type="number" id="line-courseback" value="0.5" min="0" max="1" step="0.01">
+        </div>
+        <div class="form-group">
+          <label>インターバル（分）</label>
+          <input type="number" id="line-interval" value="0" min="0">
+        </div>
+      </div>
+      <label class="toggle-wrap" style="margin-bottom:12px">
+        <span class="toggle-switch">
+          <input type="checkbox" id="line-is-interview">
+          <span class="toggle-slider"></span>
+        </span>
+        <div>
+          <div style="font-size:14px;font-weight:600">🤝 面接候補として登録</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">ONにすると採用・不採用を後から選択できます</div>
+        </div>
+      </label>
+      <button class="btn btn-primary" onclick="saveLineEntry()">登録</button>
+    </div>
+    <div class="card">
+      <div class="sec-title" style="margin-bottom:12px">登録済みセラピスト</div>
+      <div id="line-users-table">読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== LINE紐づけモーダル ===== -->
+<div id="link-line-modal" style="display:none;position:fixed;inset:0;z-index:300;overflow-y:auto;background:rgba(0,0,0,0.5)">
+  <div style="background:var(--card);border-radius:12px;max-width:420px;margin:80px auto;padding:24px">
+    <div style="font-weight:700;font-size:15px;margin-bottom:16px">🔗 LINE IDを紐づける</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px" id="link-line-modal-name"></div>
+    <div style="font-size:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:10px;margin-bottom:14px;color:#0369a1">
+      セラピストにLINEで「登録」と送ってもらい、Supabaseの therapists テーブルで確認したLINE user_idを入力してください。
+    </div>
+    <div class="form-group">
+      <label>LINE ユーザーID</label>
+      <input type="text" id="link-line-userid" placeholder="U...">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="confirmLinkLine()">紐づける</button>
+      <button class="btn btn-secondary" onclick="_hideModal('link-line-modal')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 面接詳細モーダル ===== -->
+<div id="interview-modal" style="display:none;position:fixed;inset:0;z-index:9600;overflow-y:auto;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,0.6);padding:20px">
+  <div style="background:var(--surface);border-radius:var(--radius);max-width:480px;margin:0 auto;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <span style="font-weight:700;font-size:16px">🤝 面接情報</span>
+      <button onclick="_hideModal('interview-modal')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+    </div>
+
+    <!-- 基本情報 -->
+    <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px;text-transform:uppercase">基本情報</div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="form-group" style="margin:0">
+        <label>名前（源氏名）</label>
+        <input type="text" id="iv-name" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>面接日</label>
+        <input type="date" id="iv-date" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+      </div>
+    </div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="form-group" style="margin:0">
+        <label>年齢</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="iv-age" min="18" max="60" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted);flex-shrink:0">歳</span>
+        </div>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>身長</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="iv-height" min="140" max="200" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted);flex-shrink:0">cm</span>
+        </div>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>カップ数</label>
+      <select id="iv-cup" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface)">
+        <option value="">未回答</option>
+        <option value="A">A</option><option value="B">B</option><option value="C">C</option>
+        <option value="D">D</option><option value="E">E</option><option value="F">F</option>
+        <option value="G">G</option><option value="H">H以上</option>
+      </select>
+    </div>
+
+    <!-- 経験 -->
+    <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">経験</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input type="radio" name="iv-exp" id="iv-exp-yes" value="yes" onchange="toggleIvExp()" style="display:none">
+      <input type="radio" name="iv-exp" id="iv-exp-no"  value="no"  onchange="toggleIvExp()" style="display:none" checked>
+      <button type="button" id="iv-exp-btn-yes" onclick="document.getElementById('iv-exp-yes').checked=true;toggleIvExp();_ivExpUpdateBtn()"
+        style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s">
+        ✅ 経験あり
+      </button>
+      <button type="button" id="iv-exp-btn-no" onclick="document.getElementById('iv-exp-no').checked=true;toggleIvExp();_ivExpUpdateBtn()"
+        style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--accent);background:#fff1f2;color:var(--accent);font-size:14px;font-weight:600;cursor:pointer;transition:all .15s">
+        ❌ 経験なし
+      </button>
+    </div>
+
+    <!-- 経験ありの場合 -->
+    <div id="iv-exp-section" style="display:none;background:var(--bg);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div class="form-group" style="margin-bottom:8px">
+        <label>経験年数</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="iv-exp-years" min="0" max="30" style="width:80px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted)">年</span>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label>過去店舗</label>
+        <div id="iv-past-stores-wrap" style="display:flex;flex-direction:column;gap:6px;margin-bottom:6px"></div>
+        <button type="button" onclick="addPastStoreInput()" class="btn btn-secondary btn-sm">＋ 追加</button>
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label>辞めた理由</label>
+        <textarea id="iv-quit-reason" rows="2" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:8px">
+        <label>志望動機</label>
+        <textarea id="iv-motivation" rows="2" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>他で面接を受けているか</label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input type="radio" name="iv-other" id="iv-other-yes" value="yes" style="display:none">
+          <input type="radio" name="iv-other" id="iv-other-no"  value="no"  style="display:none" checked>
+          <button type="button" onclick="document.getElementById('iv-other-yes').checked=true;_ivOtherUpdateBtn()"
+            id="iv-other-btn-yes" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--border);background:var(--surface);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">
+            あり
+          </button>
+          <button type="button" onclick="document.getElementById('iv-other-no').checked=true;_ivOtherUpdateBtn()"
+            id="iv-other-btn-no" style="flex:1;padding:8px;border-radius:8px;border:2px solid var(--accent);background:#fff1f2;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s">
+            なし
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 共通 -->
+    <div style="font-size:13px;font-weight:700;color:var(--muted);margin-bottom:8px">共通</div>
+    <div class="grid2" style="margin-bottom:10px">
+      <div class="form-group" style="margin:0">
+        <label>週何日</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="iv-work-days" min="1" max="7" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted);flex-shrink:0">日</span>
+        </div>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>何時間くらい</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="iv-work-hours" min="1" max="24" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+          <span style="font-size:12px;color:var(--muted);flex-shrink:0">時間</span>
+        </div>
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>出勤時間帯の希望</label>
+      <input type="text" id="iv-preferred-time" placeholder="例：昼〜夕方" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+    </div>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>不安なところ</label>
+      <textarea id="iv-anxiety" rows="2" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>質疑応答メモ</label>
+      <textarea id="iv-qa-memo" rows="3" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+    </div>
+
+    <!-- ステータス -->
+    <div class="form-group" style="margin-bottom:16px">
+      <label>ステータス</label>
+      <select id="iv-status" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:var(--surface)">
+        <option value="scheduled">面接予定</option>
+        <option value="interviewed">面接済</option>
+        <option value="hired">採用</option>
+        <option value="training">講習中</option>
+        <option value="confirmed">源氏名確定（正式登録）</option>
+        <option value="rejected">不採用</option>
+      </select>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveInterview()">保存</button>
+      <button class="btn btn-secondary" onclick="_hideModal('interview-modal')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== スカウトモーダル ===== -->
+<div id="scout-modal" style="display:none;position:fixed;inset:0;z-index:300;overflow-y:auto;background:rgba(0,0,0,0.5)">
+  <div style="background:#ffffff;border-radius:12px;max-width:420px;margin:60px auto;padding:24px;border:1px solid #e2e8f0;box-shadow:0 8px 24px rgba(0,0,0,0.15)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <span style="font-weight:700;font-size:15px;color:#0f172a" id="scout-modal-title">スカウト設定</span>
+      <button onclick="_hideModal('scout-modal')" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b;line-height:1">✕</button>
+    </div>
+    <div class="form-group">
+      <label style="color:#334155;font-weight:600;font-size:13px">紹介元会社を選択</label>
+      <div id="scout-company-list" style="border:1.5px solid #e2e8f0;border-radius:8px;overflow:hidden;margin-top:6px;margin-bottom:10px;background:#ffffff"></div>
+      <button type="button" onclick="toggleScoutNewForm()" class="btn" style="width:100%;font-size:13px;border:1.5px dashed #94a3b8;color:#475569;background:#f8fafc">＋ 新規会社を追加</button>
+    </div>
+    <div id="scout-new-company-form" style="display:none;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:14px;margin-bottom:12px">
+      <div style="font-size:12px;color:#475569;margin-bottom:10px;font-weight:600">新規会社を登録</div>
+      <div class="form-group">
+        <label>会社名</label>
+        <input type="text" id="scout-new-name" placeholder="例: A社">
+      </div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>バック率（%）</label>
+          <input type="number" id="scout-new-rate" value="10" min="0" max="100" step="0.1">
+        </div>
+        <div class="form-group">
+          <label>顧問料（円/日）</label>
+          <input type="number" id="scout-new-fee" value="0" min="0">
+        </div>
+      </div>
+      <button type="button" onclick="addScoutCompany()" class="btn btn-primary" style="width:100%">登録</button>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:8px">
+      <button id="scout-modal-remove-btn" onclick="removeTherapistScout()" class="btn" style="flex:1;background:#fee2e2;color:#b91c1c;border-color:#fca5a5;display:none">紐付け解除</button>
+      <button onclick="saveTherapistScout()" class="btn btn-primary" style="flex:2">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== アナウンスページ（管理者専用）===== -->
+<div id="page-broadcast" class="page">
+  <div style="font-weight:700;font-size:15px;margin-bottom:14px">📢 アナウンス</div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:10px">送信先セラピスト</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="btn btn-secondary btn-sm" onclick="broadcastSelectAll(true)">全選択</button>
+      <button class="btn btn-secondary btn-sm" onclick="broadcastSelectAll(false)">全解除</button>
+      <span id="broadcast-count" style="font-size:13px;color:var(--muted);align-self:center">0人選択中</span>
+    </div>
+    <div id="broadcast-therapist-list" style="display:flex;flex-direction:column;gap:8px">読み込み中...</div>
+  </div>
+  <div class="card" style="margin-bottom:14px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">メッセージ</div>
+    <textarea id="broadcast-message" rows="5" placeholder="セラピスト全員に送信するメッセージを入力..."
+      style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);font-size:14px;font-family:inherit;resize:vertical"></textarea>
+  </div>
+  <button class="btn btn-line" style="width:100%;padding:14px;font-size:15px" onclick="sendBroadcastMessage()">📨 選択したセラピストに送信</button>
+  <div id="broadcast-results" style="margin-top:14px"></div>
+</div>
+
+<!-- ===== スカウト集計ページ ===== -->
+<div id="page-scout" class="page">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+    <span style="font-weight:700;font-size:15px">🔍 スカウト集計</span>
+    <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+      <label style="font-size:13px;color:var(--muted)">集計月</label>
+      <input type="month" id="scout-month-sel" style="font-size:13px;padding:5px 10px" onchange="loadScoutSummary()">
+    </div>
+  </div>
+  <div id="scout-summary-list"><p style="color:var(--muted)">読み込み中...</p></div>
+</div>
+<script type="module" src="/src/main.ts"></script>
+</body>
 </html>

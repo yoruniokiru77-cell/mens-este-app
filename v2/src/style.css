@@ -1,9 +1,10 @@
-/* ============================================================
+﻿/* ============================================================
    shadcn/ui inspired design system
    管理者: ニュートラルグレー × シャープ
    セラピスト: ローズパステル × やわらか
    ============================================================ */
 :root {
+  /* ── 管理者ベース（shadcn/ui準拠） ── */
   --bg:       #f8fafc;
   --surface:  #ffffff;
   --primary:  #0f172a;
@@ -24,6 +25,7 @@
   --ring:     0 0 0 2px #fff, 0 0 0 4px var(--accent);
 }
 
+/* ── セラピストモード専用変数（bodyにtherapist-mode付与時） ── */
 body.therapist-mode {
   --bg:       #fff5f7;
   --surface:  #ffffff;
@@ -52,6 +54,7 @@ body {
   transition: background .3s, color .3s;
 }
 
+/* ========== 管理者ナビ（shadcn準拠） ========== */
 #nav {
   background: var(--primary);
   display: flex; overflow-x: auto;
@@ -72,6 +75,7 @@ body {
 #nav button:hover { color: rgba(255,255,255,.8); }
 #nav button.active { color: #fff; border-bottom-color: var(--accent); }
 
+/* ========== セラピスト ボトムナビ ========== */
 #bottom-nav {
   display: none; position: fixed;
   bottom: 0; left: 0; right: 0; height: var(--bottom-h);
@@ -100,8 +104,10 @@ body.therapist-mode #bottom-nav {
 #bottom-nav button.active { color: var(--accent); border-top-color: var(--accent); }
 #bottom-nav button .icon { font-size: 22px; line-height: 1; }
 
+/* ========== コンテンツ ========== */
 .page { display: none; padding: 14px; max-width: 680px; margin: 0 auto; }
 .page.active { display: block; }
+/* PC表示: シフト表・マスタ管理は画面全体を使用 */
 @media (min-width: 768px) {
   #page-shift-calendar,
   #page-master-mgmt,
@@ -113,6 +119,7 @@ body.therapist-mode .page {
   padding-bottom: calc(var(--bottom-h) + env(safe-area-inset-bottom) + 12px);
 }
 
+/* ========== カード（shadcn: border + no shadow） ========== */
 .card {
   background: var(--surface);
   border-radius: var(--radius-lg);
@@ -122,10 +129,14 @@ body.therapist-mode .page {
   box-shadow: var(--shadow);
   transition: border-color .15s, box-shadow .15s;
 }
-body.therapist-mode .card { box-shadow: var(--shadow-md); }
+body.therapist-mode .card {
+  border-color: var(--border);
+  box-shadow: var(--shadow-md);
+}
 .card-title { font-size: 11px; color: var(--muted); margin-bottom: 3px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 .card-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
 
+/* ========== フォーム（shadcn Input） ========== */
 .form-group { margin-bottom: 14px; }
 label {
   display: block; font-size: 12px; color: var(--muted);
@@ -151,11 +162,53 @@ body.therapist-mode textarea:focus {
   box-shadow: 0 0 0 3px rgba(244,114,182,0.2);
 }
 input[type=number] { -moz-appearance: textfield; }
+input[type=range] {
+  padding: 0; border: none; background: none; box-shadow: none;
+  -webkit-appearance: none; appearance: none;
+  height: 20px; cursor: pointer;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  height: 4px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--accent2) 0px, var(--accent2) 6px,
+    transparent 6px, transparent 10px
+  );
+  border-radius: 2px;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent2);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  margin-top: -7px;
+  cursor: pointer;
+}
+input[type=range]::-moz-range-track {
+  height: 4px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--accent2) 0px, var(--accent2) 6px,
+    transparent 6px, transparent 10px
+  );
+  border-radius: 2px;
+}
+input[type=range]::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent2);
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
 select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 13px center; padding-right: 36px;
 }
 
+/* ========== ボタン（shadcn Button） ========== */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   padding: 10px 18px; border-radius: var(--radius); border: 1px solid transparent;
@@ -164,37 +217,81 @@ select {
   white-space: nowrap; position: relative; -webkit-tap-highlight-color: rgba(0,0,0,0);
   user-select: none; -webkit-user-select: none;
 }
+/* iOS タップ遅延解消 */
 a, button, [role="button"], select, label { touch-action: manipulation; }
-.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 1px 2px rgba(233,69,96,0.2); }
+.btn-primary {
+  background: var(--accent); color: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 1px 2px rgba(233,69,96,0.2);
+}
 .btn-primary:hover { filter: brightness(1.06); }
 .btn-primary:active { opacity: .88; transform: scale(.98); }
-.btn-secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
-body.therapist-mode .btn-secondary { background: #fff0f5; color: var(--primary); border-color: #fbcfe8; }
+
+/* secondary: shadcn secondary（ニュートラル） */
+.btn-secondary {
+  background: var(--surface); color: var(--text);
+  border-color: var(--border);
+}
+body.therapist-mode .btn-secondary {
+  background: #fff0f5; color: var(--primary);
+  border-color: #fbcfe8;
+}
 .btn-secondary:hover { background: var(--bg); }
 .btn-secondary:active { opacity: .85; }
+
+/* LINE */
 .btn-line { background: #06c755; color: #fff; border-color: #06c755; }
 .btn-line:hover { filter: brightness(1.05); }
-.btn-danger { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
+
+/* destructive */
+.btn-danger {
+  background: #fff1f2; color: #be123c;
+  border-color: #fecdd3;
+}
 .btn-danger:hover { background: #ffe4e6; }
-.btn-outline { background: transparent; color: var(--text); border-color: var(--border); }
+
+/* outline（shadcn outline variant） */
+.btn-outline {
+  background: transparent; color: var(--text);
+  border-color: var(--border);
+}
 .btn-outline:hover { background: var(--bg); }
-.btn-ghost { background: transparent; color: var(--muted); border-color: transparent; }
+
+/* ghost */
+.btn-ghost {
+  background: transparent; color: var(--muted);
+  border-color: transparent;
+}
 .btn-ghost:hover { background: var(--bg); color: var(--text); }
+
 .btn-sm { padding: 5px 11px; font-size: 12px; border-radius: 6px; min-height: 30px; }
 .btn:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }
+
+/* セラピストモードの主要ボタン：グラデーション */
 body.therapist-mode .btn-primary {
   background: linear-gradient(135deg, #e94560 0%, #f472b6 100%);
-  border: none; box-shadow: 0 4px 14px rgba(233,69,96,0.3);
+  border: none;
+  box-shadow: 0 4px 14px rgba(233,69,96,0.3);
 }
 body.therapist-mode .btn-primary:active { transform: scale(.97); }
 
+/* ========== テーブル（shadcn Table） ========== */
 .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--radius); border: 1px solid var(--border); }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
-th { background: var(--bg); padding: 9px 8px; text-align: left; font-weight: 600; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; letter-spacing: 0.03em; }
-td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; font-size: 12px; }
+th {
+  background: var(--bg); padding: 9px 8px;
+  text-align: left; font-weight: 600; font-size: 11px;
+  color: var(--muted); border-bottom: 1px solid var(--border);
+  white-space: nowrap; letter-spacing: 0.03em;
+}
+td {
+  padding: 9px 8px; border-bottom: 1px solid var(--border);
+  vertical-align: middle; font-size: 12px;
+}
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: var(--bg); }
 
+/* ========== グリッド ========== */
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
 @media (max-width: 480px) {
@@ -202,55 +299,113 @@ tbody tr:hover { background: var(--bg); }
   .grid3 { grid-template-columns: 1fr 1fr; }
 }
 
-.badge { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 9999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; border: 1px solid transparent; }
+/* ========== バッジ（shadcn Badge） ========== */
+.badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 9px; border-radius: 9999px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
 .badge-green { background: #dcfce7; color: #15803d; border-color: #bbf7d0; }
 .badge-red   { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
 .badge-gray  { background: var(--bg); color: var(--muted); border-color: var(--border); }
 
+/* ========== トグルスイッチ ========== */
+.toggle-wrap { display: flex; align-items: center; gap: 12px; cursor: pointer; padding: 10px 0; }
 .toggle-switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
 .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
-.toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 24px; transition: background .2s; }
-.toggle-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .2s; box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
+.toggle-slider {
+  position: absolute; inset: 0; background: var(--border);
+  border-radius: 24px; transition: background .2s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute;
+  width: 18px; height: 18px; left: 3px; top: 3px;
+  background: #fff; border-radius: 50%; transition: transform .2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+}
 .toggle-switch input:checked + .toggle-slider { background: var(--success); }
 .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
 
+/* ========== 選択カード ========== */
+.select-card {
+  border: 1.5px solid var(--border); border-radius: var(--radius);
+  padding: 12px 14px; cursor: pointer; transition: all .15s;
+  margin-bottom: 8px; display: flex; align-items: flex-start; gap: 10px;
+  background: var(--surface);
+}
+.select-card:hover { border-color: var(--accent); background: #fff5f7; }
+.select-card.selected { border-color: var(--accent); background: #fff5f7; box-shadow: 0 0 0 3px rgba(233,69,96,0.08); }
+.select-card input[type="radio"] { margin-top: 2px; flex-shrink: 0; accent-color: var(--accent); width: 16px; height: 16px; }
+
+/* ========== オプション行 ========== */
+.opt-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--border); }
+.opt-row:last-child { border-bottom: none; }
+.opt-label { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; flex: 1; }
+
+/* ========== オーバーレイ ========== */
 #overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 9999; align-items: center; justify-content: center; flex-direction: column; color: #fff; gap: 16px; font-size: 16px; backdrop-filter: blur(2px); }
 #overlay.show { display: flex; }
 .spinner { width: 34px; height: 34px; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ========== セクション ========== */
 .sec-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .sec-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
 
+/* ========== 日付ナビ ========== */
 .date-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
-.date-nav button { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 14px; cursor: pointer; font-size: 16px; touch-action: manipulation; transition: background .12s; }
+.date-nav button {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 8px 14px;
+  cursor: pointer; font-size: 16px; touch-action: manipulation;
+  transition: background .12s;
+}
 .date-nav button:hover { background: var(--bg); }
 .date-nav span { font-size: 15px; font-weight: 700; min-width: 110px; text-align: center; }
 
+/* ========== ログイン画面 ========== */
+#login-page { max-width: 360px; margin: 40px auto; padding: 16px; }
+#login-page .card { padding: 32px; text-align: center; }
+
+/* ========== フィルターバー ========== */
 .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: flex-end; }
 .filter-bar .form-group { margin-bottom: 0; flex: 1; min-width: 130px; }
 
+/* ========== その他 ========== */
+#course-price-display { font-size: 20px; font-weight: 700; color: var(--accent); margin-top: 4px; }
 .therapist-card { border-left: 3px solid var(--accent); }
 .therapist-card .card-value.pay { color: var(--success); }
 .therapist-card .card-value.store { color: var(--accent2); }
+.tab-active { background: rgba(233,69,96,0.07); }
 
+/* ========== セラピストモード：特別なカードと演出 ========== */
 body.therapist-mode .sec-title {
   background: linear-gradient(135deg, #e94560, #f472b6);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+body.therapist-mode .card:hover {
+  box-shadow: 0 6px 24px rgba(233,69,96,0.12);
+  border-color: #fce7f3;
+  transform: translateY(-1px);
+  transition: all .2s;
+}
 body.therapist-mode label { color: #9d6b8a; }
 body.therapist-mode th { background: #fff9fb; color: #9d6b8a; border-color: #fce7f3; }
 body.therapist-mode td { border-color: #fce7f3; }
 body.therapist-mode tbody tr:hover { background: #fff5f7; }
+body.therapist-mode .badge-green { background: #dcfce7; color: #15803d; }
 body.therapist-mode .toggle-switch input:checked + .toggle-slider { background: #f472b6; }
 body.therapist-mode .date-nav button { border-color: #fbcfe8; background: #fff0f5; }
 body.therapist-mode .date-nav button:hover { background: #fce7f3; }
 
+/* ========== iPhoneセーフエリア ========== */
 @supports (padding-bottom: env(safe-area-inset-bottom)) {
   #bottom-nav { padding-bottom: env(safe-area-inset-bottom); height: calc(var(--bottom-h) + env(safe-area-inset-bottom)); }
 }
 
+/* ========== GAS iframe対応 ========== */
 html, body { width: 100% !important; max-width: 100% !important; }
 .btn { min-height: 44px; }
 .btn-sm { min-height: 30px; }
@@ -259,14 +414,35 @@ td, th { font-size: 12px; }
 #bottom-nav button .icon { font-size: 24px; }
 #bottom-nav button { font-size: 11px; }
 
-.modal-overlay {
-  display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,0.55); z-index: 9400;
-  overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px;
+/* ========== モーダル共通（iOS対応） ========== */
+/* position:fixed モーダルのiOS対応 */
+div[id$="-modal"][style*="position:fixed"] > div:first-child,
+div[id$="-modal"] > div[style*="background:var(--surface)"],
+div[id$="-modal"] > div[style*="background: var(--surface)"] {
+  margin: auto;
 }
-.modal-overlay.show { display: block; }
-.modal-inner { display: flex; align-items: center; justify-content: center; min-height: 100%; }
+/* display:flexではなくdisplay:blockを使い、内部ラッパーでcentering */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 9400;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 16px;
+}
+.modal-overlay.show {
+  display: block;
+}
+.modal-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+}
 
+/* ========== Toastアニメーション（既存互換） ========== */
 @keyframes slideUp {
   from { transform: translateX(-50%) translateY(20px); opacity: 0; }
   to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
