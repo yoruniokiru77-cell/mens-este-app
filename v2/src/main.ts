@@ -15169,3 +15169,88 @@ function hideOverlay()  { document.getElementById('overlay').classList.remove('s
 // 起動
 // ============================================================
 window.addEventListener('DOMContentLoaded', init);
+
+// ============================================================
+// グローバル公開（ES module スコープから window に露出）
+// HTML の onclick="xxx()" は window.xxx を参照するため必須
+// ============================================================
+Object.assign(window, {
+  // ナビ・ページ遷移
+  showPage, openCashManagement,
+  // モーダル共通
+  _hideModal, _showModal,
+  // 予約
+  loadReservations, changeResvDate, resetResvForm,
+  submitReservation, saveAndSendLine, updateResvRow, cancelResvLine,
+  openEditResv, copyResvGuideByIdx, sendResvLineNotify,
+  _syncResvDatetime, checkInterval, checkAutoHonshimei,
+  openAdminSalesFromResv,
+  // 姫予約
+  openHimeModal, openHimeApproveModal, openRoomApproveModal,
+  // 売上
+  loadSalesReport, submitSalesEntry, calcSalesCoursePrice,
+  calcSalesTotal, clearSalesPrefill, setDateRangeMode,
+  // 給料
+  loadPayroll, changePayrollDay, switchPayrollTab,
+  openPayrollPreviewModal, copyPayroll, sendPayrollLine,
+  // 顧客
+  loadCustomerMaster, loadCustomerList, editMasterCustomer,
+  saveMasterCustomer, openCustomerDetail, addCustomerModalNG,
+  removeCustomerModalNG, deleteMemoById, startEditMemo,
+  cancelEditMemo, submitEditMemo, toggleHistDetail,
+  importCustomersFromSheet,
+  // セラピスト・LINE管理
+  saveLineUser, deleteLineUser, openLinkLineModal,
+  confirmLinkLine, sendReminderOne, sendReminderAll,
+  openMenuBackModal, saveLineEntry, selectDiscountMode,
+  hireTherapist, rejectTherapist, openTherapistProfileModal,
+  initTherapistProfile, saveTherapistProfile, selectTpCup,
+  // シフト
+  loadShiftCalendar, setCalView, changeCalendarMonth, changeCalendarWeek,
+  goToday, addShiftItem, deleteShiftRow, submitAllShifts,
+  loadCalUnsubmitted, loadAttendanceSummary, rejectShift,
+  openCalAddShift, _openCalShiftMenu, openEditShiftModal,
+  openAttendanceModal, deleteMyPendingShift, editMyPendingShift,
+  updatePendingShift, removePendingItem, restoreShiftToPending,
+  switchShiftTab, toggleShiftDeadline, clearShiftDeadline,
+  openShiftChangeRequest, approveShiftChangeRequest, rejectShiftChangeRequest,
+  submitDayoffRequest, approveDayoffRequest, rejectDayoffRequest,
+  loadDayoffPendingPanel, notifyAllApprovedShifts,
+  // マイ予約
+  loadMyReservations, confirmAllReservations,
+  // マスタ管理
+  switchMasterTab, openMenuForm, saveMenuMaster, deleteMenuMaster,
+  editMenuMaster, selectMenuType, openRoomForm, saveRoomMaster,
+  deleteRoomMaster, editRoomMaster, saveStoreSettings, saveMenuSettings,
+  loadInterviewMgmt, openInterviewModal, saveInterview, deleteInterview,
+  openManualForm, saveManualMaster, deleteManualMaster, editManualMaster,
+  filterManualView, openPaymentDestForm, savePaymentDestRow,
+  deletePaymentDestRow, loadAllStoreFixedSummary, openFixedCostForm,
+  saveFixedCostMasterRow, deleteFixedCostMasterRow, loadFixedCostPayments,
+  markFixedCostPaid, unmarkFixedCostPaid, addPastStoreInput,
+  openExpenseTplForm, saveExpenseTplRow, deleteExpenseTplRow,
+  saveStoreExpenseRow, deleteStoreExpenseRow, switchSeTab,
+  switchSeFixedSub, onSePresetChange, onSeTemplateChange, toggleIvExp,
+  // ルーム・チェックアウト
+  loadCheckoutPage, loadRoomAvailability, submitCheckout,
+  showRoomInfo, openChecklistForm, closeChecklistForm,
+  saveChecklistItem, editChecklistItem, deleteChecklistItem,
+  loadChecklistForRoom, toggleRoomCollection, markCheckedCollected,
+  // 金庫・回収
+  loadCollection, toggleOtherSign,
+  // 経費
+  saveStoreDropBalance,
+  // スカウト
+  loadScoutSummary, addScoutCompany,
+  deleteScoutCompany, openScoutModal, selectScoutCompany,
+  saveTherapistScout, removeTherapistScout, toggleScoutNewForm,
+  copyScoutDetail, toggleScoutRow,
+  // 連携
+  openSiteSyncModal,
+  // ブロードキャスト
+  sendBroadcastMessage, broadcastSelectAll,
+  // その他
+  calcCoursePrice, uncheckOptNone, selectOptType,
+  showOverlay, hideOverlay,
+});
+
