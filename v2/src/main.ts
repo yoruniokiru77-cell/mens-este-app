@@ -1,6 +1,7 @@
 import './style.css';
 import { ctx, sb } from './lib/supabase';
 import { renderPayrollPage, initPayroll } from './pages/payroll';
+import { renderReservationPage, initReservation } from './pages/reservation';
 
 // ── 認証状態 ──────────────────────────────────────────
 let storeName = '';
@@ -19,7 +20,8 @@ export function showPage(name: string) {
   if (bnav) bnav.classList.add('active');
 
   // ページ初期化
-  if (name === 'payroll') initPayroll();
+  if (name === 'payroll')      initPayroll();
+  if (name === 'reservation')  initReservation();
 }
 
 // ── シェルHTML ──────────────────────────────────────
@@ -89,7 +91,7 @@ function renderShell() {
 
       <!-- ページコンテナ -->
       <div id="page-payroll" class="page">${renderPayrollPage()}</div>
-      <div id="page-reservation" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">予約管理（実装中）</div></div>
+      <div id="page-reservation" class="page">${renderReservationPage()}</div>
       <div id="page-sales-report" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">売上確認（実装中）</div></div>
       <div id="page-shift-calendar" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">シフト表（実装中）</div></div>
       <div id="page-customer-master" class="page"><div style="padding:40px;text-align:center;color:var(--muted)">顧客マスタ（実装中）</div></div>
