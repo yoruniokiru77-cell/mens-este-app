@@ -11,7 +11,7 @@ export async function apiGet(action, params = {}) {
     // ===== セラピスト =====
     case 'getTherapists': {
       const { data, error } = await _sb.from('therapists')
-        .select('*').eq('store_id', STORE_ID).eq('active', true).eq('is_interview', false).eq('is_admin', false).order('registered_at');
+        .select('*').eq('store_id', window.STORE_ID).eq('active', true).eq('is_interview', false).eq('is_admin', false).order('registered_at');
       if (error) throw new Error(error.message);
       return (data || []).map(t => ({
         name:        t.name,
@@ -39,7 +39,7 @@ export async function apiGet(action, params = {}) {
     case 'getTherapistProfiles': {
       const { data, error } = await _sb.from('therapists')
         .select('id,name,age,cup,real_name,profile_notes')
-        .eq('store_id', STORE_ID).eq('active', true).eq('is_interview', false).eq('is_admin', false).order('registered_at');
+        .eq('store_id', window.STORE_ID).eq('active', true).eq('is_interview', false).eq('is_admin', false).order('registered_at');
       if (error) throw new Error(error.message);
       return data || [];
     }
@@ -53,7 +53,7 @@ export async function apiGet(action, params = {}) {
 
     case 'getLineUsers': {
       const { data, error } = await _sb.from('therapists')
-        .select('*').eq('store_id', STORE_ID).eq('active', true).order('registered_at');
+        .select('*').eq('store_id', window.STORE_ID).eq('active', true).order('registered_at');
       if (error) throw new Error(error.message);
       return (data || []).map(t => ({
         name:        t.name,
@@ -81,9 +81,9 @@ export async function apiGet(action, params = {}) {
 
     case 'getInitialData': {
       const [tRes, rRes, mRes] = await Promise.all([
-        _sb.from('therapists').select('*').eq('store_id', STORE_ID).eq('active', true).eq('is_admin', false).order('registered_at'),
-        _sb.from('rooms').select('*').eq('store_id', STORE_ID).eq('active', true).order('display_order'),
-        _sb.from('menus').select('*').eq('store_id', STORE_ID).eq('active', true).order('display_order')
+        _sb.from('therapists').select('*').eq('store_id', window.STORE_ID).eq('active', true).eq('is_admin', false).order('registered_at'),
+        _sb.from('rooms').select('*').eq('store_id', window.STORE_ID).eq('active', true).order('display_order'),
+        _sb.from('menus').select('*').eq('store_id', window.STORE_ID).eq('active', true).order('display_order')
       ]);
       const therapists = (tRes.data || []).map((t,i) => ({
         name: t.name, userId: t.line_user_id||'', displayName: t.line_display_name||'',
@@ -108,13 +108,13 @@ export async function apiGet(action, params = {}) {
 
     case 'getTherapistInterval': {
       const { data } = await _sb.from('therapists')
-        .select('interval_min').eq('store_id', STORE_ID).eq('name', params.name).single();
+        .select('interval_min').eq('store_id', window.STORE_ID).eq('name', params.name).single();
       return data ? data.interval_min : 30;
     }
 
     case 'getTherapistCourseBack': {
       const { data } = await _sb.from('therapists')
-        .select('course_back').eq('store_id', STORE_ID).eq('name', params.name).single();
+        .select('course_back').eq('store_id', window.STORE_ID).eq('name', params.name).single();
       return data && data.course_back !== null ? Number(data.course_back) : 0.5;
     }
 
@@ -130,7 +130,7 @@ export async function apiGet(action, params = {}) {
       const to = nextStr + 'T02:59:59+09:00';
       const { data, error } = await _sb.from('reservations')
         .select('*, therapists!reservations_therapist_id_fkey(interval_min)')
-        .eq('store_id', STORE_ID)
+        .eq('store_id', window.STORE_ID)
         .gte('date', from).lte('date', to)
         .order('date');
       if (error) throw new Error(error.message);
@@ -150,7 +150,7 @@ export async function apiGet(action, params = {}) {
         // reservationsから集計（キャンセル除く・日付単位で重複排除）
         const { data: resvHist } = await _sb.from('reservations')
           .select('customer_tel, therapist_name, date')
-          .eq('store_id', STORE_ID)
+          .eq('store_id', window.STORE_ID)
           .neq('status', 'cancelled')
           .in('customer_tel', allTels);
         (resvHist || []).forEach(r => {
@@ -213,7 +213,7 @@ export async function apiGet(action, params = {}) {
       try {
         if (custTel) {
           const { data: prevSales } = await _sb.from('sales')
-            .select('id').eq('store_id', STORE_ID)
+            .select('id').eq('store_id', window.STORE_ID)
             .eq('customer_tel', custTel)
             .limit(1);
           isNewCustomer = !prevSales || prevSales.length === 0;
@@ -224,7 +224,7 @@ export async function apiGet(action, params = {}) {
 
       const _isUnassigned = params.therapist === '__unassigned__';
       const { error } = await _sb.from('reservations').insert({
-        store_id:        STORE_ID,
+        store_id:        window.STORE_ID,
         therapist_name:  _isUnassigned ? null : params.therapist,
         therapist_id:    _isUnassigned ? null : await _getTherapistId(params.therapist),
         customer_name:   params.customer,
@@ -287,7 +287,7 @@ export async function apiGet(action, params = {}) {
       // tel優先、なければcustomer_noで顧客特定
       let cust = null;
       if (tel) {
-        const { data } = await _sb.from('customers').select('id,cancel_count').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
+        const { data } = await _sb.from('customers').select('id,cancel_count').eq('store_id', window.STORE_ID).ilike('tel', tel).maybeSingle();
         cust = data;
       }
       if (cust) {
@@ -307,7 +307,7 @@ export async function apiGet(action, params = {}) {
         if (resvData) custTel = resvData.customer_tel || '';
       }
       const salesData = {
-        store_id:       STORE_ID,
+        store_id:       window.STORE_ID,
         therapist_name: params.therapist,
         therapist_id:   await _getTherapistId(params.therapist),
         date:           params.date ? new Date(params.date).toISOString() : new Date().toISOString(),
@@ -327,7 +327,7 @@ export async function apiGet(action, params = {}) {
       // reservation_idがある場合は既存売上を確認してUPDATE/INSERT分岐
       if (params.reservationId) {
         const { data: existing } = await _sb.from('sales')
-          .select('id').eq('store_id', STORE_ID)
+          .select('id').eq('store_id', window.STORE_ID)
           .eq('reservation_id', params.reservationId).maybeSingle();
         if (existing) {
           // 既存売上を更新
@@ -335,7 +335,7 @@ export async function apiGet(action, params = {}) {
           if (error) throw new Error(error.message);
           // 予約テーブルのcourse_minも同期（セラピストがコース変更した場合に管理者側も反映）
           await _sb.from('reservations').update({ course_min: salesData.course_min })
-            .eq('id', params.reservationId).eq('store_id', STORE_ID);
+            .eq('id', params.reservationId).eq('store_id', window.STORE_ID);
           return { ok: true, updated: true };
         }
       }
@@ -345,13 +345,13 @@ export async function apiGet(action, params = {}) {
       // 予約テーブルのcourse_minも同期
       if (params.reservationId) {
         await _sb.from('reservations').update({ course_min: salesData.course_min })
-          .eq('id', params.reservationId).eq('store_id', STORE_ID);
+          .eq('id', params.reservationId).eq('store_id', window.STORE_ID);
       }
       return { ok: true, updated: false };
     }
 
     case 'getSalesData': {
-      let q = _sb.from('sales').select('*').eq('store_id', STORE_ID).order('date', { ascending: false });
+      let q = _sb.from('sales').select('*').eq('store_id', window.STORE_ID).order('date', { ascending: false });
       if (params.startDate) q = q.gte('date', params.startDate + 'T00:00:00+09:00');
       if (params.endDate)   q = q.lte('date', params.endDate   + 'T23:59:59+09:00');
       const { data, error } = await q;
@@ -379,7 +379,7 @@ export async function apiGet(action, params = {}) {
     }
 
     case 'getTherapistsFromSales': {
-      const { data } = await _sb.from('sales').select('therapist_name').eq('store_id', STORE_ID);
+      const { data } = await _sb.from('sales').select('therapist_name').eq('store_id', window.STORE_ID);
       return [...new Set((data||[]).map(r => r.therapist_name).filter(Boolean))];
     }
 
@@ -394,13 +394,13 @@ export async function apiGet(action, params = {}) {
           endDt.setDate(endDt.getDate() + 1);
           endDt.setHours(2, 59, 59, 0);
           return _sb.from('sales').select('*')
-            .eq('store_id', STORE_ID)
+            .eq('store_id', window.STORE_ID)
             .gte('date', startDate + 'T03:00:00+09:00')
             .lte('date', endDt.toISOString())
             .order('date');
         })(),
-        _sb.from('therapists').select('id,name,course_back,option_back,has_guarantee,hourly_rate,daily_guarantee,discount_mode,parking_fee,extension_back,extension_back_honshimei').eq('store_id', STORE_ID).eq('active', true),
-        _sb.from('store_settings').select('*').eq('store_id', STORE_ID).single()
+        _sb.from('therapists').select('id,name,course_back,option_back,has_guarantee,hourly_rate,daily_guarantee,discount_mode,parking_fee,extension_back,extension_back_honshimei').eq('store_id', window.STORE_ID).eq('active', true),
+        _sb.from('store_settings').select('*').eq('store_id', window.STORE_ID).single()
       ]);
       const tMap = {};
       (therapistRes.data || []).forEach(t => { tMap[t.name] = t; });
@@ -412,7 +412,7 @@ export async function apiGet(action, params = {}) {
       let menuBackMap = {}; // key: therapist_id + '_' + menu_id
       if (therapistIds.length) {
         const { data: menuBacks } = await _sb.from('therapist_menu_backs')
-          .select('*').eq('store_id', STORE_ID).in('therapist_id', therapistIds);
+          .select('*').eq('store_id', window.STORE_ID).in('therapist_id', therapistIds);
         (menuBacks || []).forEach(b => {
           menuBackMap[b.therapist_id + '_' + b.menu_id] = {
             other:    b.back_amount,
@@ -423,7 +423,7 @@ export async function apiGet(action, params = {}) {
 
       // メニューマスタ（コース: course_min → menu_id / オプション: name → menu_id）
       const { data: menuData } = await _sb.from('menus').select('id,name,duration_min,type,extension_price')
-        .eq('store_id', STORE_ID).eq('active', true);
+        .eq('store_id', window.STORE_ID).eq('active', true);
       const menuByMin  = {}; // course_min → menu_id（コース用）
       const menuByName = {}; // name → menu_id（オプション用）
       (menuData || []).forEach(m => {
@@ -457,7 +457,7 @@ export async function apiGet(action, params = {}) {
       if (custTels.length) {
         const { data: prevSales } = await _sb.from('sales')
           .select('customer_tel')
-          .eq('store_id', STORE_ID)
+          .eq('store_id', window.STORE_ID)
           .lt('date', startDate + 'T00:00:00+09:00')
           .in('customer_tel', custTels);
         (prevSales || []).forEach(r => { if (r.customer_tel) prevSalesTels.add(r.customer_tel); });
@@ -469,7 +469,7 @@ export async function apiGet(action, params = {}) {
       resvEndDt.setHours(2, 59, 59, 0);
       const resvQuery = await _sb.from('reservations')
         .select('therapist_name, date')
-        .eq('store_id', STORE_ID)
+        .eq('store_id', window.STORE_ID)
         .eq('status', 'active')
         .gte('date', startDate + 'T03:00:00+09:00')
         .lte('date', resvEndDt.toISOString());
@@ -569,7 +569,7 @@ export async function apiGet(action, params = {}) {
       const guarTherapists = (therapistRes.data || []).filter(t => t.has_guarantee && (t.hourly_rate || t.daily_guarantee));
       if (guarTherapists.length) {
         const shiftsRes = await _sb.from('shifts').select('therapist_name, date, start_time, end_time')
-          .eq('store_id', STORE_ID).eq('status', 'approved')
+          .eq('store_id', window.STORE_ID).eq('status', 'approved')
           .gte('date', startDate).lte('date', endDate);
         (shiftsRes.data || []).forEach(s => {
           const dateLabel = s.date.replace(/-/g, '/');
@@ -601,7 +601,7 @@ export async function apiGet(action, params = {}) {
 
     // ===== 経費 =====
     case 'getExpenses': {
-      let q = _sb.from('expenses').select('*').eq('store_id', STORE_ID).order('date', { ascending: false });
+      let q = _sb.from('expenses').select('*').eq('store_id', window.STORE_ID).order('date', { ascending: false });
       if (params.startDate)  q = q.gte('date', params.startDate);
       if (params.endDate)    q = q.lte('date', params.endDate);
       if (params.therapist)  q = q.eq('therapist_name', params.therapist);
@@ -614,7 +614,7 @@ export async function apiGet(action, params = {}) {
 
     case 'saveStoreExpense': {
       const { error } = await _sb.from('expenses').insert({
-        store_id:       STORE_ID,
+        store_id:       window.STORE_ID,
         date:           params.date,
         category:       params.category,
         amount:         Number(params.amount),
@@ -628,7 +628,7 @@ export async function apiGet(action, params = {}) {
     case 'saveExpense': {
       // 同じ日付・カテゴリ・セラピストのレコードがあればUPDATE、なければINSERT
       const { data: existing } = await _sb.from('expenses')
-        .select('id').eq('store_id', STORE_ID)
+        .select('id').eq('store_id', window.STORE_ID)
         .eq('date', params.date).eq('category', params.category)
         .eq('therapist_name', params.therapist || '').maybeSingle();
       if (existing) {
@@ -638,7 +638,7 @@ export async function apiGet(action, params = {}) {
         if (error) throw new Error(error.message);
       } else {
         const { error } = await _sb.from('expenses').insert({
-          store_id:       STORE_ID,
+          store_id:       window.STORE_ID,
           date:           params.date,
           category:       params.category,
           amount:         Number(params.amount),
@@ -652,7 +652,7 @@ export async function apiGet(action, params = {}) {
 
     case 'deleteExpenseByCategory': {
       await _sb.from('expenses').delete()
-        .eq('store_id', STORE_ID)
+        .eq('store_id', window.STORE_ID)
         .eq('date', params.date)
         .eq('category', params.category)
         .eq('therapist_name', params.therapist || '');
@@ -668,7 +668,7 @@ export async function apiGet(action, params = {}) {
     // ===== 固定費マスタ =====
     case 'getFixedCostMasters': {
       const { data, error } = await _sb.from('store_fixed_costs')
-        .select('*').eq('store_id', STORE_ID).eq('active', true)
+        .select('*').eq('store_id', window.STORE_ID).eq('active', true)
         .order('category').order('name');
       if (error) throw new Error(error.message);
       return data || [];
@@ -676,7 +676,7 @@ export async function apiGet(action, params = {}) {
 
     case 'saveFixedCostMaster': {
       const row = {
-        store_id:               STORE_ID,
+        store_id:               window.STORE_ID,
         name:                   params.name,
         category:               params.category,
         room_id:                params.roomId   || null,
@@ -707,7 +707,7 @@ export async function apiGet(action, params = {}) {
 
     case 'getFixedCostPayments': {
       const { data, error } = await _sb.from('fixed_cost_payments')
-        .select('*').eq('store_id', STORE_ID).eq('period', params.period);
+        .select('*').eq('store_id', window.STORE_ID).eq('period', params.period);
       if (error) throw new Error(error.message);
       return data || [];
     }
@@ -716,7 +716,7 @@ export async function apiGet(action, params = {}) {
       const { data: existing } = await _sb.from('fixed_cost_payments')
         .select('id').eq('fixed_cost_id', params.fixedCostId).eq('period', params.period).maybeSingle();
       const row = {
-        store_id:      STORE_ID,
+        store_id:      window.STORE_ID,
         fixed_cost_id: params.fixedCostId,
         period:        params.period,
         amount:        Number(params.amount),
@@ -815,7 +815,7 @@ export async function apiGet(action, params = {}) {
       const items = (params.items || []);
       const therapistId = await _getTherapistId(params.therapist);
       const rows = items.map(item => ({
-        store_id:       STORE_ID,
+        store_id:       window.STORE_ID,
         therapist_id:   therapistId,
         therapist_name: params.therapist,
         date:           item.date,
@@ -831,7 +831,7 @@ export async function apiGet(action, params = {}) {
     }
 
     case 'getShifts': {
-      let q = _sb.from('shifts').select('*').eq('store_id', STORE_ID).order('date').order('start_time');
+      let q = _sb.from('shifts').select('*').eq('store_id', window.STORE_ID).order('date').order('start_time');
       if (params.therapist)  q = q.eq('therapist_name', params.therapist);
       if (params.status)     q = q.eq('status', params.status);
       if (params.date)       q = q.eq('date', params.date);
@@ -875,7 +875,7 @@ export async function apiGet(action, params = {}) {
       const { error } = await _sb.from('shifts').update({
         status: 'approved',
         approved_at: new Date().toISOString()
-      }).eq('id', row).eq('store_id', STORE_ID);
+      }).eq('id', row).eq('store_id', window.STORE_ID);
       if (error) throw new Error('承認エラー: ' + error.message);
       // 更新確認
       const { data: check } = await _sb.from('shifts').select('status').eq('id', row).single();
@@ -890,7 +890,7 @@ export async function apiGet(action, params = {}) {
         status: 'rejected',
         approved_at: new Date().toISOString(),
         memo: params.reason || null
-      }).eq('id', params.row).eq('store_id', STORE_ID);
+      }).eq('id', params.row).eq('store_id', window.STORE_ID);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
@@ -900,13 +900,13 @@ export async function apiGet(action, params = {}) {
         status: 'pending',
         approved_at: null,
         memo: null
-      }).eq('id', params.row).eq('store_id', STORE_ID);
+      }).eq('id', params.row).eq('store_id', window.STORE_ID);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
 
     case 'deleteShift': {
-      const { error } = await _sb.from('shifts').delete().eq('id', params.row).eq('store_id', STORE_ID);
+      const { error } = await _sb.from('shifts').delete().eq('id', params.row).eq('store_id', window.STORE_ID);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
@@ -917,7 +917,7 @@ export async function apiGet(action, params = {}) {
       // 同日にすでに未却下のお休み申請があれば重複防止
       const { data: dupCheck } = await _sb.from('shifts')
         .select('id, status')
-        .eq('store_id', STORE_ID)
+        .eq('store_id', window.STORE_ID)
         .eq('therapist_name', params.therapist)
         .eq('date', params.date)
         .eq('is_dayoff_request', true)
@@ -925,7 +925,7 @@ export async function apiGet(action, params = {}) {
         .maybeSingle();
       if (dupCheck) return { ok: false, message: 'すでにお休み申請済みです' };
       const { error } = await _sb.from('shifts').insert({
-        store_id:          STORE_ID,
+        store_id:          window.STORE_ID,
         therapist_id:      therapistId,
         therapist_name:    params.therapist,
         date:              params.date,
@@ -944,7 +944,7 @@ export async function apiGet(action, params = {}) {
       // 管理者向け: 承認待ちのお休み申請一覧
       const { data, error } = await _sb.from('shifts')
         .select('*')
-        .eq('store_id', STORE_ID)
+        .eq('store_id', window.STORE_ID)
         .eq('is_dayoff_request', true)
         .eq('status', 'pending')
         .order('date', { ascending: true });
@@ -967,11 +967,11 @@ export async function apiGet(action, params = {}) {
         status:          'approved',
         attendance_type: attType,
         approved_at:     new Date().toISOString()
-      }).eq('id', params.row).eq('store_id', STORE_ID);
+      }).eq('id', params.row).eq('store_id', window.STORE_ID);
       if (error) throw new Error(error.message);
       // 同日・同セラピストの他の承認済みシフトにも attendance_type を反映
       await _sb.from('shifts').update({ attendance_type: attType })
-        .eq('store_id', STORE_ID)
+        .eq('store_id', window.STORE_ID)
         .eq('therapist_name', params.therapist)
         .eq('date', shiftDateStr)
         .eq('status', 'approved')
@@ -983,7 +983,7 @@ export async function apiGet(action, params = {}) {
       const { error } = await _sb.from('shifts').update({
         status: 'rejected',
         memo:   params.reason || null
-      }).eq('id', params.row).eq('store_id', STORE_ID);
+      }).eq('id', params.row).eq('store_id', window.STORE_ID);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
@@ -1000,7 +1000,7 @@ export async function apiGet(action, params = {}) {
         if (shiftData) {
           await _sb.from('reservations')
             .update({ status: 'cancelled' })
-            .eq('store_id', STORE_ID)
+            .eq('store_id', window.STORE_ID)
             .eq('therapist_name', shiftData.therapist_name)
             .gte('date', shiftData.date + 'T00:00:00+09:00')
             .lte('date', shiftData.date + 'T23:59:59+09:00')
@@ -1036,7 +1036,7 @@ export async function apiGet(action, params = {}) {
 
     case 'addInterviewShift': {
       const { data: shiftData, error } = await _sb.from('shifts').insert({
-        store_id:       STORE_ID,
+        store_id:       window.STORE_ID,
         therapist_name: params.therapist,
         date:           params.date.replace(/\//g, '-'),
         start_time:     _normalizeTime(params.startTime),
@@ -1055,7 +1055,7 @@ export async function apiGet(action, params = {}) {
     case 'getMenuBacks': {
       const { therapistId } = params;
       const { data, error } = await _sb.from('therapist_menu_backs')
-        .select('*').eq('store_id', STORE_ID).eq('therapist_id', therapistId);
+        .select('*').eq('store_id', window.STORE_ID).eq('therapist_id', therapistId);
       if (error) throw new Error(error.message);
       return data || [];
     }
@@ -1065,12 +1065,12 @@ export async function apiGet(action, params = {}) {
       const { therapistId, backs } = params;
       // 既存を全削除して再INSERT（upsert方式）
       await _sb.from('therapist_menu_backs')
-        .delete().eq('store_id', STORE_ID).eq('therapist_id', therapistId);
+        .delete().eq('store_id', window.STORE_ID).eq('therapist_id', therapistId);
       const inserts = backs
         .filter(b => (b.back_amount !== '' && b.back_amount !== null) ||
                      (b.back_amount_honshimei !== '' && b.back_amount_honshimei !== null && b.back_amount_honshimei !== undefined))
         .map(b => ({
-          store_id:     STORE_ID,
+          store_id:     window.STORE_ID,
           therapist_id: therapistId,
           menu_id:      b.menu_id,
           back_amount:  (b.back_amount !== '' && b.back_amount !== null) ? Number(b.back_amount) : null,
@@ -1088,10 +1088,10 @@ export async function apiGet(action, params = {}) {
       const { reservationId, options } = params;
       if (!reservationId) return { ok: true };
       await _sb.from('sale_options').delete()
-        .eq('store_id', STORE_ID).eq('reservation_id', reservationId);
+        .eq('store_id', window.STORE_ID).eq('reservation_id', reservationId);
       if (options && options.length > 0) {
         const inserts = options.map(o => ({
-          store_id:       STORE_ID,
+          store_id:       window.STORE_ID,
           reservation_id: reservationId,
           menu_id:        o.menuId || null,
           menu_name:      o.name  || '',
@@ -1113,9 +1113,9 @@ export async function apiGet(action, params = {}) {
       const monStr = fmtD(mon), sunStr = fmtD(sun);
 
       const [tRes, sRes] = await Promise.all([
-        _sb.from('therapists').select('name,line_user_id').eq('store_id', STORE_ID).eq('active', true),
+        _sb.from('therapists').select('name,line_user_id').eq('store_id', window.STORE_ID).eq('active', true),
         _sb.from('shifts').select('therapist_name,status')
-          .eq('store_id', STORE_ID).gte('date', monStr).lte('date', sunStr)
+          .eq('store_id', window.STORE_ID).gte('date', monStr).lte('date', sunStr)
       ]);
       const all           = (tRes.data || []).filter(t => t.name && t.name !== '管理者');
       const submittedSet  = new Set((sRes.data || []).map(s => s.therapist_name));
@@ -1137,8 +1137,8 @@ case 'sendShiftReminder': {
     const monStr = fmtD(mon), sunStr = fmtD(sun);
     const weekLabel = monStr.replace(/-/g,'/') + '〜' + sunStr.replace(/-/g,'/');
     const [tRes, sRes] = await Promise.all([
-      _sb.from('therapists').select('name,line_user_id').eq('store_id', STORE_ID).eq('active', true),
-      _sb.from('shifts').select('therapist_name,status').eq('store_id', STORE_ID).gte('date', monStr).lte('date', sunStr)
+      _sb.from('therapists').select('name,line_user_id').eq('store_id', window.STORE_ID).eq('active', true),
+      _sb.from('shifts').select('therapist_name,status').eq('store_id', window.STORE_ID).gte('date', monStr).lte('date', sunStr)
     ]);
     const submittedSet = new Set((sRes.data || []).map(s => s.therapist_name));
     const targets = (tRes.data || []).filter(t => t.name && t.name !== '管理者' && !submittedSet.has(t.name) && t.line_user_id);
@@ -1174,7 +1174,7 @@ case 'sendReminderToOne': {
       const name = String(params.name || '').trim();
       // 内部IDは参照用のみ（検索には使わない）
       const internalId = params.internalId || null;
-      let q = _sb.from('customers').select('*').eq('store_id', STORE_ID);
+      let q = _sb.from('customers').select('*').eq('store_id', window.STORE_ID);
       if (tel && tel.length >= 4)  q = q.ilike('tel', '%' + tel + '%');
       else if (name)               q = q.ilike('name', name);
       else if (internalId)         q = q.eq('id', internalId);
@@ -1200,7 +1200,7 @@ case 'sendReminderToOne': {
       // 電話番号で重複チェック（電話番号がある場合）
       if (tel) {
         const { data: dup } = await _sb.from('customers').select('id,customer_no,name')
-          .eq('store_id', STORE_ID).ilike('tel', '%' + tel + '%').maybeSingle();
+          .eq('store_id', window.STORE_ID).ilike('tel', '%' + tel + '%').maybeSingle();
         if (dup) {
           // 既存顧客 → 名前のみ更新して返す（重複登録はしない）
           return { ok: true, customerNo: String(dup.customer_no || ''), updated: true, existed: true };
@@ -1209,7 +1209,7 @@ case 'sendReminderToOne': {
 
       // 新規登録（customer_noは採番しない）
       const { error: insErr } = await _sb.from('customers').insert({
-        store_id: STORE_ID,
+        store_id: window.STORE_ID,
         name,
         tel: tel || null
       });
@@ -1222,7 +1222,7 @@ case 'sendReminderToOne': {
       // 電話番号で顧客を特定
       let ex = null;
       if (tel) {
-        const { data } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).ilike('tel', '%' + tel + '%').maybeSingle();
+        const { data } = await _sb.from('customers').select('id').eq('store_id', window.STORE_ID).ilike('tel', '%' + tel + '%').maybeSingle();
         ex = data;
       }
       if (!ex) return { ok: false, error: '顧客が見つかりません' };
@@ -1251,14 +1251,14 @@ case 'sendReminderToOne': {
         // 検索時は全件対象（DB側でフィルタ）
         const { data: d, error: e, count: c } = await _sb.from('customers')
           .select('*', { count: 'exact' })
-          .eq('store_id', STORE_ID)
+          .eq('store_id', window.STORE_ID)
           .or(`name.ilike.%${search}%,tel.ilike.%${search}%`)
           .order('name');
         data = d; error = e; count = c;
       } else {
         const { data: d, error: e, count: c } = await _sb.from('customers')
           .select('*', { count: 'exact' })
-          .eq('store_id', STORE_ID).order('name').range(from, to);
+          .eq('store_id', window.STORE_ID).order('name').range(from, to);
         data = d; error = e; count = c;
       }
       if (error) throw new Error(error.message);
@@ -1288,7 +1288,7 @@ case 'sendReminderToOne': {
       // 電話番号またはcustomer_noで顧客を特定
       let custData = null;
       if (tel) {
-        const { data } = await _sb.from('customers').select('*').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
+        const { data } = await _sb.from('customers').select('*').eq('store_id', window.STORE_ID).ilike('tel', tel).maybeSingle();
         custData = data;
       }
       // 来店履歴：電話番号ベース
@@ -1297,7 +1297,7 @@ case 'sendReminderToOne': {
         (async () => {
           if (lookupTel) {
             let q = _sb.from('reservations').select('*')
-              .eq('store_id', STORE_ID)
+              .eq('store_id', window.STORE_ID)
               .ilike('customer_tel', lookupTel)
               .neq('status', 'cancelled')
               .order('date', { ascending: false }).limit(30);
@@ -1333,7 +1333,7 @@ case 'sendReminderToOne': {
       if (resvIds.length) {
         const { data: saleOpts } = await _sb.from('sale_options')
           .select('reservation_id, menu_name, amount')
-          .eq('store_id', STORE_ID).in('reservation_id', resvIds);
+          .eq('store_id', window.STORE_ID).in('reservation_id', resvIds);
         (saleOpts || []).forEach(o => {
           if (!optionsMap[o.reservation_id]) optionsMap[o.reservation_id] = [];
           optionsMap[o.reservation_id].push({ name: o.menu_name, amount: Number(o.amount) });
@@ -1355,7 +1355,7 @@ case 'sendReminderToOne': {
       let cancelHistory = [];
       if (params.includeCancel && lookupTel) {
         const cancelQ = _sb.from('reservations').select('date,course_min,therapist_name,cancel_reason,memo')
-              .eq('store_id', STORE_ID).ilike('customer_tel', lookupTel)
+              .eq('store_id', window.STORE_ID).ilike('customer_tel', lookupTel)
               .eq('status', 'cancelled').order('date', { ascending: false }).limit(20);
         const { data: cancelData } = await cancelQ;
         const CANCEL_REASON_LABEL = { customer: 'お客様都合', therapist: 'セラピスト都合', other: 'その他' };
@@ -1383,13 +1383,13 @@ case 'sendReminderToOne': {
       // customerId(UUID)優先 → tel → customer_noの順で顧客特定
       let custId = customerId || null;
       if (!custId && tel) {
-        const { data: c } = await _sb.from('customers').select('id').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
+        const { data: c } = await _sb.from('customers').select('id').eq('store_id', window.STORE_ID).ilike('tel', tel).maybeSingle();
         if (c) custId = c.id;
       }
       // 顧客マスタ未登録（tel有り）→ 自動登録してIDを取得
       if (!custId && tel) {
         const { data: newC, error: insErr } = await _sb.from('customers').insert({
-          store_id: STORE_ID, tel: tel,
+          store_id: window.STORE_ID, tel: tel,
           name: params.customerName || tel, status: 'normal'
         }).select('id').single();
         if (!insErr && newC) custId = newC.id;
@@ -1426,7 +1426,7 @@ case 'sendReminderToOne': {
       const therapist = params.therapist || '';
       const { data: resvData } = await _sb.from('reservations')
         .select('customer_no, customer_name, customer_tel, date')
-        .eq('store_id', STORE_ID).eq('therapist_name', therapist)
+        .eq('store_id', window.STORE_ID).eq('therapist_name', therapist)
         .neq('status', 'cancelled');
       const custMap = {};
       (resvData || []).forEach(r => {
@@ -1451,7 +1451,7 @@ case 'sendReminderToOne': {
       const tels = [...new Set(Object.values(custMap).map(c => c.tel).filter(Boolean))];
       if (tels.length) {
         const { data: custByTel } = await _sb.from('customers')
-          .select('tel,name,id').eq('store_id', STORE_ID).in('tel', tels);
+          .select('tel,name,id').eq('store_id', window.STORE_ID).in('tel', tels);
         (custByTel || []).forEach(c => {
           if (custMap[c.tel]) {
             custMap[c.tel].name       = c.name || custMap[c.tel].name;
@@ -1484,7 +1484,7 @@ case 'sendReminderToOne': {
       // telで検索（telなしの場合は顧客特定不能のため素通り）
       let custData = null;
       if (tel) {
-        const { data } = await _sb.from('customers').select('status,ng_therapists').eq('store_id', STORE_ID).ilike('tel', tel).maybeSingle();
+        const { data } = await _sb.from('customers').select('status,ng_therapists').eq('store_id', window.STORE_ID).ilike('tel', tel).maybeSingle();
         custData = data;
       }
       if (!custData) return { allowed: true, reason: '' };
@@ -1517,24 +1517,24 @@ case 'sendReminderToOne': {
       if (params.parkingFee      !== undefined) upd.parking_fee       = params.parkingFee === '' || params.parkingFee === null ? null : Number(params.parkingFee);
       if (params.extensionBack   !== undefined) upd.extension_back             = params.extensionBack   === '' || params.extensionBack   === null ? null : Number(params.extensionBack);
       if (params.extensionBackHon !== undefined) upd.extension_back_honshimei  = params.extensionBackHon === '' || params.extensionBackHon === null ? null : Number(params.extensionBackHon);
-      const { error } = await _sb.from('therapists').update(upd).eq('store_id', STORE_ID).eq('line_user_id', params.userId);
+      const { error } = await _sb.from('therapists').update(upd).eq('store_id', window.STORE_ID).eq('line_user_id', params.userId);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
 
     case 'deactivateTherapist': {
       // active=false にして非表示（物理削除はしない）
-      const { error } = await _sb.from('therapists').update({ active: false }).eq('store_id', STORE_ID).eq('line_user_id', params.userId);
+      const { error } = await _sb.from('therapists').update({ active: false }).eq('store_id', window.STORE_ID).eq('line_user_id', params.userId);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
 
     case 'saveManualLineEntry': {
       // 同名チェック
-      const dupCheck = await _sb.from('therapists').select('id').eq('store_id', STORE_ID).eq('name', params.name || '').eq('active', true).maybeSingle();
+      const dupCheck = await _sb.from('therapists').select('id').eq('store_id', window.STORE_ID).eq('name', params.name || '').eq('active', true).maybeSingle();
       if (dupCheck.data) throw new Error('「' + params.name + '」はすでに登録されています。別の源氏名を使用してください。');
       const { error } = await _sb.from('therapists').insert({
-        store_id:    STORE_ID,
+        store_id:    window.STORE_ID,
         name:        params.name || '',
         line_user_id:params.userId || null,
         interval_min:Number(params.interval || 30),
@@ -1549,33 +1549,33 @@ case 'sendReminderToOne': {
     }
 
     case 'hireTherapist': {
-      const { error } = await _sb.from('therapists').update({ is_interview: false }).eq('id', params.id).eq('store_id', STORE_ID);
+      const { error } = await _sb.from('therapists').update({ is_interview: false }).eq('id', params.id).eq('store_id', window.STORE_ID);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
 
     case 'rejectTherapist': {
-      const { error } = await _sb.from('therapists').delete().eq('id', params.id).eq('store_id', STORE_ID);
+      const { error } = await _sb.from('therapists').delete().eq('id', params.id).eq('store_id', window.STORE_ID);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
 
     case 'linkLineUser': {
-      const { error } = await _sb.from('therapists').update({ line_user_id: params.userId }).eq('id', params.id).eq('store_id', STORE_ID);
+      const { error } = await _sb.from('therapists').update({ line_user_id: params.userId }).eq('id', params.id).eq('store_id', window.STORE_ID);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
 
     case 'getInterviews': {
       const { data, error } = await _sb.from('interviews')
-        .select('*').eq('store_id', STORE_ID).order('interview_date', { ascending: false });
+        .select('*').eq('store_id', window.STORE_ID).order('interview_date', { ascending: false });
       if (error) throw new Error(error.message);
       return data || [];
     }
 
     case 'saveInterview': {
       const rec = {
-        store_id:        STORE_ID,
+        store_id:        window.STORE_ID,
         shift_id:        params.shift_id || null,
         name:            params.name || '',
         interview_date:  params.interview_date || null,
@@ -1607,18 +1607,18 @@ case 'sendReminderToOne': {
       // 源氏名確定 → therapistsのnameを更新・is_interviewをfalseに
       if (params.status === 'confirmed' && params.therapist_name_original) {
         const { data: th } = await _sb.from('therapists').select('id')
-          .eq('store_id', STORE_ID).eq('name', params.therapist_name_original).eq('active', true).maybeSingle();
+          .eq('store_id', window.STORE_ID).eq('name', params.therapist_name_original).eq('active', true).maybeSingle();
         if (th) {
           await _sb.from('therapists').update({ name: params.name, is_interview: false }).eq('id', th.id);
         } else {
-          await _sb.from('therapists').insert({ store_id: STORE_ID, name: params.name, interval_min: 30, active: true, is_interview: false });
+          await _sb.from('therapists').insert({ store_id: window.STORE_ID, name: params.name, interval_min: 30, active: true, is_interview: false });
         }
       }
       // 不採用 → therapists削除・シフト削除
       if (params.status === 'rejected') {
         if (params.therapist_name_original) {
           const { data: th } = await _sb.from('therapists').select('id')
-            .eq('store_id', STORE_ID).eq('name', params.therapist_name_original).eq('active', true).maybeSingle();
+            .eq('store_id', window.STORE_ID).eq('name', params.therapist_name_original).eq('active', true).maybeSingle();
           if (th) await _sb.from('therapists').delete().eq('id', th.id);
         }
         if (params.shift_id) await _sb.from('shifts').delete().eq('id', params.shift_id);
@@ -1632,7 +1632,7 @@ case 'sendReminderToOne': {
       if (iv) {
         if (iv.shift_id) await _sb.from('shifts').delete().eq('id', iv.shift_id);
         const { data: th } = await _sb.from('therapists').select('id')
-          .eq('store_id', STORE_ID).eq('name', iv.name).eq('is_interview', true).maybeSingle();
+          .eq('store_id', window.STORE_ID).eq('name', iv.name).eq('is_interview', true).maybeSingle();
         if (th) await _sb.from('therapists').delete().eq('id', th.id);
       }
       const { error } = await _sb.from('interviews').delete().eq('id', params.id);
@@ -1642,7 +1642,7 @@ case 'sendReminderToOne': {
 
     // LINEからの源氏名重複チェック（GASから呼び出し用）
     case 'checkTherapistName': {
-      const { data } = await _sb.from('therapists').select('id').eq('store_id', STORE_ID).eq('name', params.name || '').eq('active', true).maybeSingle();
+      const { data } = await _sb.from('therapists').select('id').eq('store_id', window.STORE_ID).eq('name', params.name || '').eq('active', true).maybeSingle();
       return { exists: !!data };
     }
 
@@ -1652,10 +1652,10 @@ case 'sendReminderToOne': {
       const userId = params.userId || '';
       if (!name) return { ok: false, reason: 'empty_name' };
       // 同名チェック
-      const { data: dup } = await _sb.from('therapists').select('id').eq('store_id', STORE_ID).eq('name', name).eq('active', true).maybeSingle();
+      const { data: dup } = await _sb.from('therapists').select('id').eq('store_id', window.STORE_ID).eq('name', name).eq('active', true).maybeSingle();
       if (dup) return { ok: false, reason: 'duplicate', name };
       // LINE userId が既存セラピストに紐付いているか確認
-      const { data: existing } = await _sb.from('therapists').select('id,name').eq('store_id', STORE_ID).eq('line_user_id', userId).eq('active', true).maybeSingle();
+      const { data: existing } = await _sb.from('therapists').select('id,name').eq('store_id', window.STORE_ID).eq('line_user_id', userId).eq('active', true).maybeSingle();
       if (existing) {
         // 既存セラピストの名前を更新
         await _sb.from('therapists').update({ name }).eq('id', existing.id);
@@ -1663,7 +1663,7 @@ case 'sendReminderToOne': {
       }
       // 新規登録
       const { error } = await _sb.from('therapists').insert({
-        store_id:     STORE_ID,
+        store_id:     window.STORE_ID,
         name,
         line_user_id: userId,
         interval_min: 30,
@@ -1675,7 +1675,7 @@ case 'sendReminderToOne': {
 
     // ===== マスタ管理 =====
     case 'getMenuMaster': {
-      const { data, error } = await _sb.from('menus').select('*').eq('store_id', STORE_ID).order('display_order');
+      const { data, error } = await _sb.from('menus').select('*').eq('store_id', window.STORE_ID).order('display_order');
       if (error) throw new Error(error.message);
       return (data || []).map((r,i) => ({
         row: r.id, id: r.id, name: r.name||'', col3: r.duration_min||'', col4: r.price||'',
@@ -1709,7 +1709,7 @@ case 'sendReminderToOne': {
         if (error) throw new Error(error.message);
         return { ok: true, id: params.row };
       } else {
-        const { data, error } = await _sb.from('menus').insert({ store_id: STORE_ID, ...menuData }).select().single();
+        const { data, error } = await _sb.from('menus').insert({ store_id: window.STORE_ID, ...menuData }).select().single();
         if (error) throw new Error(error.message);
         return { ok: true, id: data.id };
       }
@@ -1722,7 +1722,7 @@ case 'sendReminderToOne': {
     }
 
     case 'getRoomMaster': {
-      const { data, error } = await _sb.from('rooms').select('*, interval_min').eq('store_id', STORE_ID).order('display_order');
+      const { data, error } = await _sb.from('rooms').select('*, interval_min').eq('store_id', window.STORE_ID).order('display_order');
       if (error) throw new Error(error.message);
       return (data || []).map((r,i) => ({
         row: r.id, id: r.id, name: r.name||'', col3: r.description||'', col4: r.guest_guide||'',
@@ -1741,7 +1741,7 @@ case 'sendReminderToOne': {
         return { ok: true, id: params.row };
       } else {
         const { data, error } = await _sb.from('rooms').insert({
-          store_id: STORE_ID, name: params.name||'',
+          store_id: window.STORE_ID, name: params.name||'',
           description: params.col3||null, guest_guide: params.col4||null,
           display_order: Number(params.order)||0, active: true,
           interval_min: Number(params.intervalMin||0)
@@ -1760,7 +1760,7 @@ case 'sendReminderToOne': {
     // ===== 退勤チェックリスト =====
     case 'getChecklistByStore': {
       const { data, error } = await _sb.from('room_checklists').select('*')
-        .eq('store_id', STORE_ID).eq('active', true).order('room_name').order('display_order');
+        .eq('store_id', window.STORE_ID).eq('active', true).order('room_name').order('display_order');
       if (error) throw new Error(error.message);
       return (data || []).map(r => ({
         id: r.id, roomName: r.room_name, itemName: r.item_name, order: r.display_order,
@@ -1770,7 +1770,7 @@ case 'sendReminderToOne': {
 
     case 'saveChecklistItem': {
       const itemData = {
-        store_id: STORE_ID,
+        store_id: window.STORE_ID,
         room_name: params.roomName,
         item_name: params.itemName,
         display_order: Number(params.order) || 0,
@@ -1797,7 +1797,7 @@ case 'sendReminderToOne': {
 
     case 'saveCheckoutLog': {
       const { data, error } = await _sb.from('checkout_logs').insert({
-        store_id: STORE_ID,
+        store_id: window.STORE_ID,
         therapist_name: params.therapistName,
         room_name: params.roomName,
         work_date: params.workDate,
@@ -1810,7 +1810,7 @@ case 'sendReminderToOne': {
 
     case 'getManuals': {
       const { data, error } = await _sb.from('manuals').select('*')
-        .eq('store_id', STORE_ID).order('category').order('display_order');
+        .eq('store_id', window.STORE_ID).order('category').order('display_order');
       if (error) throw new Error(error.message);
       return (data || []).map(r => ({
         id: r.id, category: r.category, title: r.title,
@@ -1820,7 +1820,7 @@ case 'sendReminderToOne': {
     }
     case 'saveManual': {
       const manualData = {
-        store_id:      STORE_ID,
+        store_id:      window.STORE_ID,
         category:      params.category || 'その他',
         title:         params.title || '',
         body:          params.body || null,
@@ -1845,7 +1845,7 @@ case 'sendReminderToOne': {
     }
 
     case 'getTherapistMaster': {
-      const { data } = await _sb.from('therapists').select('*').eq('store_id', STORE_ID).eq('active', true).order('registered_at');
+      const { data } = await _sb.from('therapists').select('*').eq('store_id', window.STORE_ID).eq('active', true).order('registered_at');
       return (data || []).map(t => ({
         id: t.id, name: t.name, userId: t.line_user_id||'',
         interval: t.interval_min??30,
@@ -1857,7 +1857,7 @@ case 'sendReminderToOne': {
     // ===== スカウト =====
     case 'getScoutCompanies': {
       const { data } = await _sb.from('scout_companies')
-        .select('*').eq('store_id', STORE_ID).eq('active', true).order('created_at');
+        .select('*').eq('store_id', window.STORE_ID).eq('active', true).order('created_at');
       return data || [];
     }
     case 'saveScoutCompany': {
@@ -1869,7 +1869,7 @@ case 'sendReminderToOne': {
         return data;
       } else {
         const { data, error } = await _sb.from('scout_companies')
-          .insert({ store_id: STORE_ID, name: params.name, back_rate: params.back_rate, advisory_fee: params.advisory_fee })
+          .insert({ store_id: window.STORE_ID, name: params.name, back_rate: params.back_rate, advisory_fee: params.advisory_fee })
           .select().single();
         if (error) throw new Error(error.message);
         return data;
@@ -1878,13 +1878,13 @@ case 'sendReminderToOne': {
     case 'getTherapistScout': {
       const { data } = await _sb.from('therapist_scouts')
         .select('*, scout_companies(*)')
-        .eq('store_id', STORE_ID).eq('therapist_id', params.therapist_id).eq('active', true).maybeSingle();
+        .eq('store_id', window.STORE_ID).eq('therapist_id', params.therapist_id).eq('active', true).maybeSingle();
       return data || null;
     }
     case 'saveTherapistScout': {
       // UPSERT: store_id+therapist_idのユニーク制約を利用
       const { error } = await _sb.from('therapist_scouts')
-        .upsert({ store_id: STORE_ID, therapist_id: params.therapist_id, company_id: params.company_id, active: true },
+        .upsert({ store_id: window.STORE_ID, therapist_id: params.therapist_id, company_id: params.company_id, active: true },
           { onConflict: 'store_id,therapist_id' });
       if (error) throw new Error(error.message);
       return { ok: true };
@@ -1892,7 +1892,7 @@ case 'sendReminderToOne': {
     case 'deleteTherapistScout': {
       const { error } = await _sb.from('therapist_scouts')
         .update({ active: false })
-        .eq('store_id', STORE_ID).eq('therapist_id', params.therapist_id);
+        .eq('store_id', window.STORE_ID).eq('therapist_id', params.therapist_id);
       if (error) throw new Error(error.message);
       return { ok: true };
     }
@@ -1906,7 +1906,7 @@ case 'sendReminderToOne': {
       // ① therapist_scouts を取得
       const { data: scouts, error: scoutErr } = await _sb.from('therapist_scouts')
         .select('therapist_id, company_id')
-        .eq('store_id', STORE_ID).eq('active', true);
+        .eq('store_id', window.STORE_ID).eq('active', true);
       if (scoutErr) throw new Error('scouts: ' + scoutErr.message);
       if (!scouts || !scouts.length) return [];
 
@@ -1928,7 +1928,7 @@ case 'sendReminderToOne': {
       // ④ 売上（コースのみ）
       const { data: sales } = await _sb.from('sales')
         .select('therapist_id, date, course_price')
-        .eq('store_id', STORE_ID)
+        .eq('store_id', window.STORE_ID)
         .in('therapist_id', therapistIds)
         .gte('date', startDt.toISOString())
         .lte('date', endDt.toISOString());
@@ -1938,7 +1938,7 @@ case 'sendReminderToOne': {
       const mStr = String(m).padStart(2,'0');
       const { data: shifts } = await _sb.from('shifts')
         .select('therapist_name, date')
-        .eq('store_id', STORE_ID)
+        .eq('store_id', window.STORE_ID)
         .in('therapist_name', therapistNames)
         .eq('status', 'approved')
         .neq('attendance_type', 'absent')
@@ -1989,7 +1989,7 @@ case 'verifyTokenAction': {
   if (Date.now() > Number(data.expires_at)) return { ok: false, error: 'expired' };
   // 店舗IDをURLに反映
   if (data.store_id) {
-    STORE_ID = data.store_id;
+    window.STORE_ID = data.store_id;
     clearCache(); // 店舗切り替え時にキャッシュを全クリア
   }
   return { ok: true, name: data.therapist_name };
@@ -2002,13 +2002,13 @@ case 'verifyTokenAction': {
       if (today.getHours() < 3) today.setDate(today.getDate() - 1);
       today.setHours(3,0,0,0);
       const { data, error } = await _sb.from('reservations').select('*')
-        .eq('store_id', STORE_ID).eq('therapist_name', params.therapist)
+        .eq('store_id', window.STORE_ID).eq('therapist_name', params.therapist)
         .gte('date', today.toISOString()).neq('status', 'cancelled').order('date');
       if (error) throw new Error(error.message);
 
       // 未承認の姫予約は日付に関係なく追加取得（月またぎ対応）
       const { data: pendingHime } = await _sb.from('reservations').select('*')
-        .eq('store_id', STORE_ID).eq('therapist_name', params.therapist)
+        .eq('store_id', window.STORE_ID).eq('therapist_name', params.therapist)
         .eq('is_hime', true).eq('is_hime_approved', false)
         .neq('status', 'cancelled').lt('date', today.toISOString());
       // 重複を除いてマージ
@@ -2025,7 +2025,7 @@ case 'verifyTokenAction': {
       if (custTels.length) {
         const { data: resvHist } = await _sb.from('reservations')
           .select('customer_tel, therapist_name, date')
-          .eq('store_id', STORE_ID)
+          .eq('store_id', window.STORE_ID)
           .in('customer_tel', custTels)
           .eq('therapist_name', params.therapist)
           .neq('status', 'cancelled');
@@ -2044,7 +2044,7 @@ case 'verifyTokenAction': {
       const custNameMap = {}; // tel → 正式名
       if (custTels.length) {
         const { data: custData } = await _sb.from('customers')
-          .select('tel, name').eq('store_id', STORE_ID)
+          .select('tel, name').eq('store_id', window.STORE_ID)
           .in('tel', custTels);
         (custData || []).forEach(c => { if (c.tel) custNameMap[c.tel] = c.name; });
       }
@@ -2095,7 +2095,7 @@ case 'sendLineMessage': {
 
     // ===== 店舗設定 =====
     case 'getStoreSettings': {
-      const { data } = await _sb.from('store_settings').select('*').eq('store_id', STORE_ID).maybeSingle();
+      const { data } = await _sb.from('store_settings').select('*').eq('store_id', window.STORE_ID).maybeSingle();
       if (!data) return {};
       const cp = data.course_prices || {};
       return {
@@ -2107,7 +2107,7 @@ case 'sendLineMessage': {
     }
 
     case 'saveStoreSettings': {
-      const { data: ex } = await _sb.from('store_settings').select('id').eq('store_id', STORE_ID).maybeSingle();
+      const { data: ex } = await _sb.from('store_settings').select('id').eq('store_id', window.STORE_ID).maybeSingle();
       const upd = {};
       if (params.course_prices      !== undefined) upd.course_prices      = params.course_prices;
       if (params.course_step_price  !== undefined) upd.course_step_price  = Number(params.course_step_price);
@@ -2130,9 +2130,9 @@ case 'sendLineMessage': {
       if (params.extension_price    !== undefined) upd.extension_price    = Number(params.extension_price);
       if (params.shift_deadline     !== undefined) upd.shift_deadline     = params.shift_deadline || null;
       if (ex) {
-        await _sb.from('store_settings').update(upd).eq('store_id', STORE_ID);
+        await _sb.from('store_settings').update(upd).eq('store_id', window.STORE_ID);
       } else {
-        await _sb.from('store_settings').insert({ store_id: STORE_ID, ...upd });
+        await _sb.from('store_settings').insert({ store_id: window.STORE_ID, ...upd });
       }
       return { ok: true };
     }
