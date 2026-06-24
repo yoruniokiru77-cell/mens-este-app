@@ -624,6 +624,42 @@ therapistPay     = baseTherapistPay - miscFee - accomFee
 
 ---
 
+## v2リアーキテクチャ計画（2026/6/24決定）
+
+### 方針
+現行システム（main/Vercel本番）は一切触らず、v2ブランチで並行開発する。
+
+```
+現行: main branch → mens-este-app.vercel.app（本番・触らない）
+新規: v2 branch   → mens-este-app-v2.vercel.app（開発・テスト）
+共通: 同じSupabaseを参照
+```
+
+### 技術スタック
+| 要素 | 採用 |
+|---|---|
+| ビルド | Vite |
+| 言語 | TypeScript |
+| UI | Vanilla TS（Reactなし） |
+| テスト | Vitest |
+| デプロイ | Vercel（別プロジェクト: mens-este-app-v2） |
+
+### フェーズ
+1. **Phase 1（次セッション最初）**: v2ブランチ作成・Vite+TS初期化・Vercel別プロジェクト接続
+2. **Phase 2**: `_calcPayroll`をTypedモジュールに移植・Vitestで全パターンテスト作成
+3. **Phase 3**: `apiGet`のswitch文をservice別ファイルに分割（payrollService.ts等）
+4. **Phase 4**: 画面ごとにUI移植
+5. **Phase 5**: v2をmainにマージ・本番URL差し替え
+
+### 次セッションの作業手順
+1. `git checkout -b v2`
+2. `npm create vite@latest . -- --template vanilla-ts`
+3. Vercelで新プロジェクト`mens-este-app-v2`を作成・v2ブランチ接続
+4. `_calcPayroll`をTypeScriptで書き直し（src/lib/calcPayroll.ts）
+5. Vitestで給料計算の全パターンテスト作成
+
+---
+
 ## 過去の作業ログ（参照先）
 
 詳細な作業履歴はdocsフォルダを参照してください。
