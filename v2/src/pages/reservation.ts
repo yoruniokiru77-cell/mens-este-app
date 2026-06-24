@@ -1,22 +1,25 @@
 import { sb, ctx } from '../lib/supabase';
-import { getReservations, addReservation, cancelReservation } from '../services/reservationService';
+import { getReservations, addReservation, cancelReservation, updateReservation } from '../services/reservationService';
 import { getShifts } from '../services/shiftService';
 import { getCustomer } from '../services/customerService';
 import { getStoreSettings } from '../services/storeService';
 import { getTherapists, getTherapistInterval } from '../services/therapistService';
+import { LINE_PUSH_URL } from '../lib/supabase';
 
 // ── 状態 ─────────────────────────────────────────────
 let currentResvDate = (() => { const d = new Date(); d.setHours(0,0,0,0); return d; })();
 
-let _resvData: any[]                     = [];
-let _resvViewMode: 'therapist' | 'time' = 'therapist';
-let _resvShiftMap: Record<string, any[]> = {};
+let _resvData: any[]                      = [];
+let _resvViewMode: 'therapist' | 'time'  = 'therapist';
+let _resvShiftMap: Record<string, any[]>  = {};
 let _resvRoomMap:  Record<string, string> = {};
-let _therapists: any[]                   = [];
-let _menus: any[]                        = [];
+let _therapists: any[]                    = [];
+let _menus: any[]                         = [];
 let _nominationFee = { free: 0, nomination: 1000, honshimei: 1000 };
+let _storeLineName = '';
 let _lookupNameTimer: any = null;
 let _lookupTelTimer:  any = null;
+let _editIdx = -1;
 
 const NOMINATION_LABEL: Record<string, string> = { free: 'フリー', nomination: '指名', honshimei: '本指名' };
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -24,6 +27,87 @@ const pad = (n: number) => String(n).padStart(2, '0');
 // ── HTML ─────────────────────────────────────────────
 export function renderReservationPage(): string {
   return `
+    <!-- 予約変更モーダル -->
+    <div id="resv-edit-modal" class="modal-overlay">
+      <div class="modal-inner">
+        <div style="background:#fff;border-radius:16px;padding:20px;width:100%;max-width:480px;margin:auto">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div style="font-size:16px;font-weight:700">予約変更</div>
+            <button class="btn btn-ghost btn-sm" onclick="window._resv.closeEdit()">✕</button>
+          </div>
+          <div class="grid2">
+            <div class="form-group">
+              <label>日時</label>
+              <input type="date" id="edit-date-part">
+              <select id="edit-time-sel" style="margin-top:6px" onchange="window._resv.syncEditDatetime()"></select>
+              <input type="hidden" id="edit-date">
+            </div>
+            <div class="form-group">
+              <label>セラピスト</label>
+              <select id="edit-therapist"></select>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="form-group">
+              <label>コース（分）</label>
+              <select id="edit-course"></select>
+            </div>
+            <div class="form-group">
+              <label>指名種別</label>
+              <select id="edit-nomination"></select>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="form-group">
+              <label>割引（円）</label>
+              <input type="number" id="edit-discount" value="0" min="0">
+            </div>
+            <div class="form-group">
+              <label>メモ</label>
+              <input type="text" id="edit-memo" placeholder="任意">
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px">
+            <button class="btn btn-primary" onclick="window._resv.saveEdit()">保存</button>
+            <button class="btn btn-secondary" onclick="window._resv.closeEdit()">閉じる</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 顧客詳細モーダル -->
+    <div id="resv-cust-modal" class="modal-overlay">
+      <div class="modal-inner">
+        <div style="background:#fff;border-radius:16px;padding:20px;width:100%;max-width:480px;margin:auto">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div style="font-size:16px;font-weight:700">顧客詳細</div>
+            <button class="btn btn-ghost btn-sm" onclick="window._resv.closeCust()">✕</button>
+          </div>
+          <div id="resv-cust-body" style="font-size:14px;line-height:2">読み込み中...</div>
+          <div style="margin-top:12px">
+            <button class="btn btn-secondary btn-sm" onclick="window._resv.closeCust()">閉じる</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 案内文モーダル -->
+    <div id="resv-guide-modal" class="modal-overlay">
+      <div class="modal-inner">
+        <div style="background:#fff;border-radius:16px;padding:20px;width:100%;max-width:480px;margin:auto">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <div style="font-size:16px;font-weight:700">お客様案内</div>
+            <button class="btn btn-ghost btn-sm" onclick="window._resv.closeGuide()">✕</button>
+          </div>
+          <textarea id="resv-guide-text" rows="6" style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;font-size:13px;line-height:1.8;resize:vertical"></textarea>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-primary btn-sm" onclick="window._resv.copyGuide()">📋 コピー</button>
+            <button class="btn btn-secondary btn-sm" onclick="window._resv.closeGuide()">閉じる</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="date-nav">
       <button onclick="window._resv.changeDate(-1)">◀</button>
       <span id="resv-date-label"></span>
@@ -112,10 +196,14 @@ export function renderReservationPage(): string {
 export async function initReservation() {
   updateDateLabel();
   await Promise.all([_loadTherapists(), _loadMenus(), _loadStoreSettings()]);
-  _populateTimeSelect();
-  _populateTherapistSelect();
-  _populateCourseSelect();
-  _populateNominationSelect('');
+  _populateTimeSelect('resv-time-sel', '12:00');
+  _populateTimeSelect('edit-time-sel', '12:00');
+  _populateTherapistSelect('resv-therapist');
+  _populateTherapistSelect('edit-therapist');
+  _populateCourseSelect('resv-course');
+  _populateCourseSelect('edit-course');
+  _populateNominationSelect('resv-nomination', '');
+  _populateNominationSelect('edit-nomination', '');
   _setDefaultDate();
   load();
 }
@@ -140,6 +228,7 @@ async function _loadStoreSettings() {
       nomination: s.nomination_fee_nomination || 1000,
       honshimei:  s.nomination_fee_honshimei  || 1000,
     };
+    _storeLineName = s.store_line_name || '';
   } catch { /* use defaults */ }
 }
 
@@ -159,27 +248,29 @@ function _setDefaultDate() {
   syncDatetime();
 }
 
-function syncDatetime() {
-  const datePart = (document.getElementById('resv-date-part') as HTMLInputElement)?.value || '';
-  const timeVal  = (document.getElementById('resv-time-sel') as HTMLSelectElement)?.value || '09:00';
+function syncDatetime() { _syncDatetime('resv-date-part', 'resv-time-sel', 'resv-date'); }
+function syncEditDatetime() { _syncDatetime('edit-date-part', 'edit-time-sel', 'edit-date'); }
+
+function _syncDatetime(datePartId: string, timeSel: string, hiddenId: string) {
+  const datePart = (document.getElementById(datePartId) as HTMLInputElement)?.value || '';
+  const timeVal  = (document.getElementById(timeSel) as HTMLSelectElement)?.value || '09:00';
   if (!datePart) return;
   const [hStr, mStr] = timeVal.split(':');
   const h = parseInt(hStr), m = parseInt(mStr || '0');
   let dateVal: string;
   if (h >= 24) {
     const base = new Date(datePart + 'T00:00:00');
-    base.setDate(base.getDate() + 1);
-    base.setHours(h - 24, m, 0, 0);
+    base.setDate(base.getDate() + 1); base.setHours(h - 24, m, 0, 0);
     dateVal = `${base.getFullYear()}-${pad(base.getMonth()+1)}-${pad(base.getDate())}T${pad(base.getHours())}:${pad(base.getMinutes())}`;
   } else {
     dateVal = `${datePart}T${pad(h)}:${pad(m)}`;
   }
-  const hidden = document.getElementById('resv-date') as HTMLInputElement | null;
+  const hidden = document.getElementById(hiddenId) as HTMLInputElement | null;
   if (hidden) hidden.value = dateVal;
 }
 
-function _populateTimeSelect() {
-  const sel = document.getElementById('resv-time-sel') as HTMLSelectElement | null;
+function _populateTimeSelect(selId: string, defaultVal: string) {
+  const sel = document.getElementById(selId) as HTMLSelectElement | null;
   if (!sel) return;
   const opts: string[] = [];
   for (let h = 9; h <= 27; h++) {
@@ -189,18 +280,18 @@ function _populateTimeSelect() {
     }
   }
   sel.innerHTML = opts.join('');
-  sel.value = '12:00';
+  sel.value = defaultVal;
 }
 
-function _populateTherapistSelect() {
-  const sel = document.getElementById('resv-therapist') as HTMLSelectElement | null;
+function _populateTherapistSelect(selId: string) {
+  const sel = document.getElementById(selId) as HTMLSelectElement | null;
   if (!sel) return;
   const opts = _therapists.map(t => `<option value="${t.name}">${t.name}</option>`);
   sel.innerHTML = '<option value="">選択してください</option>' + opts.join('') + '<option value="__unassigned__">【未割り当て】</option>';
 }
 
-function _populateCourseSelect() {
-  const sel = document.getElementById('resv-course') as HTMLSelectElement | null;
+function _populateCourseSelect(selId: string) {
+  const sel = document.getElementById(selId) as HTMLSelectElement | null;
   if (!sel) return;
   let opts = '';
   if (_menus.length) {
@@ -210,21 +301,21 @@ function _populateCourseSelect() {
   } else {
     opts = [60, 90, 120, 150, 180].map(m => `<option value="${m}">${m}分</option>`).join('');
   }
-  sel.innerHTML = opts + '<option value="custom">その他（手入力）</option>';
-  calcPrice();
+  if (selId === 'resv-course') opts += '<option value="custom">その他（手入力）</option>';
+  sel.innerHTML = opts;
+  if (selId === 'resv-course') calcPrice();
 }
 
-function _populateNominationSelect(therapistName: string) {
-  const th = therapistName ? _therapists.find(t => t.name === therapistName) : null;
+function _populateNominationSelect(selId: string, therapistName: string) {
+  const th  = therapistName ? _therapists.find(t => t.name === therapistName) : null;
   const fee = (th && th.nominationFee != null) ? Number(th.nominationFee) : null;
-
   const items = [
     { value: 'free',       label: 'フリー',  f: 0 },
     { value: 'nomination', label: '指名',    f: fee ?? _nominationFee.nomination },
     { value: 'honshimei',  label: '本指名',  f: fee ?? _nominationFee.honshimei  },
   ];
   const html = items.map(i => `<option value="${i.value}">${i.label} ¥${i.f.toLocaleString()}</option>`).join('');
-  const sel = document.getElementById('resv-nomination') as HTMLSelectElement | null;
+  const sel = document.getElementById(selId) as HTMLSelectElement | null;
   if (sel) { const cur = sel.value; sel.innerHTML = html; if ([...sel.options].some(o => o.value === cur)) sel.value = cur; }
 }
 
@@ -257,15 +348,15 @@ function _defaultPrice(min: number): number {
   return MAP[min] || 0;
 }
 
-function _courseMinutes(): number {
-  const sel = document.getElementById('resv-course') as HTMLSelectElement | null;
+function _selInt(selId: string): number {
+  const sel = document.getElementById(selId) as HTMLSelectElement | null;
   if (!sel) return 0;
   if (sel.value === 'custom') return Number((document.getElementById('resv-custom-minutes') as HTMLInputElement)?.value) || 0;
   return Number(sel.value) || 0;
 }
 
-function _coursePrice(): number {
-  const sel = document.getElementById('resv-course') as HTMLSelectElement | null;
+function _selPrice(selId: string): number {
+  const sel = document.getElementById(selId) as HTMLSelectElement | null;
   if (!sel) return 0;
   if (sel.value === 'custom') return Number((document.getElementById('resv-custom-price') as HTMLInputElement)?.value) || 0;
   const opt = sel.options[sel.selectedIndex];
@@ -281,7 +372,7 @@ function _nomFee(therapistName: string, nomination: string): number {
 
 // ── セラピスト変更 ────────────────────────────────────
 function onTherapistChange(name: string) {
-  _populateNominationSelect(name);
+  _populateNominationSelect('resv-nomination', name);
 }
 
 // ── 顧客検索 ──────────────────────────────────────────
@@ -332,18 +423,15 @@ async function load() {
     _resvRoomMap  = {};
 
     (shiftData || []).forEach((s: any) => {
-      const att = s.attendanceType || s.attendance_type || 'normal';
+      const att = s.attendanceType || 'normal';
       if (att === 'absent' || att === 'pre_absent' || att === 'noshow') return;
-      const name = s.therapistName || s.therapist_name || '';
+      const name = s.therapist || s.therapist_name || '';
       if (!name) return;
       if (!_resvShiftMap[name]) _resvShiftMap[name] = [];
       const intv = _therapists.find(t => t.name === name)?.interval || 30;
       _resvShiftMap[name].push({
-        start: s.startTime || s.start_time || '',
-        end:   s.endTime   || s.end_time   || '',
-        roomName: s.roomName || s.room_name || '',
-        attendanceType: att,
-        intervalMin: intv,
+        start: s.startTime || '', end: s.endTime || '',
+        roomName: s.roomName || '', attendanceType: att, intervalMin: intv,
       });
     });
 
@@ -411,7 +499,7 @@ function _renderByTherapist(data: any[], el: HTMLElement) {
 
   el.innerHTML = `
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
-      合計 ${total} 件　有効売上 ¥${totalSales.toLocaleString()}
+      合計 ${total} 件（キャンセル除く）　有効売上 ¥${totalSales.toLocaleString()}
     </div>
     ${names.map(th => {
       const rows   = groups[th];
@@ -459,7 +547,9 @@ function _renderByTherapist(data: any[], el: HTMLElement) {
         hBg = '#d97706';
         attBadge = `<span style="font-size:11px;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:6px">⚠ ${atts.includes('late') ? '遅刻' : '早退'}</span>`;
       }
-      const roomBadge = _resvRoomMap[th] ? ` <span style="font-size:11px;background:rgba(255,255,255,0.25);padding:1px 8px;border-radius:10px;margin-left:4px">🚪 ${_resvRoomMap[th]}</span>` : '';
+      const roomBadge = _resvRoomMap[th]
+        ? ` <span style="font-size:11px;background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);padding:1px 8px;border-radius:4px;margin-left:6px">🏠 ${_resvRoomMap[th]}</span>`
+        : '';
 
       return `
         <div style="margin-bottom:16px">
@@ -482,7 +572,7 @@ function _renderByTime(data: any[], el: HTMLElement) {
   const totalSales = data.filter(r => r.status !== 'cancelled').reduce((s, r) => s + Number(r.price || 0), 0);
   el.innerHTML = `
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
-      合計 ${total} 件　有効売上 ¥${totalSales.toLocaleString()}
+      合計 ${total} 件（キャンセル除く）　有効売上 ¥${totalSales.toLocaleString()}
     </div>
     ${data.map(r => _resvRow(r)).join('')}`;
 }
@@ -490,46 +580,206 @@ function _renderByTime(data: any[], el: HTMLElement) {
 function _resvRow(r: any): string {
   const cancelled = r.status === 'cancelled';
   const himePend  = r.isHime && !r.isHimeApproved && !cancelled;
-  const rowBg     = cancelled ? 'opacity:0.5;background:#f3f4f6;' : himePend ? 'background:#fef3f9;' : r.isNewCustomer ? 'background:#fdf4ff;' : '';
+  const rowBg     = cancelled ? 'opacity:0.5;background:#f3f4f6;'
+                  : himePend  ? 'background:#fef3f9;'
+                  : r.isNewCustomer ? 'background:#fdf4ff;' : '';
   const newBadge  = r.isNewCustomer      ? ' <span style="font-size:10px;font-weight:700;color:#7c3aed;background:#ede9fe;padding:1px 6px;border-radius:10px">NEW</span>'     : '';
-  const himeBadge = r.isHime             ? ' <span style="font-size:11px;font-weight:700;color:#be185d;background:#fce7f3;padding:1px 6px;border-radius:10px">🌸</span>'     : '';
+  const himeBadge = r.isHime             ? ' <span style="font-size:11px;color:#be185d;background:#fce7f3;padding:1px 6px;border-radius:10px">🌸</span>' : '';
   const confBadge = r.therapistConfirmed ? ' <span style="font-size:10px;color:#059669;background:#ecfdf5;padding:1px 6px;border-radius:10px">✅ 確認済</span>' : '';
   const nomLabel  = NOMINATION_LABEL[r.nomination] || '';
-  const cancelFlag = cancelled ? '<span style="font-size:10px;color:#9ca3af;font-weight:600;margin-left:6px">キャンセル</span>'    : '';
-  const pendFlag   = himePend  ? '<span style="font-size:10px;color:#db2777;font-weight:600;margin-left:6px">承認待ち</span>' : '';
+  const cancelFlag = cancelled ? '<span style="font-size:10px;color:#9ca3af;font-weight:600;margin-left:6px">キャンセル</span>' : '';
+  const pendFlag   = himePend  ? '<span style="font-size:10px;color:#db2777;font-weight:600;margin-left:6px">承認待ち</span>'   : '';
 
   let timeStr = '';
   try {
     const dt = r.rawDate ? new Date(r.rawDate) : null;
     if (dt) { let h = dt.getHours(), m = dt.getMinutes(); if (h < 3) h += 24; timeStr = `${pad(h)}:${pad(m)}`; }
-  } catch { timeStr = (r.date || '').split(' ')[1] || ''; }
+  } catch { /* ignore */ }
+
+  const visitLabel = r.visitCount > 0
+    ? `<span style="font-size:11px;color:#059669;font-weight:600">全${r.visitCount}回</span>${r.monthlyVisitCount > 0 ? ` <span style="font-size:11px;color:#2563eb;font-weight:600">今月${r.monthlyVisitCount}回</span>` : ''}`
+    : '';
 
   const idx = _resvData.indexOf(r);
+  const btns = cancelled
+    ? '<span style="font-size:12px;color:#9ca3af">キャンセル済み</span>'
+    : `<button class="btn btn-secondary btn-sm" style="font-size:12px;padding:4px 10px" onclick="window._resv.openEdit(${idx})">変更</button>
+       <button class="btn btn-danger btn-sm" style="font-size:12px;padding:4px 10px" onclick="window._resv.cancel(${idx})">キャンセル</button>
+       <button class="btn btn-secondary btn-sm" style="font-size:12px;padding:4px 10px" onclick="window._resv.openGuide(${idx})">📋 案内</button>
+       <button class="btn btn-secondary btn-sm" style="font-size:12px;padding:4px 10px;background:#fff7ed;color:#c2410c;border-color:#fed7aa" onclick="window._resv.openSalesInput(${idx})">💰 売上入力</button>
+       <button class="btn btn-line btn-sm" style="font-size:12px;padding:4px 10px" onclick="window._resv.sendLine(${idx})">📨 LINE通知</button>
+       <button class="btn btn-secondary btn-sm" style="font-size:12px;padding:4px 10px" onclick="window._resv.openCust(${idx})">👤 顧客詳細</button>`;
+
   return `
   <div style="border-radius:8px;padding:10px 12px;margin-bottom:6px;${rowBg}border:1px solid ${cancelled ? '#e5e7eb' : 'var(--border)'}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;flex-wrap:wrap;gap:4px">
-      <div style="font-size:14px;font-weight:700">
-        ${timeStr}　${r.therapist || '未割り当て'}${cancelFlag}${pendFlag}${confBadge}
-      </div>
-      <div style="font-size:12px;color:var(--muted)">
-        ${r.course}分　¥${Number(r.price||0).toLocaleString()}${Number(r.discount)>0?` <span style="color:#dc2626">割-¥${Number(r.discount).toLocaleString()}</span>`:''}
-      </div>
+      <div style="font-size:15px;font-weight:700">${timeStr}${cancelFlag}${pendFlag}${confBadge}</div>
+      <div style="font-size:12px;color:var(--muted)">${r.course}分　¥${Number(r.price||0).toLocaleString()}${Number(r.discount)>0?` <span style="color:#dc2626">割-¥${Number(r.discount).toLocaleString()}</span>`:''}</div>
     </div>
     <div style="font-size:13px;margin-bottom:8px">
-      ${r.customer || '-'}${newBadge}${himeBadge}
+      ${r.customer || '-'}様${newBadge}${himeBadge}
       ${nomLabel ? `<span style="color:var(--muted);font-size:12px;margin-left:4px">${nomLabel}</span>` : ''}
-      ${r.visitCount > 0 ? `<span style="font-size:10px;color:#059669;background:#ecfdf5;padding:1px 6px;border-radius:10px;margin-left:4px">全${r.visitCount}回</span>` : ''}
+      ${visitLabel ? `<span style="margin-left:6px">${visitLabel}</span>` : ''}
     </div>
     ${r.memo ? `<div style="font-size:12px;color:#1d4ed8;background:#eff6ff;border-radius:6px;padding:4px 8px;margin-bottom:8px">📝 ${r.memo}</div>` : ''}
-    ${!cancelled ? `<button class="btn btn-danger btn-sm" onclick="window._resv.cancel(${idx})">キャンセル</button>` : ''}
+    <div style="display:flex;gap:6px;flex-wrap:wrap">${btns}</div>
   </div>`;
+}
+
+// ── 予約変更モーダル ──────────────────────────────────
+function openEdit(idx: number) {
+  const r = _resvData[idx];
+  if (!r) return;
+  _editIdx = idx;
+
+  // 日時セット
+  let rawDate = r.rawDate || '';
+  const dt = rawDate ? new Date(rawDate) : null;
+  if (dt) {
+    const datePartEl = document.getElementById('edit-date-part') as HTMLInputElement | null;
+    const timeSel    = document.getElementById('edit-time-sel')  as HTMLSelectElement | null;
+    if (datePartEl) {
+      let h = dt.getHours(); if (h < 3) h += 24;
+      // 日付部分は実際の日付を使う（27時ルールのため前日扱いの場合も表示日付は実際の日付）
+      const actualDate = new Date(rawDate);
+      datePartEl.value = `${actualDate.getFullYear()}-${pad(actualDate.getMonth()+1)}-${pad(actualDate.getDate())}`;
+    }
+    if (timeSel) {
+      const h = dt.getHours(), m = dt.getMinutes();
+      const dispH = h < 3 ? h + 24 : h;
+      timeSel.value = `${pad(dispH)}:${pad(m)}`;
+    }
+  }
+  syncEditDatetime();
+
+  // セラピスト
+  const thSel = document.getElementById('edit-therapist') as HTMLSelectElement | null;
+  if (thSel && r.therapist) thSel.value = r.therapist;
+
+  // コース
+  const cSel = document.getElementById('edit-course') as HTMLSelectElement | null;
+  if (cSel) { cSel.value = String(r.course || 60); if (!cSel.value) cSel.selectedIndex = 0; }
+
+  // 指名
+  const nSel = document.getElementById('edit-nomination') as HTMLSelectElement | null;
+  if (nSel) { nSel.value = r.nomination || 'free'; }
+
+  // 割引・メモ
+  (document.getElementById('edit-discount') as HTMLInputElement).value = String(r.discount || 0);
+  (document.getElementById('edit-memo') as HTMLInputElement).value     = r.memo || '';
+
+  document.getElementById('resv-edit-modal')?.classList.add('show');
+}
+
+function closeEdit() { document.getElementById('resv-edit-modal')?.classList.remove('show'); _editIdx = -1; }
+
+async function saveEdit() {
+  if (_editIdx < 0) return;
+  const r = _resvData[_editIdx];
+  if (!r) return;
+  const therapist  = (document.getElementById('edit-therapist')  as HTMLSelectElement)?.value || r.therapist;
+  const course     = _selInt('edit-course') || Number(r.course);
+  const nomination = (document.getElementById('edit-nomination') as HTMLSelectElement)?.value || r.nomination;
+  const discount   = Number((document.getElementById('edit-discount') as HTMLInputElement)?.value) || 0;
+  const memo       = (document.getElementById('edit-memo') as HTMLInputElement)?.value || '';
+  const dateVal    = (document.getElementById('edit-date') as HTMLInputElement)?.value || '';
+  const coursePrice = _selPrice('edit-course') || Number(r.coursePrice);
+  const nomFee      = _nomFee(therapist, nomination);
+  const price       = coursePrice + nomFee;
+
+  if (!dateVal) { alert('日時を入力してください'); return; }
+  _showOverlay();
+  try {
+    await updateReservation({ row: r.id, date: dateVal, therapist, course: String(course), customer: r.customer, customerNo: r.customerNo, price, coursePrice, nominationFee: nomFee, discount, nomination, memo });
+    _showToast('変更しました');
+    closeEdit();
+    load();
+  } catch (e: any) { alert('エラー: ' + e.message); }
+  finally { _hideOverlay(); }
+}
+
+// ── 案内文モーダル ────────────────────────────────────
+function openGuide(idx: number) {
+  const r = _resvData[idx]; if (!r) return;
+  let timeStr = '';
+  try {
+    const dt = new Date(r.rawDate || r.date); let h = dt.getHours(), m = dt.getMinutes(); if (h < 3) h += 24;
+    timeStr = `${pad(h)}:${pad(m)}`;
+  } catch { /* ignore */ }
+  const nomLabel = NOMINATION_LABEL[r.nomination] || '';
+  const text = `【ご予約内容】\n日時: ${currentResvDate.getFullYear()}/${currentResvDate.getMonth()+1}/${currentResvDate.getDate()} ${timeStr}\nセラピスト: ${r.therapist}\nコース: ${r.course}分\n指名: ${nomLabel}${r.discount > 0 ? `\n割引: -¥${Number(r.discount).toLocaleString()}` : ''}\nお支払: ¥${Number(r.price).toLocaleString()}`;
+  (document.getElementById('resv-guide-text') as HTMLTextAreaElement).value = text;
+  document.getElementById('resv-guide-modal')?.classList.add('show');
+}
+function closeGuide() { document.getElementById('resv-guide-modal')?.classList.remove('show'); }
+async function copyGuide() {
+  const text = (document.getElementById('resv-guide-text') as HTMLTextAreaElement)?.value || '';
+  try { await navigator.clipboard.writeText(text); _showToast('コピーしました'); } catch { alert('コピーできませんでした'); }
+}
+
+// ── 顧客詳細モーダル ──────────────────────────────────
+async function openCust(idx: number) {
+  const r = _resvData[idx]; if (!r) return;
+  document.getElementById('resv-cust-modal')?.classList.add('show');
+  const body = document.getElementById('resv-cust-body');
+  if (!body) return;
+  body.innerHTML = '読み込み中...';
+  try {
+    const res = await getCustomer({ tel: r.tel || '' });
+    if (!res.found) { body.innerHTML = '顧客情報が見つかりません'; return; }
+    const statusColors: Record<string, string> = { normal: '#059669', '注意': '#d97706', 'NG': '#dc2626', '出禁': '#7c3aed' };
+    const statusColor = statusColors[res.status] || '#059669';
+    body.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="font-size:18px;font-weight:700">${res.name}様</div>
+        <div style="font-size:13px;color:var(--muted)">📞 ${res.tel || '-'}</div>
+        <div><span style="font-size:12px;font-weight:700;color:${statusColor};background:${statusColor}18;padding:2px 10px;border-radius:10px">${res.status}</span></div>
+        ${(res.cancelCount || 0) > 0 ? `<div style="font-size:13px;color:#d97706">⚠ キャンセル ${res.cancelCount}回</div>` : ''}
+        ${res.ngTherapists?.length ? `<div style="font-size:13px;color:#dc2626">NG: ${res.ngTherapists.join(', ')}</div>` : ''}
+      </div>`;
+  } catch (e: any) { body.innerHTML = `エラー: ${e.message}`; }
+}
+function closeCust() { document.getElementById('resv-cust-modal')?.classList.remove('show'); }
+
+// ── 売上入力 ──────────────────────────────────────────
+function openSalesInput(idx: number) {
+  const r = _resvData[idx]; if (!r) return;
+  // 現行システムと同様に売上入力画面に遷移（v2では売上入力ページに移動）
+  if ((window as any)._app?.showPage) (window as any)._app.showPage('sales-input');
+}
+
+// ── LINE通知 ──────────────────────────────────────────
+async function sendLine(idx: number) {
+  const r = _resvData[idx]; if (!r) return;
+  const th = _therapists.find(t => t.name === r.therapist);
+  const userId = th?.userId || '';
+  if (!userId) { alert('LINE IDが未登録です'); return; }
+
+  let timeStr = '';
+  try {
+    const dt = new Date(r.rawDate || r.date); let h = dt.getHours(), m = dt.getMinutes(); if (h < 3) h += 24;
+    timeStr = `${pad(h)}:${pad(m)}`;
+  } catch { /* ignore */ }
+  const store = _storeLineName || '店舗';
+  const nomLabel = NOMINATION_LABEL[r.nomination] || '';
+  const msg = `【予約通知】${store}\n${currentResvDate.getMonth()+1}/${currentResvDate.getDate()} ${timeStr}〜\n${r.course}分 ${nomLabel}\n${r.customer}様\n¥${Number(r.price).toLocaleString()}`;
+
+  if (!confirm(`LINE送信しますか？\n${r.therapist}さんへ`)) return;
+  _showOverlay();
+  try {
+    const res = await fetch(LINE_PUSH_URL + '?action=sendLineMessage&userId=' + encodeURIComponent(userId) + '&message=' + encodeURIComponent(msg));
+    const json = await res.json().catch(() => ({}));
+    if (json.ok === false) throw new Error(json.error || '送信失敗');
+    _showToast('LINE送信しました');
+  } catch (e: any) { alert('LINE送信エラー: ' + e.message); }
+  finally { _hideOverlay(); }
 }
 
 // ── 予約登録 ──────────────────────────────────────────
 async function submit() {
-  const mins        = _courseMinutes();
-  const coursePrice = _coursePrice();
-  const therapist   = (document.getElementById('resv-therapist') as HTMLSelectElement)?.value || '';
+  const mins        = _selInt('resv-course');
+  const coursePrice = _selPrice('resv-course');
+  const therapist   = (document.getElementById('resv-therapist')  as HTMLSelectElement)?.value || '';
   const custName    = ((document.getElementById('resv-customer-name') as HTMLInputElement)?.value || '').trim();
   const dateVal     = (document.getElementById('resv-date') as HTMLInputElement)?.value || '';
   const tel         = (document.getElementById('resv-customer-tel-full') as HTMLInputElement)?.value?.trim()
@@ -580,16 +830,12 @@ async function submit() {
     _showToast('予約を登録しました');
     reset();
     load();
-  } catch (e: any) {
-    alert('エラー: ' + e.message);
-  } finally {
-    _hideOverlay();
-  }
+  } catch (e: any) { alert('エラー: ' + e.message); }
+  finally { _hideOverlay(); }
 }
 
 async function cancel(idx: number) {
-  const r = _resvData[idx];
-  if (!r) return;
+  const r = _resvData[idx]; if (!r) return;
   let timeStr = '';
   try { const dt = new Date(r.rawDate || r.date); let h = dt.getHours(); if (h < 3) h += 24; timeStr = `${pad(h)}:${pad(dt.getMinutes())}`; } catch { /* ignore */ }
   if (!confirm(`キャンセルしますか？\n${timeStr} ${r.therapist} / ${r.customer}`)) return;
@@ -626,6 +872,7 @@ function _showToast(msg: string) {
   changeDate: (d: number) => { currentResvDate.setDate(currentResvDate.getDate() + d); updateDateLabel(); load(); },
   setView: (mode: 'therapist' | 'time') => { _resvViewMode = mode; renderTable(_resvData); },
   syncDatetime,
+  syncEditDatetime,
   calcPrice,
   onTherapistChange,
   lookupByName,
@@ -633,4 +880,14 @@ function _showToast(msg: string) {
   submit,
   cancel,
   reset,
+  openEdit,
+  closeEdit,
+  saveEdit,
+  openGuide,
+  closeGuide,
+  copyGuide,
+  openCust,
+  closeCust,
+  openSalesInput,
+  sendLine,
 };
