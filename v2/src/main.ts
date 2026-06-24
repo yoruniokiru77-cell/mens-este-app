@@ -16,6 +16,7 @@ import { apiGet } from './lib/api';
 // 現在の店舗ID（URLパラメータで上書き・init処理で再代入あり）
 const _storeParam = new URLSearchParams(location.search).get('store') || new URLSearchParams(location.search).get('s') || '';
 let STORE_ID = STORE_CODE_MAP[_storeParam] || _storeParam || DEFAULT_STORE_ID;
+window.STORE_ID = STORE_ID;
 
 // ============================================================
 // 操作ログ記録（operation_logs テーブルへ保存・閲覧UIは後日）
@@ -345,7 +346,7 @@ async function init() {
   const page          = urlParams.get('page')  || '';
   const mode          = urlParams.get('mode')  || '';
   const storeParam    = urlParams.get('store') || '';
-  if (storeParam) STORE_ID = storeParam;
+  if (storeParam) { STORE_ID = storeParam; window.STORE_ID = STORE_ID; }
   window._startPage   = page || 'my-reservations';
 
   const dbgEl = document.getElementById('debug-url');
