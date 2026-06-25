@@ -1,12 +1,11 @@
-// @ts-nocheck
 // UI ユーティリティ — モーダル・クリップボード・確認ダイアログ
 
-export function _showModal(id) {
+export function _showModal(id: string): void {
   const el = document.getElementById(id);
   if (!el) return;
   el.style.cssText = el.style.cssText.replace('display:none', 'display:block');
   el.style.display = 'block';
-  const inner = el.querySelector(':scope > div');
+  const inner = el.querySelector(':scope > div') as HTMLElement | null;
   if (inner) {
     inner.style.margin = 'auto';
     inner.style.position = 'relative';
@@ -15,17 +14,17 @@ export function _showModal(id) {
   void el.getBoundingClientRect();
 }
 
-export function _hideModal(id) {
+export function _hideModal(id: string): void {
   const el = document.getElementById(id);
   if (el) el.style.display = 'none';
 }
 
-export async function _copyToClipboard(text) {
+export async function _copyToClipboard(text: string): Promise<boolean> {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     try {
       await navigator.clipboard.writeText(text);
       return true;
-    } catch(e) { /* fallthrough */ }
+    } catch (e) { /* fallthrough */ }
   }
   const ta = document.createElement('textarea');
   ta.value = text;
@@ -36,16 +35,22 @@ export async function _copyToClipboard(text) {
   const range = document.createRange();
   range.selectNodeContents(ta);
   const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
+  if (sel) {
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
   ta.setSelectionRange(0, 999999);
   let ok = false;
-  try { ok = document.execCommand('copy'); } catch(e) {}
+  try { ok = document.execCommand('copy'); } catch (e) {}
   document.body.removeChild(ta);
   return ok;
 }
 
-export function _confirm(message, okLabel = 'OK', cancelLabel = 'キャンセル') {
+export function _confirm(
+  message: string,
+  okLabel = 'OK',
+  cancelLabel = 'キャンセル'
+): Promise<boolean> {
   return new Promise(resolve => {
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
@@ -58,7 +63,7 @@ export function _confirm(message, okLabel = 'OK', cancelLabel = 'キャンセル
         </div>
       </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelector('#_confirm-ok').onclick    = () => { document.body.removeChild(overlay); resolve(true);  };
-    overlay.querySelector('#_confirm-cancel').onclick = () => { document.body.removeChild(overlay); resolve(false); };
+    (overlay.querySelector('#_confirm-ok') as HTMLElement).onclick    = () => { document.body.removeChild(overlay); resolve(true);  };
+    (overlay.querySelector('#_confirm-cancel') as HTMLElement).onclick = () => { document.body.removeChild(overlay); resolve(false); };
   });
 }
