@@ -12723,6 +12723,7 @@ function renderShiftCalendar(el, days, shifts) {
     const byThDate = {};
     shifts.forEach(s => {
       if (!s.isDayoffRequest && dayoffKeys.has(s.therapist + '|' + s.date)) return;
+      if (s.isDayoffRequest && s.status === 'rejected') return;
       if (!byThDate[s.therapist]) byThDate[s.therapist] = {};
       if (!byThDate[s.therapist][s.date]) byThDate[s.therapist][s.date] = [];
       byThDate[s.therapist][s.date].push(s);
@@ -12823,6 +12824,7 @@ function renderShiftCalendar(el, days, shifts) {
     const byDate = {};
     shifts.forEach(s => {
       if (!s.isDayoffRequest && dayoffKeys2.has(s.therapist + '|' + s.date)) return;
+      if (s.isDayoffRequest && s.status === 'rejected') return;
       if (!byDate[s.date]) byDate[s.date] = [];
       byDate[s.date].push(s);
     });
