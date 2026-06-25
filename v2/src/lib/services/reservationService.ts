@@ -1,0 +1,255 @@
+import { _sb } from '../config';
+import { _fmtDatetimeJp } from '../helpers';
+
+async function _getTherapistId(name: string): Promise<string | null> {
+  if (!name) return null;
+  const { data } = await _sb.from('therapists')
+    .select('id').eq('store_id', (window as any).STORE_ID as string).eq('name', name).maybeSingle();
+  return data ? data.id : null;
+}
+
+export async function getReservations(params: Record<string, any> = {}): Promise<any> {
+  const dateStr = params.date; // yyyy-MM-dd
+  const from = dateStr + 'T03:00:00+09:00';
+  const nextDate = new Date(dateStr + 'T00:00:00+09:00');
+  nextDate.setDate(nextDate.getDate() + 1);
+  const nextPad = (n: number) => String(n).padStart(2,'0');
+  const nextStr = nextDate.getFullYear() + '-' + nextPad(nextDate.getMonth()+1) + '-' + nextPad(nextDate.getDate());
+  const to = nextStr + 'T02:59:59+09:00';
+  const { data, error } = await _sb.from('reservations')
+    .select('*, therapists!reservations_therapist_id_fkey(interval_min)')
+    .eq('store_id', (window as any).STORE_ID)
+    .gte('date', from).lte('date', to)
+    .order('date');
+  if (error) throw new Error(error.message);
+
+  const rows = data || [];
+
+  const allTels = [...new Set(rows.map((r: any) => r.customer_tel).filter(Boolean))];
+  const visitByTherapist: Record<string, number> = {};
+  const visitByTherapistMonth: Record<string, number> = {};
+  const visitTotalByTel: Record<string, number> = {};
+  if (allTels.length) {
+    const nowMonth = dateStr.slice(0, 7);
+    const countedKeys = new Set<string>();
+    const countedDayKeys = new Set<string>();
+
+    const { data: resvHist } = await _sb.from('reservations')
+      .select('customer_tel, therapist_name, date')
+      .eq('store_id', (window as any).STORE_ID)
+      .neq('status', 'cancelled')
+      .in('customer_tel', allTels);
+    (resvHist || []).forEach((r: any) => {
+      const tel = r.customer_tel || '';
+      if (!tel || !r.therapist_name) return;
+      const dayKey = (r.date||'').slice(0, 10) + '_' + r.therapist_name + '_' + tel;
+      if (countedKeys.has(dayKey)) return;
+      countedKeys.add(dayKey);
+      const key = tel + '_' + r.therapist_name;
+      visitByTherapist[key] = (visitByTherapist[key] || 0) + 1;
+      if (r.date && r.date.slice(0, 7) === nowMonth) {
+        visitByTherapistMonth[key] = (visitByTherapistMonth[key] || 0) + 1;
+      }
+      const totalDayKey = (r.date||'').slice(0, 10) + '_' + tel;
+      if (!countedDayKeys.has(totalDayKey)) {
+        countedDayKeys.add(totalDayKey);
+        visitTotalByTel[tel] = (visitTotalByTel[tel] || 0) + 1;
+      }
+    });
+  }
+
+  return rows.map((r: any) => ({
+    row:        r.id,
+    date:       _fmtDatetimeJp(r.date),
+    rawDate:    r.date,
+    therapist:  r.therapist_name || '',
+    course:     r.course_min || 60,
+    customer:   r.customer_name || '',
+    price:      r.price || 0,
+    discount:   r.discount || 0,
+    nomination: r.nomination || 'free',
+    customerNo: r.customer_no || '',
+    tel:        r.customer_tel || '',
+    coursePrice:r.course_price || 0,
+    optionPrice:r.option_price || 0,
+    nominationFee: r.nomination_fee || 0,
+    status:        r.status || 'active',
+    isNewCustomer: (() => {
+      const tel = r.customer_tel || '';
+      return r.is_new_customer || (tel ? (visitTotalByTel[tel] || 0) === 1 : false);
+    })(),
+    isHime:             r.is_hime || false,
+    isHimeApproved:     r.is_hime_approved || false,
+    therapistConfirmed: r.therapist_confirmed || false,
+    visitCount:      (() => { const t = r.customer_tel || ''; return t ? (visitByTherapist[t + '_' + r.therapist_name] || 0) : 0; })(),
+    monthlyVisitCount: (() => { const t = r.customer_tel || ''; return t ? (visitByTherapistMonth[t + '_' + r.therapist_name] || 0) : 0; })(),
+    memo:          r.memo || '',
+    isUnassigned:  r.is_unassigned || false,
+    id:            r.id,
+    _id:        r.id
+  }));
+}
+
+export async function addReservation(params: Record<string, any> = {}): Promise<any> {
+  let isNewCustomer = false;
+  const custTel = (params.tel || '').replace(/[-\s]/g, '');
+  try {
+    if (custTel) {
+      const { data: prevSales } = await _sb.from('sales')
+        .select('id').eq('store_id', (window as any).STORE_ID)
+        .eq('customer_tel', custTel)
+        .limit(1);
+      isNewCustomer = !prevSales || prevSales.length === 0;
+    } else {
+      isNewCustomer = true;
+    }
+  } catch(e) { isNewCustomer = false; }
+
+  const _isUnassigned = params.therapist === '__unassigned__';
+  const { error } = await _sb.from('reservations').insert({
+    store_id:        (window as any).STORE_ID,
+    therapist_name:  _isUnassigned ? null : params.therapist,
+    therapist_id:    _isUnassigned ? null : await _getTherapistId(params.therapist),
+    customer_name:   params.customer,
+    customer_no:     params.customerNo || '',
+    customer_tel:    params.tel || '',
+    date:            new Date(params.date).toISOString(),
+    course_min:      Number(params.course),
+    price:           Number(params.price),
+    course_price:    Number(params.coursePrice || params.price),
+    option_price:    Number(params.optionPrice || 0),
+    nomination_fee:  Number(params.nominationFee || 0),
+    discount:        Number(params.discount || 0),
+    nomination:      params.nomination || 'free',
+    is_new_customer: isNewCustomer,
+    is_unassigned:   _isUnassigned,
+    memo:            params.memo || null
+  });
+  if (error) throw new Error(error.message);
+  return { ok: true, isNewCustomer };
+}
+
+export async function updateReservation(params: Record<string, any> = {}): Promise<any> {
+  const { error } = await _sb.from('reservations').update({
+    therapist_name: params.therapist,
+    therapist_id:   await _getTherapistId(params.therapist),
+    customer_name:  params.customer,
+    customer_no:    params.customerNo || '',
+    date:           new Date(params.date).toISOString(),
+    course_min:     Number(params.course),
+    price:          Number(params.price),
+    course_price:   Number(params.coursePrice || params.price),
+    option_price:   Number(params.optionPrice || 0),
+    nomination_fee: Number(params.nominationFee || 0),
+    discount:       Number(params.discount || 0),
+    nomination:     params.nomination || 'free',
+    memo:           params.memo || null
+  }).eq('id', params.row);
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}
+
+export async function deleteReservation(params: Record<string, any> = {}): Promise<any> {
+  const { error } = await _sb.from('reservations').delete().eq('id', params.row);
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}
+
+export async function cancelReservation(params: Record<string, any> = {}): Promise<any> {
+  const upd: Record<string, any> = { status: 'cancelled' };
+  if (params.reason) upd.cancel_reason = params.reason;
+  const { error } = await _sb.from('reservations').update(upd).eq('id', params.row);
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}
+
+export async function recordCancellation(params: Record<string, any> = {}): Promise<any> {
+  const tel = String(params.tel || '');
+  const today = new Date().toISOString().slice(0, 10);
+  let cust: any = null;
+  if (tel) {
+    const { data } = await _sb.from('customers').select('id,cancel_count').eq('store_id', (window as any).STORE_ID).ilike('tel', tel).maybeSingle();
+    cust = data;
+  }
+  if (cust) {
+    const newCount = (Number(cust.cancel_count) || 0) + 1;
+    await _sb.from('customers').update({ cancel_count: newCount, last_cancel_date: today }).eq('id', cust.id);
+  }
+  return { ok: true };
+}
+
+export async function getMyReservations(params: Record<string, any> = {}): Promise<any> {
+  const today = new Date();
+  if (today.getHours() < 3) today.setDate(today.getDate() - 1);
+  today.setHours(3,0,0,0);
+  const { data, error } = await _sb.from('reservations').select('*')
+    .eq('store_id', (window as any).STORE_ID).eq('therapist_name', params.therapist)
+    .gte('date', today.toISOString()).neq('status', 'cancelled').order('date');
+  if (error) throw new Error(error.message);
+
+  const { data: pendingHime } = await _sb.from('reservations').select('*')
+    .eq('store_id', (window as any).STORE_ID).eq('therapist_name', params.therapist)
+    .eq('is_hime', true).eq('is_hime_approved', false)
+    .neq('status', 'cancelled').lt('date', today.toISOString());
+  const existingIds = new Set((data || []).map((r: any) => r.id));
+  const extraHime = (pendingHime || []).filter((r: any) => !existingIds.has(r.id));
+  const rows = [...extraHime, ...(data || [])].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  const custTels = [...new Set(rows.map((r: any) => r.customer_tel).filter(Boolean))];
+
+  const visitMap: Record<string, number> = {};
+
+  if (custTels.length) {
+    const { data: resvHist } = await _sb.from('reservations')
+      .select('customer_tel, therapist_name, date')
+      .eq('store_id', (window as any).STORE_ID)
+      .in('customer_tel', custTels)
+      .eq('therapist_name', params.therapist)
+      .neq('status', 'cancelled');
+    const countedKeys = new Set<string>();
+    (resvHist || []).forEach((r: any) => {
+      if (!r.customer_tel) return;
+      const dayKey = r.customer_tel + '_' + (r.date || '').slice(0, 10);
+      if (countedKeys.has(dayKey)) return;
+      countedKeys.add(dayKey);
+      visitMap[r.customer_tel] = (visitMap[r.customer_tel] || 0) + 1;
+    });
+  }
+
+  const custNameMap: Record<string, string> = {};
+  if (custTels.length) {
+    const { data: custData } = await _sb.from('customers')
+      .select('tel, name').eq('store_id', (window as any).STORE_ID)
+      .in('tel', custTels);
+    (custData || []).forEach((c: any) => { if (c.tel) custNameMap[c.tel] = c.name; });
+  }
+
+  return rows.map((r: any) => {
+    const tel = r.customer_tel || '';
+    const myVisitCount = tel ? (visitMap[tel] || 0) : 0;
+    const resolvedName = (r.is_hime && tel && custNameMap[tel])
+      ? custNameMap[tel]
+      : r.customer_name || '';
+    return {
+      row:          r.id,
+      date:         _fmtDatetimeJp(r.date),
+      therapist:    r.therapist_name || '',
+      course:       r.course_min || 60,
+      customer:     resolvedName,
+      price:        r.price || 0,
+      discount:     r.discount || 0,
+      nomination:   r.nomination || 'free',
+      customerNo:   r.customer_no || '',
+      tel:          tel,
+      coursePrice:  r.course_price || 0,
+      optionPrice:  r.option_price || 0,
+      nominationFee:r.nomination_fee || 0,
+      isStoreNew:   tel ? !custNameMap[tel] : true,
+      myVisitCount,
+      isHime:             r.is_hime || false,
+      isHimeApproved:     r.is_hime_approved || false,
+      therapistConfirmed: r.therapist_confirmed || false,
+      _id:                r.id
+    };
+  });
+}
