@@ -5,7 +5,7 @@
 const DEFAULT_DISCOUNT_MODE = 'deduct_then_back';
 
 export function _calcPayroll(row, storeSettings, opts = {}) {
-  const ss = storeSettings || window._cachedStoreSettings || {};
+  const ss = storeSettings || (typeof window !== 'undefined' && window._cachedStoreSettings) || {};
 
   // 割引モード（優先順: セラピスト個別 → 店舗設定 → グローバルデフォルト）
   const mode = row.therapist_discount_mode || ss.discount_mode || DEFAULT_DISCOUNT_MODE;
