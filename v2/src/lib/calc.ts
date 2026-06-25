@@ -1,19 +1,75 @@
-// @ts-nocheck
 // 給料計算ロジック — 唯一の正規実装
 // 詳細仕様は CLAUDE.md の「_calcPayroll 関数の完全仕様」参照
 
 const DEFAULT_DISCOUNT_MODE = 'deduct_then_back';
 
-export function _calcPayroll(row, storeSettings, opts = {}) {
-  const ss = storeSettings || (typeof window !== 'undefined' && window._cachedStoreSettings) || {};
+export interface StoreSettings {
+  discount_mode?: string;
+  default_course_back?: number;
+  default_option_back?: number;
+}
+
+export interface OptItem {
+  menuId: string | null;
+  name: string;
+  amount: number;
+}
+
+export interface MenuBackEntry {
+  other: number | null;
+  honshimei: number | null;
+}
+
+export interface PayrollOpts {
+  miscFee?: number;
+  accomFee?: number;
+  optItems?: OptItem[] | null;
+  menuBackMap?: Record<string, MenuBackEntry> | null;
+  therapistId?: string | null;
+  extensionBack?: number | null;
+  extensionBackHon?: number | null;
+}
+
+export interface PayrollRow {
+  price?: number;
+  course_price?: number;
+  option_price?: number;
+  nomination_fee?: number;
+  discount?: number;
+  nomination?: string;
+  therapist_course_back?: number | null;
+  therapist_option_back?: number | null;
+  therapist_discount_mode?: string | null;
+  fixed_back_amount?: number | null;
+}
+
+export interface PayrollResult {
+  storeDrop: number;
+  therapistPay: number;
+  therapistCoursePay: number;
+  therapistOptPay: number;
+  therapistExtPay: number;
+  courseBack: number;
+  optionBack: number;
+  fixedBack: number | null;
+}
+
+export function _calcPayroll(
+  row: PayrollRow,
+  storeSettings: StoreSettings | null,
+  opts: PayrollOpts = {}
+): PayrollResult {
+  const ss: StoreSettings = storeSettings
+    ?? (typeof window !== 'undefined' ? (window as any)._cachedStoreSettings : null)
+    ?? {};
 
   // 割引モード（優先順: セラピスト個別 → 店舗設定 → グローバルデフォルト）
   const mode = row.therapist_discount_mode || ss.discount_mode || DEFAULT_DISCOUNT_MODE;
 
   // バック率
-  const courseBack = (row.therapist_course_back !== undefined && row.therapist_course_back !== null)
-    ? Number(row.therapist_course_back) : Number(ss.default_course_back || 0.5);
-  const optionBack = (row.therapist_option_back !== undefined && row.therapist_option_back !== null)
+  const courseBack = (row.therapist_course_back != null)
+    ? Number(row.therapist_course_back) : Number(ss.default_course_back ?? 0.5);
+  const optionBack = (row.therapist_option_back != null)
     ? Number(row.therapist_option_back) : Number(ss.default_option_back ?? 1.0);
 
   // 金額
@@ -24,16 +80,15 @@ export function _calcPayroll(row, storeSettings, opts = {}) {
   const discount    = Number(row.discount    || 0);
   const miscFee     = Number(opts.miscFee    || 0);
   const accomFee    = Number(opts.accomFee   || 0);
-  const optItems    = opts.optItems    || null;
-  const mbMap       = opts.menuBackMap || null;
-  const therapistId = opts.therapistId || null;
+  const optItems    = opts.optItems    ?? null;
+  const mbMap       = opts.menuBackMap ?? null;
+  const therapistId = opts.therapistId ?? null;
 
   // コース固定バック
-  const fixedBack = (row.fixed_back_amount !== undefined && row.fixed_back_amount !== null)
-    ? Number(row.fixed_back_amount) : null;
+  const fixedBack = (row.fixed_back_amount != null) ? Number(row.fixed_back_amount) : null;
 
   // ── コース給料（therapistCoursePay）──
-  let therapistCoursePay;
+  let therapistCoursePay: number;
   if (fixedBack !== null) {
     therapistCoursePay = (mode === 'deduct_then_back')
       ? fixedBack - Math.round(discount / 2)
@@ -65,12 +120,11 @@ export function _calcPayroll(row, storeSettings, opts = {}) {
         therapistOptPay += extPay;
         return;
       }
-      const mb = opt.menuId ? (mbMap[therapistId + '_' + opt.menuId] || null) : null;
+      const mb = opt.menuId ? (mbMap[therapistId + '_' + opt.menuId] ?? null) : null;
       if (mb) {
         const prim = isHon ? mb.honshimei : mb.other;
         const fall = isHon ? mb.other     : mb.honshimei;
-        const fixedOpt = (prim !== null && prim !== undefined) ? prim
-                       : (fall !== null && fall !== undefined) ? fall : null;
+        const fixedOpt = prim != null ? prim : fall != null ? fall : null;
         if (fixedOpt !== null) { therapistOptPay += Number(fixedOpt); return; }
       }
       therapistOptPay += Math.round(opt.amount * optionBack);
@@ -84,8 +138,7 @@ export function _calcPayroll(row, storeSettings, opts = {}) {
   const baseTherapistPay = therapistCoursePay + therapistOptPay + nomFee;
   const totalAmount      = coursePrice + actualOptPrice + nomFee - discount;
   const storeDrop        = totalAmount - baseTherapistPay;
-
-  const therapistPay = baseTherapistPay - miscFee - accomFee;
+  const therapistPay     = baseTherapistPay - miscFee - accomFee;
 
   return { storeDrop, therapistPay, therapistCoursePay, therapistOptPay, therapistExtPay, courseBack, optionBack, fixedBack };
 }
