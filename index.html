@@ -13413,6 +13413,9 @@ async function openEditResv(idx) {
   _syncResvDatetime();
   // セラピストリストを最新化・変更前のセラピスト名を保持して渡す（1回だけ呼ぶ）
   await populateTherapistSelect(r.therapist);
+  // 指名料選択肢を編集中のセラピストに合わせて更新（onchangeが発火しないため手動で呼ぶ）
+  populateNominationSelects(r.therapist);
+  document.getElementById('resv-nomination').value = r.nomination || 'free';
   // 変更前のセラピストが選択肢にない場合は先頭に追加
   if (r.therapist && sel) {
     const exists = Array.from(sel.options).some(o => o.value === r.therapist);
