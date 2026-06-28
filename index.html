@@ -3651,11 +3651,6 @@ async function apiGet(action, params = {}) {
         approved_at: new Date().toISOString()
       }).eq('id', row).eq('store_id', STORE_ID);
       if (error) throw new Error('承認エラー: ' + error.message);
-      // 更新確認
-      const { data: check } = await _sb.from('shifts').select('status').eq('id', row).single();
-      if (!check || check.status !== 'approved') {
-        throw new Error('承認の更新に失敗しました（RLS制限の可能性）。Supabaseのポリシーを確認してください。');
-      }
       return { ok: true };
     }
 
