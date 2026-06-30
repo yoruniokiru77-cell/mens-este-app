@@ -6998,7 +6998,7 @@ async function approveShiftChangeRequest(row, newStart, newEnd, therapistName) {
     } catch(e5) { roomIntervalMin = 0; }
 
     const conflict = (roomShifts || []).find(s => {
-      if (s.attendance_type === 'absent' || s.attendance_type === 'noshow') return false;
+      if (s.attendance_type === 'absent' || s.attendance_type === 'noshow' || s.attendance_type === 'pre_absent') return false;
       const sStart = _toMin27(s.start_time);
       const sEnd   = _toMin27(s.end_time) + roomIntervalMin;
       return newStartMin < sEnd && newEndMin > sStart;
@@ -7386,7 +7386,7 @@ async function checkRoomConflict(date, startTime, endTime, excludeRow, warningEl
     const endMin   = normalizeEnd(startMin, toMin(endTime));
 
     const conflicts = (data || []).filter(s => {
-      if (s.attendance_type === 'absent' || s.attendance_type === 'noshow') return false;
+      if (s.attendance_type === 'absent' || s.attendance_type === 'noshow' || s.attendance_type === 'pre_absent') return false;
 
       const sDate = (s.date||'').replace(/\//g,'-');
       const sStart = toMin(s.start_time);
