@@ -1310,6 +1310,10 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
         style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
         📝 都度経費
       </button>
+      <button id="master-tab-supplystock" onclick="switchMasterTab('supplystock')"
+        style="padding:10px 16px;border:none;background:none;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap">
+        🧴 備品在庫
+      </button>
     </div>
 
     <!-- メニューマスタ -->
@@ -1971,6 +1975,17 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
           <button class="btn btn-primary" style="flex:1" onclick="saveFixedCostMasterRow()">保存</button>
           <button class="btn btn-secondary" onclick="closeFixedCostForm()">キャンセル</button>
         </div>
+      </div>
+    </div>
+
+    <!-- 備品在庫パネル -->
+    <div id="master-panel-supplystock" style="display:none">
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div class="sec-title">🧴 備品在庫設定</div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px">ルームごとに現在庫・1人あたり消費数・通知閾値を設定します。売上登録時に自動で在庫が減り、閾値以下になると管理者LINEに通知されます。</div>
+        <div id="supply-stock-master-list">読み込み中...</div>
       </div>
     </div>
   </div>
@@ -4902,6 +4917,75 @@ case 'sendLineMessage': {
         await _sb.from('store_settings').update(upd).eq('store_id', STORE_ID);
       } else {
         await _sb.from('store_settings').insert({ store_id: STORE_ID, ...upd });
+      }
+      return { ok: true };
+    }
+
+    // ===== 備品在庫管理 =====
+    case 'getRoomSupplyStock': {
+      const { data, error } = await _sb.from('room_supply_stock')
+        .select('*').eq('store_id', STORE_ID);
+      if (error) throw new Error(error.message);
+      return data || [];
+    }
+
+    case 'saveRoomSupplyStock': {
+      const { roomId, supplyName, quantity, consumptionPerUse, notifyThreshold } = params;
+      const { error } = await _sb.from('room_supply_stock').upsert({
+        store_id: STORE_ID,
+        room_id: roomId,
+        supply_name: supplyName,
+        quantity: Number(quantity),
+        consumption_per_use: Number(consumptionPerUse ?? 1),
+        notify_threshold: Number(notifyThreshold ?? 10),
+        notified_at: null,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'store_id,room_id,supply_name' });
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
+    case 'replenishRoomSupply': {
+      const { roomId, supplyName, addQuantity } = params;
+      const { data: cur } = await _sb.from('room_supply_stock')
+        .select('quantity').eq('store_id', STORE_ID).eq('room_id', roomId)
+        .eq('supply_name', supplyName).maybeSingle();
+      const newQty = (cur ? Number(cur.quantity) : 0) + Number(addQuantity);
+      const { error } = await _sb.from('room_supply_stock').upsert({
+        store_id: STORE_ID, room_id: roomId, supply_name: supplyName,
+        quantity: newQty, notified_at: null, updated_at: new Date().toISOString()
+      }, { onConflict: 'store_id,room_id,supply_name' });
+      if (error) throw new Error(error.message);
+      return { ok: true, newQuantity: newQty };
+    }
+
+    case 'decrementRoomSupplyStock': {
+      const { roomId, roomName } = params;
+      if (!roomId) return { ok: true, skipped: true };
+      const { data: stocks } = await _sb.from('room_supply_stock')
+        .select('*').eq('store_id', STORE_ID).eq('room_id', roomId);
+      if (!stocks || stocks.length === 0) return { ok: true, skipped: true };
+      const LINE_PUSH = 'https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push';
+      const { data: admins } = await _sb.from('therapists')
+        .select('line_user_id').eq('store_id', STORE_ID).eq('is_admin', true).eq('active', true);
+      const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).maybeSingle();
+      const storeName = storeData ? storeData.name : '';
+      for (const stock of stocks) {
+        const newQty = Math.max(0, stock.quantity - stock.consumption_per_use);
+        const shouldNotify = newQty <= stock.notify_threshold && !stock.notified_at;
+        await _sb.from('room_supply_stock').update({
+          quantity: newQty,
+          notified_at: shouldNotify ? new Date().toISOString() : stock.notified_at,
+          updated_at: new Date().toISOString()
+        }).eq('id', stock.id);
+        if (shouldNotify && admins && admins.length > 0) {
+          const msg = `【${storeName}】在庫アラート\n${roomName || 'ルーム'}の「${stock.supply_name}」残り${newQty}個になりました。補充をご確認ください。`;
+          for (const admin of admins) {
+            if (admin.line_user_id) {
+              try { await fetch(LINE_PUSH + '?action=sendLineMessage&userId=' + encodeURIComponent(admin.line_user_id) + '&message=' + encodeURIComponent(msg)); } catch(e) {}
+            }
+          }
+        }
       }
       return { ok: true };
     }
@@ -8726,6 +8810,81 @@ async function deleteFixedCostMasterRow(id, name) {
 }
 
 // ============================================================
+// 備品在庫マスタ
+// ============================================================
+const SUPPLY_ITEMS = ['マウスウォッシュ', 'ボディスポンジ', '紙パンツ'];
+
+async function loadSupplyStockMaster() {
+  const el = document.getElementById('supply-stock-master-list');
+  if (!el) return;
+  el.innerHTML = '読み込み中...';
+  try {
+    const [rooms, stocks] = await Promise.all([
+      apiGetCached('getRoomMaster', {}),
+      apiGet('getRoomSupplyStock', {})
+    ]);
+    if (!rooms || rooms.length === 0) {
+      el.innerHTML = '<p style="color:var(--muted);font-size:13px;padding:12px">ルームマスタが登録されていません。先にルームを追加してください。</p>';
+      return;
+    }
+    const stockMap = {};
+    (stocks || []).forEach(s => { stockMap[s.room_id + '_' + s.supply_name] = s; });
+
+    let html = '';
+    for (const room of rooms) {
+      html += `<div style="margin-bottom:18px">
+        <div style="font-weight:700;font-size:14px;margin-bottom:8px;padding:6px 10px;background:var(--surface);border-radius:8px">🚪 ${room.name}</div>
+        <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="color:var(--muted)">
+            <th style="text-align:left;padding:6px 8px;font-weight:600">備品</th>
+            <th style="text-align:center;padding:6px 8px;font-weight:600">現在庫</th>
+            <th style="text-align:center;padding:6px 8px;font-weight:600">消費数/人</th>
+            <th style="text-align:center;padding:6px 8px;font-weight:600">通知閾値</th>
+            <th style="padding:6px 8px"></th>
+          </tr></thead>
+          <tbody>`;
+      for (const sname of SUPPLY_ITEMS) {
+        const key = room.id + '_' + sname;
+        const s = stockMap[key] || {};
+        const qty = s.quantity ?? '';
+        const cpu = s.consumption_per_use ?? 1;
+        const thr = s.notify_threshold ?? 10;
+        const low = s.quantity != null && s.quantity <= s.notify_threshold;
+        html += `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:8px">${sname}${low ? ' <span style="font-size:10px;background:#ef4444;color:#fff;padding:1px 5px;border-radius:8px">残少</span>' : ''}</td>
+          <td style="padding:8px;text-align:center"><input type="number" min="0" value="${qty}" placeholder="0" style="width:70px;padding:5px;border:1.5px solid var(--border);border-radius:6px;text-align:center;font-size:13px;background:var(--bg)" id="ss-qty-${room.id}-${sname}"></td>
+          <td style="padding:8px;text-align:center"><input type="number" min="1" value="${cpu}" style="width:60px;padding:5px;border:1.5px solid var(--border);border-radius:6px;text-align:center;font-size:13px;background:var(--bg)" id="ss-cpu-${room.id}-${sname}"></td>
+          <td style="padding:8px;text-align:center"><input type="number" min="0" value="${thr}" style="width:60px;padding:5px;border:1.5px solid var(--border);border-radius:6px;text-align:center;font-size:13px;background:var(--bg)" id="ss-thr-${room.id}-${sname}"></td>
+          <td style="padding:8px"><button class="btn btn-primary btn-sm" onclick="saveSupplyStock('${room.id}','${sname}')">保存</button></td>
+        </tr>`;
+      }
+      html += `</tbody></table></div></div>`;
+    }
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = '<p style="color:var(--warning);font-size:13px;padding:12px">読み込みエラー: ' + e.message + '</p>';
+  }
+}
+
+async function saveSupplyStock(roomId, supplyName) {
+  const qty = document.getElementById('ss-qty-' + roomId + '-' + supplyName).value;
+  const cpu = document.getElementById('ss-cpu-' + roomId + '-' + supplyName).value;
+  const thr = document.getElementById('ss-thr-' + roomId + '-' + supplyName).value;
+  if (qty === '') { alert('現在庫を入力してください'); return; }
+  try {
+    showOverlay();
+    await apiGet('saveRoomSupplyStock', { roomId, supplyName, quantity: qty, consumptionPerUse: cpu, notifyThreshold: thr });
+    showToast('保存しました');
+    loadSupplyStockMaster();
+  } catch(e) {
+    alert('保存エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+// ============================================================
 // 固定費支払い管理（売上確認ページ）
 // ============================================================
 async function loadFixedCostPayments() {
@@ -10735,7 +10894,7 @@ function initMasterMgmt() {
 
 function switchMasterTab(tab) {
   _currentMasterTab = tab;
-  ['menu','room','therapist','store','manual','checklist','fixedcost','paymentdest','expensetpl'].forEach(t => {
+  ['menu','room','therapist','store','manual','checklist','fixedcost','paymentdest','expensetpl','supplystock'].forEach(t => {
     const panel = document.getElementById('master-panel-' + t);
     const btn   = document.getElementById('master-tab-' + t);
     if (panel) panel.style.display = t === tab ? '' : 'none';
@@ -10744,15 +10903,16 @@ function switchMasterTab(tab) {
       btn.style.borderBottom = t === tab ? '2px solid var(--accent)' : '2px solid transparent';
     }
   });
-  if (tab === 'menu')      loadMenuMaster();
-  if (tab === 'room')      loadRoomMaster();
-  if (tab === 'therapist') loadLineUsers();
-  if (tab === 'store')     loadStoreSettingsUI();
-  if (tab === 'manual')    loadManualMaster();
-  if (tab === 'checklist') initChecklistMaster();
-  if (tab === 'fixedcost')    loadFixedCostMaster();
+  if (tab === 'menu')        loadMenuMaster();
+  if (tab === 'room')        loadRoomMaster();
+  if (tab === 'therapist')   loadLineUsers();
+  if (tab === 'store')       loadStoreSettingsUI();
+  if (tab === 'manual')      loadManualMaster();
+  if (tab === 'checklist')   initChecklistMaster();
+  if (tab === 'fixedcost')   loadFixedCostMaster();
   if (tab === 'paymentdest') loadPaymentDestMaster();
   if (tab === 'expensetpl')  loadExpenseTemplateMaster();
+  if (tab === 'supplystock') loadSupplyStockMaster();
 }
 
 // ===== メニューマスタ =====
@@ -15571,6 +15731,18 @@ async function submitSalesEntry() {
       catch(e2) { console.warn('sale_options保存エラー:', e2); }
     }
     showToast(wasUpdated ? '売上を更新しました' : '売上を登録しました');
+
+    // 備品在庫を自動減算（新規登録時のみ・ルームあり予約）
+    if (!wasUpdated && window._currentReservationId) {
+      try {
+        const { data: resvForStock } = await _sb.from('reservations')
+          .select('room_id,room_name').eq('id', window._currentReservationId).maybeSingle();
+        if (resvForStock && resvForStock.room_id) {
+          await apiGet('decrementRoomSupplyStock', { roomId: resvForStock.room_id, roomName: resvForStock.room_name || '' });
+        }
+      } catch(e) { console.warn('備品在庫減算エラー:', e); }
+    }
+
     window._salesOriginal = null;
     const nameEl = document.getElementById('sales-customer-name');
     if (nameEl) { nameEl.readOnly = false; nameEl.style.background = ''; nameEl.style.color = ''; }
