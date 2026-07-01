@@ -6969,7 +6969,7 @@ async function submitShiftChangeApprove() {
   const newStart     = document.getElementById('sca-start').value;
   const newEnd       = document.getElementById('sca-end').value;
 
-  if (!roomId) { alert('ルームを選択してください'); return; }
+  if (!roomId && STORE_ID !== '33333333-0000-0000-0000-000000000003') { alert('ルームを選択してください'); return; }
 
   // 正規化（26時→02:00）
   const normalizeT = t => {
@@ -7344,7 +7344,8 @@ async function openRoomApproveModal(row, therapist, date, startTime, endTime, cu
 
   // ルームマスタ読み込み
   const sel = document.getElementById('room-approve-select');
-  sel.innerHTML = '<option value="">ルームを選択してください（必須）</option>';
+  const _isKanisuStore = STORE_ID === '33333333-0000-0000-0000-000000000003';
+  sel.innerHTML = '<option value="">' + (_isKanisuStore ? 'ルームを選択（任意・後から設定可）' : 'ルームを選択してください（必須）') + '</option>';
   try {
     const rooms = await apiGetCached('getRoomMaster', {});
     rooms.forEach(r => {
@@ -7520,8 +7521,9 @@ async function confirmApproveShift() {
   const roomId   = val ? val.split('|')[0] : '';
   const roomName = val ? val.split('|')[1] : '';
 
-  // ルーム必須チェック
-  if (!roomId) { alert('ルームを選択してください'); return; }
+  // ルーム必須チェック（神栖店はルーム任意）
+  const _isKanisu = STORE_ID === '33333333-0000-0000-0000-000000000003';
+  if (!roomId && !_isKanisu) { alert('ルームを選択してください'); return; }
 
   // シフト情報取得（LINE通知用）
   const shiftInfo = document.getElementById('room-approve-shift-info').textContent;
@@ -12169,7 +12171,7 @@ async function confirmCalAddShift() {
   if (!startTime || !endTime)   { alert('時間を入力してください'); return; }
   if (_timeToMinutes(startTime) >= _timeToMinutes(endTime)) { alert('終了時間は開始時間より後にしてください'); return; }
   const _addStatus = document.getElementById('cal-add-status')?.value || 'approved';
-  if (_calAddType === 'shift' && !roomVal && _addStatus === 'approved') { alert('ルームを選択してください'); return; }
+  if (_calAddType === 'shift' && !roomVal && _addStatus === 'approved' && STORE_ID !== '33333333-0000-0000-0000-000000000003') { alert('ルームを選択してください'); return; }
 
   let therapistName;
 
