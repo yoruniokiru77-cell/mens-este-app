@@ -16464,7 +16464,7 @@ async function loadLineUsers() {
           <div class="card" style="margin-bottom:14px;border:2px solid #fbbf24;background:#fffbeb">
             <div class="sec-title" style="margin-bottom:12px;color:#b45309">🤝 面接候補（${interviewList.length}名）</div>
             ${interviewList.map(u => {
-              const safeName = JSON.stringify(u.name);
+              const safeName = "'" + (u.name || '').replace(/'/g, "\\'") + "'";
               return `
               <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #fde68a">
                 <div>
@@ -16492,7 +16492,7 @@ async function loadLineUsers() {
           <div class="card" style="margin-bottom:14px;border:2px solid #93c5fd;background:#eff6ff">
             <div class="sec-title" style="margin-bottom:12px;color:#1d4ed8">🔗 LINE未紐づけセラピスト（${unlinkedList.length}名）</div>
             ${unlinkedList.map(u => {
-              const safeName = JSON.stringify(u.name);
+              const safeName = "'" + (u.name || '').replace(/'/g, "\\'") + "'";
               return `
               <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid #bfdbfe">
                 <div>
