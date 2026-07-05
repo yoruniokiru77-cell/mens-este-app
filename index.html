@@ -2225,11 +2225,11 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
   </div>
 </div>
 
-<!-- ===== スカウトモーダル ===== -->
+<!-- ===== 外注モーダル ===== -->
 <div id="scout-modal" style="display:none;position:fixed;inset:0;z-index:300;overflow-y:auto;background:rgba(0,0,0,0.5)">
   <div style="background:#ffffff;border-radius:12px;max-width:420px;margin:60px auto;padding:24px;border:1px solid #e2e8f0;box-shadow:0 8px 24px rgba(0,0,0,0.15)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-      <span style="font-weight:700;font-size:15px;color:#0f172a" id="scout-modal-title">スカウト設定</span>
+      <span style="font-weight:700;font-size:15px;color:#0f172a" id="scout-modal-title">外注設定</span>
       <button onclick="_hideModal('scout-modal')" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b;line-height:1">✕</button>
     </div>
     <div class="form-group">
@@ -2283,7 +2283,7 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
   <div id="broadcast-results" style="margin-top:14px"></div>
 </div>
 
-<!-- ===== スカウト集計ページ ===== -->
+<!-- ===== 外注集計ページ ===== -->
 <div id="page-scout" class="page">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
     <span style="font-weight:700;font-size:15px">🔍 外注報酬</span>
@@ -4638,7 +4638,7 @@ case 'sendReminderToOne': {
       }));
     }
 
-    // ===== スカウト =====
+    // ===== 外注 =====
     case 'getScoutCompanies': {
       const { data } = await _sb.from('scout_companies')
         .select('*').eq('store_id', STORE_ID).eq('active', true).order('created_at');
@@ -4681,7 +4681,7 @@ case 'sendReminderToOne': {
       return { ok: true };
     }
     case 'getScoutSummary': {
-      // 指定月の売上・シフトデータを取得してスカウト集計
+      // 指定月の売上・シフトデータを取得して外注集計
       const ym = params.month; // "2026-05"
       const [y, m] = ym.split('-').map(Number);
       const startDt = new Date(y, m-1, 1, 3, 0, 0);
@@ -5156,7 +5156,7 @@ function startAdminMode() {
   if (broadcastTab) broadcastTab.style.display = '';
   const interviewTab = document.getElementById('tab-interview-mgmt');
   if (interviewTab) interviewTab.style.display = '';
-  // 神栖店（Premium）のみスカウトタブを表示
+  // 神栖店（Premium）のみ外注タブを表示
   if (STORE_ID === '33333333-0000-0000-0000-000000000003') {
     const scoutTab = document.getElementById('tab-scout');
     if (scoutTab) scoutTab.style.display = '';
@@ -11259,7 +11259,7 @@ async function loadTherapistMaster() {
     const data = await apiGetCached('getTherapistMaster', {});
     if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">データなし</p>'; return; }
     const isKamisu = STORE_ID === '33333333-0000-0000-0000-000000000003';
-    // 神栖店の場合はスカウト紐付けを取得
+    // 神栖店の場合は外注紐付けを取得
     let scoutMap = {};
     if (isKamisu) {
       try {
@@ -11270,7 +11270,7 @@ async function loadTherapistMaster() {
       } catch(e) { console.warn('scout fetch error', e); }
     }
     el.innerHTML = `<div class="table-wrap"><table>
-      <thead><tr><th>名前</th><th>コースバック</th><th>インターバル</th><th>メール</th>${isKamisu ? '<th>スカウト</th>' : ''}</tr></thead>
+      <thead><tr><th>名前</th><th>コースバック</th><th>インターバル</th><th>メール</th>${isKamisu ? '<th>外注</th>' : ''}</tr></thead>
       <tbody>${data.map(t => `
         <tr>
           <td style="font-weight:600">${t.name}</td>
@@ -11281,7 +11281,7 @@ async function loadTherapistMaster() {
             ${scoutMap[t.id]
               ? `<span style="font-size:12px;background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:10px;margin-right:6px">${scoutMap[t.id]}</span>`
               : ''}
-            <button class="btn btn-sm" style="font-size:12px;padding:3px 10px" onclick="openScoutModal('${t.id}','${t.name}')">🔍 スカウト</button>
+            <button class="btn btn-sm" style="font-size:12px;padding:3px 10px" onclick="openScoutModal('${t.id}','${t.name}')">🔍 外注</button>
           </td>` : ''}
         </tr>`).join('')}
       </tbody></table></div>`;
@@ -11289,14 +11289,14 @@ async function loadTherapistMaster() {
 }
 
 // ============================================================
-// スカウトモード
+// 外注モード
 // ============================================================
 let _scoutTargetId   = null;  // 設定中のtherapist_id
 let _scoutCompanies  = [];    // 会社マスタキャッシュ
 
 async function openScoutModal(therapistId, therapistName) {
   _scoutTargetId = therapistId;
-  document.getElementById('scout-modal-title').textContent = `🔍 スカウト設定 — ${therapistName}`;
+  document.getElementById('scout-modal-title').textContent = `🔍 外注設定 — ${therapistName}`;
 
   // 会社一覧を取得
   _scoutCompanies = await apiGet('getScoutCompanies', {});
@@ -11428,7 +11428,7 @@ async function saveTherapistScout() {
 }
 
 async function removeTherapistScout() {
-  if (!await _confirm('スカウト紐付けを解除しますか？')) return;
+  if (!await _confirm('外注紐付けを解除しますか？')) return;
   try {
     await apiGet('deleteTherapistScout', { therapist_id: _scoutTargetId });
     _hideModal('scout-modal');
@@ -11436,7 +11436,7 @@ async function removeTherapistScout() {
   } catch(e) { alert('解除エラー: ' + e.message); }
 }
 
-// ===== スカウト集計 =====
+// ===== 外注集計 =====
 // ============================================================
 // 📢 アナウンス機能（管理者専用）
 // ============================================================
@@ -11513,7 +11513,7 @@ async function loadScoutSummary() {
   try {
     const rows = await apiGet('getScoutSummary', { month });
     if (!rows || !rows.length) {
-      listEl.innerHTML = '<p style="color:var(--muted)">スカウト対象のセラピストがいません</p>';
+      listEl.innerHTML = '<p style="color:var(--muted)">外注対象のセラピストがいません</p>';
       return;
     }
 
@@ -16527,7 +16527,7 @@ async function loadLineUsers() {
         .not('back_amount', 'is', null).gt('back_amount', 0);
       (backs || []).forEach(b => fixedBackSet.add(b.therapist_id));
     }
-    // 神栖店の場合はスカウト紐付けを取得
+    // 神栖店の場合は外注紐付けを取得
     let scoutMap = {};
     if (isKamisu) {
       try {
@@ -16552,7 +16552,7 @@ async function loadLineUsers() {
               <th>1日保証</th>
               <th>固定バック</th>
               ${isNeverland ? '<th>割引モード</th>' : ''}
-              ${isKamisu ? '<th>スカウト</th>' : ''}
+              ${isKamisu ? '<th>外注</th>' : ''}
               <th>保存</th>
               <th>削除</th>
             </tr>
@@ -16633,7 +16633,7 @@ async function loadLineUsers() {
                     <option value="store_bears" ${u.discountMode==='store_bears' ? 'selected' : ''}>店舗負担</option>
                   </select>
                 </td>` : ''}
-                ${isKamisu ? `<td>${scoutLabel}<button class="btn btn-sm" style="font-size:12px;padding:3px 10px" onclick="openScoutModal('${u.id}','${u.name}')">🔍 スカウト</button></td>` : ''}
+                ${isKamisu ? `<td>${scoutLabel}<button class="btn btn-sm" style="font-size:12px;padding:3px 10px" onclick="openScoutModal('${u.id}','${u.name}')">🔍 外注</button></td>` : ''}
                 <td>
                   <button class="btn btn-primary btn-sm" onclick="saveLineUser('${u.userId}', '${u.name}')">保存</button>
                 </td>
