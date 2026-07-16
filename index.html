@@ -5164,9 +5164,9 @@ function startAdminMode() {
   const tpTab = document.getElementById('tab-therapist-profile');
   if (tpTab) tpTab.style.display = '';
   const broadcastTab = document.getElementById('tab-broadcast');
-  if (broadcastTab) broadcastTab.style.display = '';
+  if (broadcastTab) broadcastTab.style.display = SCOUT_STORE_IDS.has(STORE_ID) ? 'none' : '';
   const interviewTab = document.getElementById('tab-interview-mgmt');
-  if (interviewTab) interviewTab.style.display = '';
+  if (interviewTab) interviewTab.style.display = SCOUT_STORE_IDS.has(STORE_ID) ? 'none' : '';
   // 神栖店（Premium）のみ外注タブを表示
   if (SCOUT_STORE_IDS.has(STORE_ID)) {
     const scoutTab = document.getElementById('tab-scout');
