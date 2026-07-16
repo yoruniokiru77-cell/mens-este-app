@@ -4970,6 +4970,14 @@ case 'sendLineMessage': {
       return { ok: true, newQuantity: newQty };
     }
 
+    case 'deleteSupplyItem': {
+      const { supplyName } = params;
+      const { error } = await _sb.from('room_supply_stock')
+        .delete().eq('store_id', STORE_ID).eq('supply_name', supplyName);
+      if (error) throw new Error(error.message);
+      return { ok: true };
+    }
+
     case 'decrementRoomSupplyStock': {
       const { roomId, roomName } = params;
       if (!roomId) return { ok: true, skipped: true };
@@ -5167,6 +5175,8 @@ function startAdminMode() {
   if (broadcastTab) broadcastTab.style.display = SCOUT_STORE_IDS.has(STORE_ID) ? 'none' : '';
   const interviewTab = document.getElementById('tab-interview-mgmt');
   if (interviewTab) interviewTab.style.display = SCOUT_STORE_IDS.has(STORE_ID) ? 'none' : '';
+  const supplyTab = document.getElementById('tab-supply');
+  if (supplyTab) supplyTab.style.display = STORE_ID === '55555555-0000-0000-0000-000000000005' ? 'none' : '';
   // 神栖店（Premium）のみ外注タブを表示
   if (SCOUT_STORE_IDS.has(STORE_ID)) {
     const scoutTab = document.getElementById('tab-scout');
@@ -8842,7 +8852,7 @@ async function deleteFixedCostMasterRow(id, name) {
 // ============================================================
 // 備品在庫マスタ
 // ============================================================
-const SUPPLY_ITEMS = ['マウスウォッシュ', 'ボディスポンジ', '紙パンツ', 'お茶'];
+const SUPPLY_ITEMS_DEFAULT = ['マウスウォッシュ', 'ボディスポンジ', '紙パンツ', 'お茶'];
 
 async function loadSupplyStockMaster() {
   const el = document.getElementById('supply-stock-master-list');
@@ -8860,7 +8870,17 @@ async function loadSupplyStockMaster() {
     const stockMap = {};
     (stocks || []).forEach(s => { stockMap[s.room_id + '_' + s.supply_name] = s; });
 
-    let html = '';
+    // DBに登録済みの品目 + デフォルト品目をマージ（重複排除）
+    const dbItems = [...new Set((stocks || []).map(s => s.supply_name))];
+    const supplyItems = [...new Set([...SUPPLY_ITEMS_DEFAULT, ...dbItems])];
+
+    // 品目追加フォーム
+    let html = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;padding:10px;background:var(--surface);border-radius:8px;border:1.5px solid var(--border)">
+      <input type="text" id="ss-new-item" placeholder="新しい備品名を入力" style="flex:1;padding:7px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg)">
+      <button class="btn btn-primary btn-sm" onclick="addSupplyItem()">＋ 追加</button>
+    </div>`;
+
     for (const room of rooms) {
       html += `<div style="margin-bottom:18px">
         <div style="font-weight:700;font-size:14px;margin-bottom:8px;padding:6px 10px;background:var(--surface);border-radius:8px">🚪 ${room.name}</div>
@@ -8874,26 +8894,77 @@ async function loadSupplyStockMaster() {
             <th style="padding:6px 8px"></th>
           </tr></thead>
           <tbody>`;
-      for (const sname of SUPPLY_ITEMS) {
+      for (const sname of supplyItems) {
         const key = room.id + '_' + sname;
         const s = stockMap[key] || {};
         const qty = s.quantity ?? '';
         const cpu = s.consumption_per_use ?? 1;
         const thr = s.notify_threshold ?? 10;
         const low = s.quantity != null && s.quantity <= s.notify_threshold;
+        const snameEsc = sname.replace(/'/g, "\\'");
         html += `<tr style="border-bottom:1px solid var(--border)">
           <td style="padding:8px">${sname}${low ? ' <span style="font-size:10px;background:#ef4444;color:#fff;padding:1px 5px;border-radius:8px">残少</span>' : ''}</td>
           <td style="padding:8px;text-align:center"><input type="number" min="0" value="${qty}" placeholder="0" style="width:70px;padding:5px;border:1.5px solid var(--border);border-radius:6px;text-align:center;font-size:13px;background:var(--bg)" id="ss-qty-${room.id}-${sname}"></td>
           <td style="padding:8px;text-align:center"><input type="number" min="1" value="${cpu}" style="width:60px;padding:5px;border:1.5px solid var(--border);border-radius:6px;text-align:center;font-size:13px;background:var(--bg)" id="ss-cpu-${room.id}-${sname}"></td>
           <td style="padding:8px;text-align:center"><input type="number" min="0" value="${thr}" style="width:60px;padding:5px;border:1.5px solid var(--border);border-radius:6px;text-align:center;font-size:13px;background:var(--bg)" id="ss-thr-${room.id}-${sname}"></td>
-          <td style="padding:8px"><button class="btn btn-primary btn-sm" onclick="saveSupplyStock('${room.id}','${sname}')">保存</button></td>
+          <td style="padding:8px;display:flex;gap:4px">
+            <button class="btn btn-primary btn-sm" onclick="saveSupplyStock('${room.id}','${snameEsc}')">保存</button>
+          </td>
         </tr>`;
       }
       html += `</tbody></table></div></div>`;
     }
+
+    // 品目削除ボタン（全ルーム横断で削除）
+    html += `<div style="margin-top:12px;padding:10px;background:var(--surface);border-radius:8px;border:1.5px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:8px">🗑️ 備品を削除（全ルームから削除）</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">`;
+    for (const sname of supplyItems) {
+      const snameEsc = sname.replace(/'/g, "\\'");
+      html += `<button class="btn btn-sm" style="background:#fee2e2;color:#b91c1c;border-color:#fca5a5;font-size:11px"
+        onclick="deleteSupplyItem('${snameEsc}')">${sname} ✕</button>`;
+    }
+    html += `</div></div>`;
+
     el.innerHTML = html;
   } catch(e) {
     el.innerHTML = '<p style="color:var(--warning);font-size:13px;padding:12px">読み込みエラー: ' + e.message + '</p>';
+  }
+}
+
+async function addSupplyItem() {
+  const input = document.getElementById('ss-new-item');
+  const name = (input?.value || '').trim();
+  if (!name) { alert('備品名を入力してください'); return; }
+  try {
+    showOverlay();
+    const rooms = await apiGetCached('getRoomMaster', {});
+    if (!rooms || rooms.length === 0) { alert('ルームが登録されていません'); return; }
+    // 全ルームに初期行を作成（quantity=0）
+    for (const room of rooms) {
+      await apiGet('saveRoomSupplyStock', { roomId: room.id, supplyName: name, quantity: 0, consumptionPerUse: 1, notifyThreshold: 10 });
+    }
+    input.value = '';
+    showToast(name + ' を追加しました');
+    loadSupplyStockMaster();
+  } catch(e) {
+    alert('追加エラー: ' + e.message);
+  } finally {
+    hideOverlay();
+  }
+}
+
+async function deleteSupplyItem(supplyName) {
+  if (!confirm(supplyName + ' を全ルームから削除しますか？\n（在庫データもすべて削除されます）')) return;
+  try {
+    showOverlay();
+    await apiGet('deleteSupplyItem', { supplyName });
+    showToast(supplyName + ' を削除しました');
+    loadSupplyStockMaster();
+  } catch(e) {
+    alert('削除エラー: ' + e.message);
+  } finally {
+    hideOverlay();
   }
 }
 
