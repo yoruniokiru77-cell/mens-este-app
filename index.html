@@ -5121,7 +5121,7 @@ async function init() {
   const page          = urlParams.get('page')  || '';
   const mode          = urlParams.get('mode')  || '';
   const storeParam    = urlParams.get('store') || '';
-  if (storeParam) STORE_ID = storeParam;
+  if (storeParam) STORE_ID = STORE_CODE_MAP[storeParam] || storeParam;
   window._startPage   = page || 'my-reservations';
 
   const dbgEl = document.getElementById('debug-url');
