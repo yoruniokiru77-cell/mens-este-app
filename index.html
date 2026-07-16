@@ -2369,6 +2369,7 @@ const STORE_CODE_MAP = {
   'remens':    '22222222-0000-0000-0000-000000000002',
   'premium':   '33333333-0000-0000-0000-000000000003',
   'neverland': '44444444-0000-0000-0000-000000000004',
+  'stella':    '55555555-0000-0000-0000-000000000005',
   // 地名エイリアス
   'iwaki':     '11111111-0000-0000-0000-000000000001',
   'mito':      '22222222-0000-0000-0000-000000000002',
@@ -2377,14 +2378,16 @@ const STORE_CODE_MAP = {
   '1':         '11111111-0000-0000-0000-000000000001',
   '2':         '22222222-0000-0000-0000-000000000002',
   '3':         '33333333-0000-0000-0000-000000000003',
-  '4':         '44444444-0000-0000-0000-000000000004'
+  '4':         '44444444-0000-0000-0000-000000000004',
+  '5':         '55555555-0000-0000-0000-000000000005'
 };
 // store_id → 代表コード（地名を優先・UUID重複は後勝ちを避けるため明示マップ）
 const STORE_ID_TO_CODE = {
   '11111111-0000-0000-0000-000000000001': 'iwaki',
   '22222222-0000-0000-0000-000000000002': 'mito',
   '33333333-0000-0000-0000-000000000003': 'kamisu',
-  '44444444-0000-0000-0000-000000000004': 'neverland'
+  '44444444-0000-0000-0000-000000000004': 'neverland',
+  '55555555-0000-0000-0000-000000000005': 'stella'
 };
 
 // ============================================================
@@ -2400,6 +2403,7 @@ const STORE_KEY_MAP = {
   '22222222-0000-0000-0000-000000000002': 're_mens',
   '33333333-0000-0000-0000-000000000003': 'premium',
   '44444444-0000-0000-0000-000000000004': 'neverland',
+  '55555555-0000-0000-0000-000000000005': 'stella',
 };
 
 // 店舗ごとの対応サイト
@@ -2408,6 +2412,7 @@ const STORE_SITES = {
   're_mens':   { tamashii: true,  ranking: true,  homepage: true },
   'premium':   { tamashii: true,  ranking: true,  homepage: false },
   'neverland': { tamashii: true,  ranking: true,  homepage: false },
+  'stella':    { tamashii: false, ranking: false,  homepage: false },
 };
 
 // Supabaseクライアント初期化
@@ -2416,6 +2421,12 @@ const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 // 現在の店舗ID（URLパラメータで上書き）
 const _storeParam = new URLSearchParams(location.search).get('store') || new URLSearchParams(location.search).get('s') || '';
 let STORE_ID = STORE_CODE_MAP[_storeParam] || _storeParam || DEFAULT_STORE_ID;
+
+// スカウト（外注）機能を有効にする店舗
+const SCOUT_STORE_IDS = new Set([
+  '33333333-0000-0000-0000-000000000003', // 神栖
+  '55555555-0000-0000-0000-000000000005', // STELLA
+]);
 
 // ============================================================
 // 操作ログ記録（operation_logs テーブルへ保存・閲覧UIは後日）
@@ -5157,7 +5168,7 @@ function startAdminMode() {
   const interviewTab = document.getElementById('tab-interview-mgmt');
   if (interviewTab) interviewTab.style.display = '';
   // 神栖店（Premium）のみ外注タブを表示
-  if (STORE_ID === '33333333-0000-0000-0000-000000000003') {
+  if (SCOUT_STORE_IDS.has(STORE_ID)) {
     const scoutTab = document.getElementById('tab-scout');
     if (scoutTab) scoutTab.style.display = '';
   }
@@ -6986,7 +6997,7 @@ async function submitShiftChangeApprove() {
   const newStart     = document.getElementById('sca-start').value;
   const newEnd       = document.getElementById('sca-end').value;
 
-  if (!roomId && STORE_ID !== '33333333-0000-0000-0000-000000000003') { alert('ルームを選択してください'); return; }
+  if (!roomId && !SCOUT_STORE_IDS.has(STORE_ID)) { alert('ルームを選択してください'); return; }
 
   // 正規化（26時→02:00）
   const normalizeT = t => {
@@ -7361,7 +7372,7 @@ async function openRoomApproveModal(row, therapist, date, startTime, endTime, cu
 
   // ルームマスタ読み込み
   const sel = document.getElementById('room-approve-select');
-  const _isKanisuStore = STORE_ID === '33333333-0000-0000-0000-000000000003';
+  const _isKanisuStore = SCOUT_STORE_IDS.has(STORE_ID);
   sel.innerHTML = '<option value="">' + (_isKanisuStore ? 'ルームを選択（任意・後から設定可）' : 'ルームを選択してください（必須）') + '</option>';
   try {
     const rooms = await apiGetCached('getRoomMaster', {});
@@ -7539,7 +7550,7 @@ async function confirmApproveShift() {
   const roomName = val ? val.split('|')[1] : '';
 
   // ルーム必須チェック（神栖店はルーム任意）
-  const _isKanisu = STORE_ID === '33333333-0000-0000-0000-000000000003';
+  const _isKanisu = SCOUT_STORE_IDS.has(STORE_ID);
   if (!roomId && !_isKanisu) { alert('ルームを選択してください'); return; }
 
   // シフト情報取得（LINE通知用）
@@ -9059,7 +9070,8 @@ const STORE_NAMES = {
   '11111111-0000-0000-0000-000000000001': 'いわき',
   '22222222-0000-0000-0000-000000000002': '水戸',
   '33333333-0000-0000-0000-000000000003': '神栖',
-  '44444444-0000-0000-0000-000000000004': 'NEVERLAND'
+  '44444444-0000-0000-0000-000000000004': 'NEVERLAND',
+  '55555555-0000-0000-0000-000000000005': 'STELLA'
 };
 
 async function loadAllStoreFixedSummary() {
@@ -11291,7 +11303,7 @@ async function loadTherapistMaster() {
   try {
     const data = await apiGetCached('getTherapistMaster', {});
     if (!data.length) { el.innerHTML = '<p style="color:var(--muted)">データなし</p>'; return; }
-    const isKamisu = STORE_ID === '33333333-0000-0000-0000-000000000003';
+    const isKamisu = SCOUT_STORE_IDS.has(STORE_ID);
     // 神栖店の場合は外注紐付けを取得
     let scoutMap = {};
     if (isKamisu) {
@@ -12204,7 +12216,7 @@ async function confirmCalAddShift() {
   if (!startTime || !endTime)   { alert('時間を入力してください'); return; }
   if (_timeToMinutes(startTime) >= _timeToMinutes(endTime)) { alert('終了時間は開始時間より後にしてください'); return; }
   const _addStatus = document.getElementById('cal-add-status')?.value || 'approved';
-  if (_calAddType === 'shift' && !roomVal && _addStatus === 'approved' && STORE_ID !== '33333333-0000-0000-0000-000000000003') { alert('ルームを選択してください'); return; }
+  if (_calAddType === 'shift' && !roomVal && _addStatus === 'approved' && !SCOUT_STORE_IDS.has(STORE_ID)) { alert('ルームを選択してください'); return; }
 
   let therapistName;
 
@@ -16548,7 +16560,7 @@ async function loadLineUsers() {
       return;
     }
 
-    const isKamisu   = STORE_ID === '33333333-0000-0000-0000-000000000003';
+    const isKamisu   = SCOUT_STORE_IDS.has(STORE_ID);
     const isNeverland = STORE_ID === '44444444-0000-0000-0000-000000000004';
 
     // 固定バックの有無を判定（therapist_menu_backsに1件以上あるセラピストIDをSet化）
