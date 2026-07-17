@@ -4469,10 +4469,18 @@ case 'sendReminderToOne': {
       const name   = (params.name || '').trim();
       const userId = params.userId || '';
       if (!name) return { ok: false, reason: 'empty_name' };
-      // 同名チェック
-      const { data: dup } = await _sb.from('therapists').select('id').eq('store_id', STORE_ID).eq('name', name).eq('active', true).maybeSingle();
-      if (dup) return { ok: false, reason: 'duplicate', name };
-      // LINE userId が既存セラピストに紐付いているか確認
+      // 同名セラピストが存在するか確認
+      const { data: sameName } = await _sb.from('therapists').select('id,line_user_id').eq('store_id', STORE_ID).eq('name', name).eq('active', true).maybeSingle();
+      if (sameName) {
+        if (sameName.line_user_id === userId) {
+          // 同一LINE ID → すでに登録済み
+          return { ok: true, updated: false, name };
+        }
+        // 別のLINE ID → 機種変更とみなしてLINE IDを上書き
+        await _sb.from('therapists').update({ line_user_id: userId }).eq('id', sameName.id);
+        return { ok: true, updated: true, name };
+      }
+      // LINE userId が既存セラピストに紐付いているか確認（名前変更ケース）
       const { data: existing } = await _sb.from('therapists').select('id,name').eq('store_id', STORE_ID).eq('line_user_id', userId).eq('active', true).maybeSingle();
       if (existing) {
         // 既存セラピストの名前を更新
