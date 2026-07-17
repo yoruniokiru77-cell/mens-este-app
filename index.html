@@ -4339,7 +4339,10 @@ case 'sendReminderToOne': {
 
     case 'deactivateTherapist': {
       // active=false にして非表示（物理削除はしない）
-      const { error } = await _sb.from('therapists').update({ active: false }).eq('store_id', STORE_ID).eq('line_user_id', params.userId);
+      let q = _sb.from('therapists').update({ active: false }).eq('store_id', STORE_ID);
+      if (params.therapistId) q = q.eq('id', params.therapistId);
+      else q = q.eq('line_user_id', params.userId);
+      const { error } = await q;
       if (error) throw new Error(error.message);
       return { ok: true };
     }
@@ -16718,6 +16721,7 @@ async function loadLineUsers() {
               ${isNeverland ? '<th>割引モード</th>' : ''}
               ${isKamisu ? '<th>外注</th>' : ''}
               <th>保存</th>
+              <th>名前変更</th>
               <th>削除</th>
             </tr>
           </thead>
@@ -16802,9 +16806,12 @@ async function loadLineUsers() {
                   <button class="btn btn-primary btn-sm" onclick="saveLineUser('${u.userId}', '${u.name}')">保存</button>
                 </td>
                 <td>
+                  <button class="btn btn-sm btn-secondary" style="white-space:nowrap" onclick="openRenameTherapistModal('${u.id}','${(u.name||'').replace(/'/g,"\\'")}')">✏️ 名前変更</button>
+                </td>
+                <td>
                   <button class="btn btn-danger btn-sm"
-                    data-uid="${u.userId}" data-name="${u.name||'未設定'}"
-                    onclick="deleteLineUser(this.dataset.uid, this.dataset.name)">削除</button>
+                    data-uid="${u.userId}" data-tid="${u.id}" data-name="${u.name||'未設定'}"
+                    onclick="deleteLineUser(this.dataset.uid, this.dataset.name, this.dataset.tid)">削除</button>
                 </td>
               </tr>`;
             }).join('')}
@@ -17038,11 +17045,11 @@ async function saveMenuBacks() {
   }
 }
 
-async function deleteLineUser(userId, name) {
+async function deleteLineUser(userId, name, therapistId) {
   if (!confirm('「' + name + '」を削除しますか？\n\n※ 売上・シフト等のデータは残ります。\nシフト表やセラピスト選択肢から非表示になります。')) return;
   try {
     showOverlay();
-    await apiGet('deactivateTherapist', { userId });
+    await apiGet('deactivateTherapist', { userId, therapistId });
     therapists = await apiGet('getTherapists');
     showToast('「' + name + '」を削除しました');
     loadLineUsers();
