@@ -4985,10 +4985,13 @@ case 'sendLineMessage': {
         .select('*').eq('store_id', STORE_ID).eq('room_id', roomId);
       if (!stocks || stocks.length === 0) return { ok: true, skipped: true };
       const LINE_PUSH = 'https://rzfprialypdoyklfwpyg.supabase.co/functions/v1/line-push';
-      const { data: admins } = await _sb.from('therapists')
-        .select('line_user_id').eq('store_id', STORE_ID).eq('is_admin', true).eq('active', true);
       const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).maybeSingle();
       const storeName = storeData ? storeData.name : '';
+      const { data: ss } = await _sb.from('store_settings').select('store_line_name').eq('store_id', STORE_ID).maybeSingle();
+      const storeLineName = ss ? ss.store_line_name : '';
+      const { data: storeT } = storeLineName
+        ? await _sb.from('therapists').select('line_user_id').eq('store_id', STORE_ID).eq('name', storeLineName).eq('active', true).maybeSingle()
+        : { data: null };
       for (const stock of stocks) {
         const newQty = Math.max(0, stock.quantity - stock.consumption_per_use);
         const shouldNotify = newQty <= stock.notify_threshold && !stock.notified_at;
@@ -4997,13 +5000,9 @@ case 'sendLineMessage': {
           notified_at: shouldNotify ? new Date().toISOString() : stock.notified_at,
           updated_at: new Date().toISOString()
         }).eq('id', stock.id);
-        if (shouldNotify && admins && admins.length > 0) {
+        if (shouldNotify && storeT && storeT.line_user_id) {
           const msg = `【${storeName}】在庫アラート\n${roomName || 'ルーム'}の「${stock.supply_name}」残り${newQty}個になりました。補充をご確認ください。`;
-          for (const admin of admins) {
-            if (admin.line_user_id) {
-              try { await fetch(LINE_PUSH + '?action=sendLineMessage&userId=' + encodeURIComponent(admin.line_user_id) + '&message=' + encodeURIComponent(msg)); } catch(e) {}
-            }
-          }
+          try { await fetch(LINE_PUSH + '?action=sendLineMessage&userId=' + encodeURIComponent(storeT.line_user_id) + '&message=' + encodeURIComponent(msg)); } catch(e) {}
         }
       }
       return { ok: true };
@@ -8070,6 +8069,10 @@ function initSalesReport() {
   // 経費入力の日付デフォルト
   const seDateEl = document.getElementById('se-date');
   if (seDateEl && !seDateEl.value) seDateEl.value = today;
+
+  // STELLAは都度経費・固定費セクションを非表示
+  const expSec = document.getElementById('store-expense-section');
+  if (expSec) expSec.style.display = STORE_ID === '55555555-0000-0000-0000-000000000005' ? 'none' : '';
 
   // 今月の店舗経費を初期ロード
   loadStoreExpensesOnly();
