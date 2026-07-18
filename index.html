@@ -4762,13 +4762,14 @@ case 'sendReminderToOne': {
       // ⑤ 承認済みシフト（欠勤・無断欠勤除く）
       const therapistNames = (therapistRows || []).map(t => t.name);
       const mStr = String(m).padStart(2,'0');
+      const lastDay = new Date(y, m, 0).getDate(); // 月末日
       const { data: shiftsRaw } = await _sb.from('shifts')
         .select('therapist_name, date, attendance_type')
         .eq('store_id', STORE_ID)
         .in('therapist_name', therapistNames)
         .eq('status', 'approved')
-        .gte('date', `${y}-${mStr}-01`)
-        .lte('date', `${y}-${mStr}-31`);
+        .gte('date', `${y}-${mStr}-01T00:00:00+09:00`)
+        .lte('date', `${y}-${mStr}-${String(lastDay).padStart(2,'0')}T23:59:59+09:00`);
       // attendance_typeがNULLの場合はnormal扱い（過去データ対応）
       const shifts = (shiftsRaw || []).filter(r => r.attendance_type !== 'absent' && r.attendance_type !== 'noshow');
 
