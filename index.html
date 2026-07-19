@@ -5016,6 +5016,8 @@ case 'sendLineMessage': {
       if (e1) throw new Error(e1.message);
       await _sb.from('reservations').update({ therapist_name: newName }).eq('store_id', STORE_ID).eq('therapist_name', oldName);
       await _sb.from('sales').update({ therapist_name: newName }).eq('store_id', STORE_ID).eq('therapist_name', oldName);
+      // shiftsはtherapist_idで更新（名前マッチより確実）＋therapist_nameでも念のため更新
+      await _sb.from('shifts').update({ therapist_name: newName }).eq('store_id', STORE_ID).eq('therapist_id', therapistId);
       await _sb.from('shifts').update({ therapist_name: newName }).eq('store_id', STORE_ID).eq('therapist_name', oldName);
       await _sb.from('payroll_confirmations').update({ therapist_name: newName }).eq('store_id', STORE_ID).eq('therapist_name', oldName);
       await _sb.from('tokens').update({ therapist_name: newName }).eq('store_id', STORE_ID).eq('therapist_name', oldName);
