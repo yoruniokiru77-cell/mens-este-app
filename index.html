@@ -5018,6 +5018,7 @@ case 'sendLineMessage': {
       await _sb.from('sales').update({ therapist_name: newName }).eq('store_id', STORE_ID).eq('therapist_name', oldName);
       await _sb.from('shifts').update({ therapist_name: newName }).eq('store_id', STORE_ID).eq('therapist_name', oldName);
       await _sb.from('payroll_confirmations').update({ therapist_name: newName }).eq('store_id', STORE_ID).eq('therapist_name', oldName);
+      await _sb.from('tokens').update({ therapist_name: newName }).eq('store_id', STORE_ID).eq('therapist_name', oldName);
       return { ok: true };
     }
 
