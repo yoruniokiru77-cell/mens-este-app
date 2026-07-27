@@ -14668,7 +14668,9 @@ async function submitReservation() {
       nominationFee: nomFee,
       discount,
       nomination,
-      memo
+      memo,
+      roomId:   myShift ? myShift.roomId   : '',
+      roomName: myShift ? myShift.roomName : ''
     });
     _logOperation('reservation_create', null, { therapist: therapistName, date: dateVal, course: mins, customer: customerName, nomination });
 
@@ -14976,7 +14978,9 @@ async function saveAndSendLine() {
       tel:        document.getElementById('resv-customer-tel-full').value,
       price:      price + nomFee,
       discount:   Number(document.getElementById('resv-discount').value) || 0,
-      nomination: document.getElementById('resv-nomination').value
+      nomination: document.getElementById('resv-nomination').value,
+      roomId:   myShift_sl ? myShift_sl.roomId   : '',
+      roomName: myShift_sl ? myShift_sl.roomName : ''
     };
     await saveCustomerIfNeeded();
     const resvResult = await apiGet('addReservation', params);
