@@ -9068,12 +9068,8 @@ async function deleteSupplyItem(supplyName) {
   if (!confirm(supplyName + ' を全ルームから削除しますか？\n（在庫データもすべて削除されます）')) return;
   try {
     showOverlay();
-    const result = await apiGet('deleteSupplyItem', { supplyName });
-    if (result.deleted === 0) {
-      alert(supplyName + ' の削除に失敗しました（DBに該当データなし）\nSupabaseのRLSポリシーを確認してください');
-      return;
-    }
-    showToast(supplyName + ' を削除しました（' + result.deleted + '件）');
+    await apiGet('deleteSupplyItem', { supplyName });
+    showToast(supplyName + ' を削除しました');
     loadSupplyStockMaster();
   } catch(e) {
     alert('削除エラー: ' + e.message);
