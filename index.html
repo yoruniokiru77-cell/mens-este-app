@@ -7691,6 +7691,22 @@ async function confirmApproveShift() {
     await apiGet('updateShift', { row, date: newDateSlash, startTime: newStart, endTime: newEnd, roomId, roomName, memo: adminMemo, checkinTime, checkoutTime });
     await apiGet('approveShift', { row });
 
+    // セラピストにLINE通知（DB直接取得）
+    if (therapistName) {
+      try {
+        const { data: th } = await _sb.from('therapists').select('line_user_id')
+          .eq('store_id', STORE_ID).eq('name', therapistName).eq('active', true).maybeSingle();
+        if (th && th.line_user_id) {
+          const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
+          const storeName = storeData ? storeData.name : '';
+          const msg = '【シフト承認のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
+            '\nシフトが承認されました。\n日時: ' + newDateSlash + ' ' + newStart + '〜' + newEnd +
+            (roomName ? '\nルーム: ' + roomName : '');
+          await apiGet('sendLineMessage', { userId: th.line_user_id, message: msg });
+        }
+      } catch(e) { console.warn('LINE通知失敗:', e); }
+    }
+
     closeRoomApproveModal();
     showToast('承認しました' + (roomName ? '（' + roomName + '）' : ''));
     loadAdminShifts();
@@ -7807,8 +7823,14 @@ async function confirmEditShift() {
         try {
           const { data: shiftCheck } = await _sb.from('shifts').select('status').eq('id', row).maybeSingle();
           if (shiftCheck && shiftCheck.status === 'approved' && orig.therapistName) {
-            const t = therapists.find(th => th.name === orig.therapistName);
-            if (t && t.userId) {
+            // キャッシュ優先、未ロード時はDB直接取得
+            let lineUserId = (therapists.find(th => th.name === orig.therapistName) || {}).userId || '';
+            if (!lineUserId) {
+              const { data: thDb } = await _sb.from('therapists').select('line_user_id')
+                .eq('store_id', STORE_ID).eq('name', orig.therapistName).eq('active', true).maybeSingle();
+              lineUserId = thDb ? thDb.line_user_id : '';
+            }
+            if (lineUserId) {
               const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
               const storeName = storeData ? storeData.name : '';
               const changes = [];
@@ -7818,7 +7840,7 @@ async function confirmEditShift() {
               const msg = '【シフト変更のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
                 '\n' + changes.join('\n') +
                 '\n\nシフトが変更されました。ご確認ください。';
-              try { await apiGet('sendLineMessage', { userId: t.userId, message: msg }); } catch(e) { console.warn('LINE通知失敗:', e); }
+              try { await apiGet('sendLineMessage', { userId: lineUserId, message: msg }); } catch(e) { console.warn('LINE通知失敗:', e); }
             }
           }
         } catch(e) { console.warn('シフトステータス確認エラー:', e); }
