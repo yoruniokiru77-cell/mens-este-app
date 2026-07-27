@@ -14894,6 +14894,7 @@ async function saveAndSendLine() {
     const np_sl   = n => String(n).padStart(2,'0');
 
     // シフト超過チェック（27時ルール対応）
+    let myShift_sl = null;
     try {
       const reqMin_sl = _timeToMin27(timeStr);
       const prevDt_sl = new Date(dt); prevDt_sl.setDate(prevDt_sl.getDate() - 1);
@@ -14904,7 +14905,7 @@ async function saveAndSendLine() {
       const shiftsAll_sl = month !== prevMonth_sl
         ? [...shifts_sl, ...(await apiGet('getShifts', { month: prevMonth_sl, status: 'approved' }))]
         : shifts_sl;
-      const myShift_sl = shiftsAll_sl.find(s =>
+      myShift_sl = shiftsAll_sl.find(s =>
         s.therapist === therapistName &&
         s.date === targetDate_sl &&
         _timeToMin27(s.startTime) <= reqMin_sl &&
