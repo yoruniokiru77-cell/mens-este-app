@@ -7691,22 +7691,6 @@ async function confirmApproveShift() {
     await apiGet('updateShift', { row, date: newDateSlash, startTime: newStart, endTime: newEnd, roomId, roomName, memo: adminMemo, checkinTime, checkoutTime });
     await apiGet('approveShift', { row });
 
-    // セラピストにLINE通知（DB直接取得）
-    if (therapistName) {
-      try {
-        const { data: th } = await _sb.from('therapists').select('line_user_id')
-          .eq('store_id', STORE_ID).eq('name', therapistName).eq('active', true).maybeSingle();
-        if (th && th.line_user_id) {
-          const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
-          const storeName = storeData ? storeData.name : '';
-          const msg = '【シフト承認のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
-            '\nシフトが承認されました。\n日時: ' + newDateSlash + ' ' + newStart + '〜' + newEnd +
-            (roomName ? '\nルーム: ' + roomName : '');
-          await apiGet('sendLineMessage', { userId: th.line_user_id, message: msg });
-        }
-      } catch(e) { console.warn('LINE通知失敗:', e); }
-    }
-
     closeRoomApproveModal();
     showToast('承認しました' + (roomName ? '（' + roomName + '）' : ''));
     loadAdminShifts();
