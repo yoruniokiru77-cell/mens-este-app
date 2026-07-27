@@ -5029,10 +5029,10 @@ case 'sendLineMessage': {
 
     case 'deleteSupplyItem': {
       const { supplyName } = params;
-      const { error } = await _sb.from('room_supply_stock')
-        .delete().eq('store_id', STORE_ID).eq('supply_name', supplyName);
+      const { data, error } = await _sb.from('room_supply_stock')
+        .delete().eq('store_id', STORE_ID).eq('supply_name', supplyName).select();
       if (error) throw new Error(error.message);
-      return { ok: true };
+      return { ok: true, deleted: (data || []).length };
     }
 
     case 'renameTherapist': {
@@ -8976,9 +8976,9 @@ async function loadSupplyStockMaster() {
     const stockMap = {};
     (stocks || []).forEach(s => { stockMap[s.room_id + '_' + s.supply_name] = s; });
 
-    // DBに登録済みの品目のみ表示（削除した���目がデフォルトリストで復活しないよう）
-    const dbItems = [...new Set((stocks || []).map(s => s.supply_name))];
-    const supplyItems = dbItems.length > 0 ? dbItems : [...SUPPLY_ITEMS_DEFAULT];
+    // DBに登録済みの品目のみ表示（デフォルトリストへのフォールバックなし）
+    const supplyItems = [...new Set((stocks || []).map(s => s.supply_name))];
+
 
     // 品目追加フォーム
     let html = `
@@ -9064,8 +9064,12 @@ async function deleteSupplyItem(supplyName) {
   if (!confirm(supplyName + ' を全ルームから削除しますか？\n（在庫データもすべて削除されます）')) return;
   try {
     showOverlay();
-    await apiGet('deleteSupplyItem', { supplyName });
-    showToast(supplyName + ' を削除しました');
+    const result = await apiGet('deleteSupplyItem', { supplyName });
+    if (result.deleted === 0) {
+      alert(supplyName + ' の削除に失敗しました（DBに該当データなし）\nSupabaseのRLSポリシーを確認してください');
+      return;
+    }
+    showToast(supplyName + ' を削除しました（' + result.deleted + '件）');
     loadSupplyStockMaster();
   } catch(e) {
     alert('削除エラー: ' + e.message);
