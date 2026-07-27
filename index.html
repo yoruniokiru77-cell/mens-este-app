@@ -8976,9 +8976,9 @@ async function loadSupplyStockMaster() {
     const stockMap = {};
     (stocks || []).forEach(s => { stockMap[s.room_id + '_' + s.supply_name] = s; });
 
-    // DBに登録済みの品目 + デフォルト品目をマージ（重複排除）
+    // DBに登録済みの品目のみ表示（削除した���目がデフォルトリストで復活しないよう）
     const dbItems = [...new Set((stocks || []).map(s => s.supply_name))];
-    const supplyItems = [...new Set([...SUPPLY_ITEMS_DEFAULT, ...dbItems])];
+    const supplyItems = dbItems.length > 0 ? dbItems : [...SUPPLY_ITEMS_DEFAULT];
 
     // 品目追加フォーム
     let html = `
