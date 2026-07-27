@@ -7802,12 +7802,13 @@ async function confirmEditShift() {
       const endChanged   = origEnd !== normalizedEnd.substring(0, 5);
       const roomChanged  = (orig.roomName || '') !== (roomName || '');
 
-      if (dateChanged || startChanged || endChanged || roomChanged) {
-        // シフトステータスを確認
+      // 当日かつルーム変更がある場合のみLINE通知
+      const todayStr = (() => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); })();
+      const isToday  = (orig.date || '').replace(/\//g, '-') === todayStr;
+      if (isToday && roomChanged) {
         try {
           const { data: shiftCheck } = await _sb.from('shifts').select('status').eq('id', row).maybeSingle();
           if (shiftCheck && shiftCheck.status === 'approved' && orig.therapistName) {
-            // キャッシュ優先、未ロード時はDB直接取得
             let lineUserId = (therapists.find(th => th.name === orig.therapistName) || {}).userId || '';
             if (!lineUserId) {
               const { data: thDb } = await _sb.from('therapists').select('line_user_id')
@@ -7817,13 +7818,8 @@ async function confirmEditShift() {
             if (lineUserId) {
               const { data: storeData } = await _sb.from('stores').select('name').eq('id', STORE_ID).single();
               const storeName = storeData ? storeData.name : '';
-              const changes = [];
-              if (dateChanged)  changes.push('日付: ' + date);
-              if (startChanged || endChanged) changes.push('時間: ' + normalizedStart.substring(0,5) + '〜' + normalizedEnd.substring(0,5));
-              if (roomChanged)  changes.push('ルーム: ' + (roomName || '未割当'));
-              const msg = '【シフト変更のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
-                '\n' + changes.join('\n') +
-                '\n\nシフトが変更されました。ご確認ください。';
+              const msg = '【ルーム変更のお知らせ】' + (storeName ? '（' + storeName + '）' : '') +
+                '\n本日のルームが変更されました。\nルーム: ' + (roomName || '未割当');
               try { await apiGet('sendLineMessage', { userId: lineUserId, message: msg }); } catch(e) { console.warn('LINE通知失敗:', e); }
             }
           }
