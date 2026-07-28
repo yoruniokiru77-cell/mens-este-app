@@ -4848,24 +4848,35 @@ case 'verifyTokenAction': {
 
     // ===== セラピスト用予約 =====
     case 'getMyReservations': {
-      // 27時ルール：当日03:00〜を取得（00:00〜02:59は前日扱いのため除外）
+      // 27時ルール：前日03:00〜を取得（当日忘れて翌日に売上入力するケースに対応）
       const today = new Date();
       if (today.getHours() < 3) today.setDate(today.getDate() - 1);
       today.setHours(3,0,0,0);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
       const { data, error } = await _sb.from('reservations').select('*')
         .eq('store_id', STORE_ID).eq('therapist_name', params.therapist)
-        .gte('date', today.toISOString()).neq('status', 'cancelled').order('date');
+        .gte('date', yesterday.toISOString()).neq('status', 'cancelled').order('date');
       if (error) throw new Error(error.message);
+      // 前日分（today未満）は売上未登録のもののみ表示
+      const resvIds = (data || []).filter(r => new Date(r.date) < today).map(r => r.id);
+      let soldIds = new Set();
+      if (resvIds.length) {
+        const { data: soldData } = await _sb.from('sales').select('reservation_id')
+          .eq('store_id', STORE_ID).in('reservation_id', resvIds);
+        soldIds = new Set((soldData || []).map(s => s.reservation_id).filter(Boolean));
+      }
 
       // 未承認の姫予約は日付に関係なく追加取得（月またぎ対応）
       const { data: pendingHime } = await _sb.from('reservations').select('*')
         .eq('store_id', STORE_ID).eq('therapist_name', params.therapist)
         .eq('is_hime', true).eq('is_hime_approved', false)
-        .neq('status', 'cancelled').lt('date', today.toISOString());
-      // 重複を除いてマージ
+        .neq('status', 'cancelled').lt('date', yesterday.toISOString());
+      // 重複を除いてマージ（前日分は売上未登録のみ）
       const existingIds = new Set((data || []).map(r => r.id));
       const extraHime = (pendingHime || []).filter(r => !existingIds.has(r.id));
-      const rows = [...extraHime, ...(data || [])].sort((a,b) => new Date(a.date) - new Date(b.date));
+      const filtered = (data || []).filter(r => new Date(r.date) >= today || !soldIds.has(r.id));
+      const rows = [...extraHime, ...filtered].sort((a,b) => new Date(a.date) - new Date(b.date));
 
       // customer_tel を収集（telベースで統一）
       const custTels = [...new Set(rows.map(r => r.customer_tel).filter(Boolean))];
@@ -4911,6 +4922,7 @@ case 'verifyTokenAction': {
         return {
           row:          r.id,
           date:         _fmtDatetimeJp(r.date),
+          rawDate:      r.date,
           therapist:    r.therapist_name || '',
           course:       r.course_min || 60,
           customer:     resolvedName,
@@ -15408,9 +15420,22 @@ async function goToSalesFromReservationByRow(row) {
 }
 
 async function prefillSalesFromReservation(resv) {
-  // 日時: "2026/03/30 16:12" → "2026-03-30T16:12" に変換
-  const rawDate = String(resv.date || '');
-  const dt = rawDate.replace(/\//g, '-').replace(' ', 'T').substring(0, 16);
+  // rawDateがあればUTC→ローカル変換して使用（27時表記は datetime-local に使えないため）
+  let dt;
+  if (resv.rawDate) {
+    const isoSrc = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(resv.rawDate)
+      ? resv.rawDate.replace(' ','T') + 'Z' : resv.rawDate;
+    const d = new Date(isoSrc);
+    if (!isNaN(d)) {
+      const pad = n => String(n).padStart(2,'0');
+      dt = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
+         + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+  }
+  if (!dt) {
+    const rawDate = String(resv.date || '');
+    dt = rawDate.replace(/\//g, '-').replace(' ', 'T').substring(0, 16);
+  }
 
   // 予約IDを保存（重複チェック・UPDATE用）
   const resvId = resv.row || resv._id || null;
