@@ -14986,6 +14986,7 @@ async function saveAndSendLine() {
       price:      price + nomFee,
       discount:   Number(document.getElementById('resv-discount').value) || 0,
       nomination: document.getElementById('resv-nomination').value,
+      memo:     (document.getElementById('resv-memo') ? document.getElementById('resv-memo').value.trim() : '') || null,
       roomId:   myShift_sl ? myShift_sl.roomId   : '',
       roomName: myShift_sl ? myShift_sl.roomName : ''
     };
@@ -15015,6 +15016,7 @@ async function saveAndSendLine() {
       if (discount > 0) {
         msg += `\n割引: -¥${discount.toLocaleString()}\n適用後金額: ¥${finalPrice.toLocaleString()}`;
       }
+      if (params.memo) msg += `\nメモ: ${params.memo}`;
       msg += '\n\n予約確認したらログインして確認ボタンをタップしてください。';
       try {
         await apiGet('sendLineMessage', { userId: tLine.userId, message: msg });
