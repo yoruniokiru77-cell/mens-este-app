@@ -14190,14 +14190,16 @@ async function copyResvGuideByIdx(idx) {
     // ルームの案内文を取得
     let guideText3 = '';
     try {
-      const dateStr3 = _dt3date.replace(/\//g,'-');
-      const shifts3  = await apiGet('getShifts', { therapist: r.therapist, month: dateStr3.slice(0,7) });
-      const myShift3 = shifts3.find(s =>
-        s.date.replace(/\//g,'-') === dateStr3 && s.status === 'approved' && s.roomName
-      );
-      if (myShift3 && myShift3.roomName) {
+      const reqMin3  = _timeToMin27(_dt3time);
+      // _resvShiftMapはloadReservations()で最新化済み（ヘッダーのルーム表示と同じソース）
+      const slots3 = ((window._resvShiftMap || {})[r.therapist] || []);
+      const slot3  = slots3.find(s =>
+        s.roomName && _timeToMin27(s.start) <= reqMin3 && _timeToMin27(s.end) > reqMin3
+      ) || slots3.find(s => s.roomName);
+      const roomName3 = slot3 ? slot3.roomName : '';
+      if (roomName3) {
         const rooms3 = await apiGetCached('getRoomMaster', {});
-        const room3  = rooms3.find(rm => rm.name === myShift3.roomName);
+        const room3  = rooms3.find(rm => rm.name === roomName3);
         if (room3 && room3.col4) guideText3 = room3.col4;
       }
     } catch(e3) { console.warn('ルーム案内取得エラー:', e3); }
