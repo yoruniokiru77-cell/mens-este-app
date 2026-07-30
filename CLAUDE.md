@@ -7,7 +7,7 @@
 
 ## システム概要
 
-マッサージサロン（いわき/HerRoom・水戸/Reメンズエステ・神栖/Premium・NEVERLAND）向けの統合管理システム。
+マッサージサロン（いわき/HerRoom・水戸/Reメンズエステ・神栖/Premium・NEVERLAND・STELLA）向けの統合管理システム。
 
 | 要素 | 内容 |
 |---|---|
@@ -26,6 +26,7 @@
 | 水戸 | https://mens-este-app.vercel.app/?store=22222222... | 22222222-0000-0000-0000-000000000002 |
 | 神栖 | https://mens-este-app.vercel.app/?store=33333333... | 33333333-0000-0000-0000-000000000003 |
 | NEVERLAND | https://mens-este-app.vercel.app/?store=44444444... | 44444444-0000-0000-0000-000000000004 |
+| STELLA | https://mens-este-app.vercel.app/?store=55555555... | 55555555-0000-0000-0000-000000000005 |
 
 ---
 
@@ -151,6 +152,15 @@ node --check /tmp/check.js
 - `send_payroll_line=false` / `send_store_line=true`（店落ちのみ送信）
 - スカウトモード（🔍スカウトタブ）は神栖店のみ表示（`startAdminMode` でSTORE_IDが33333333の場合のみ）
 
+### STELLA固有機能
+- `store_id = '55555555-0000-0000-0000-000000000005'`
+- 以下のタブ・機能を非表示:
+  - ナビ: 備品（supply.html）タブ
+  - マスタ管理: 固定費・振込先・都度経費タブ
+  - 売上確認: 都度経費・固定費セクション（`store-expense-section`）
+  - 神栖・STELLAでは面接管理・アナウンスタブも非表示
+- 判定: `const isStella = STORE_ID === '55555555-0000-0000-0000-000000000005'`
+
 ### NEVERLAND固有機能
 - LINE管理ページのセラピスト一覧に「割引モード」列を表示（store_id=44444444）
 - セラピストごとに `店舗設定 / 按分（折半）/ 店舗負担` を選択可能
@@ -170,6 +180,16 @@ node --check /tmp/check.js
 - `_calcPayroll`内: `sale_options`の`menuId=null`かつ`name.includes('延長')`の項目がextとして計算
 - 固定バック設定時: `extFixed`（本指名なら`extensionBackHon`、それ以外なら`extensionBack`）を使用
 - 未設定時: `option_back`率で計算
+
+### セラピスト名変更機能
+- マスタ管理→セラピストタブの一覧に「✏️ 名前変更」ボタンあり
+- `openRenameTherapistModal(therapistId, therapistName)` → `execRenameTherapist()` → `apiGet('renameTherapist', ...)`
+- カスケード更新対象: `therapists` / `reservations` / `sales` / `shifts`（therapist_idベース＋therapist_name両方）/ `payroll_confirmations` / `tokens`
+- **同名セラピストが退職→新人で使い回した場合、給料計算・来店履歴で新旧が混在する（既知課題）**
+
+### 機種変更時のLINE ID自動更新
+- セラピストが新スマホで同じ名前をBotに送信 → 既存レコードのline_user_idを自動上書き（`registerTherapist`）
+- 異なる名前で登録してしまった場合はSQL手動対応が必要
 
 ### セラピスト確認機能
 - `reservations.therapist_confirmed` — セラピストが予約を確認したかどうかのフラグ
@@ -362,7 +382,7 @@ Supabaseのスキーマ変更後は「API → Reload schema」でキャッシュ
 
 | コマンド | 動作 |
 |---|---|
-| ログイン | ログインURL（3時間有効）を発行 |
+| ログイン | ログインURL（12時間有効）を発行 |
 | 登録 | 別店舗の追加登録（招待コードを入力） |
 | 発注 | 備品発注画面URLを発行 |
 | シフト | 今週・来週の承認済みシフトを返信 |
@@ -508,5 +528,8 @@ therapistPay     = baseTherapistPay - miscFee - accomFee
 | docs/work_log_session17.md | セッション17（6/1）の作業内容 |
 | docs/work_log_session18.md | セッション18（6/2）の作業内容 |
 | docs/work_log_session19.md | セッション19（6/3〜6/4）の作業内容 |
+| memory/project_session20.md | セッション20（7/21）の作業内容 |
+| docs/work_log_session22.md | セッション22（7/28〜29）の作業内容 |
+| docs/work_log_session23.md | セッション23（7/30）の作業内容 |
 
 **不明な仕様・消えた機能はまず作業ログを確認すること。**
