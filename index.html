@@ -2646,14 +2646,15 @@ function updateCurrentExtensionPrice(prefix) {
 // ============================================================
 
 // -------- 内部ユーティリティ --------
-// 09:00〜26:00（翌2:00）の選択肢を生成
+// 09:00〜business_end時（デフォルト26:00）の選択肢を生成
 function _buildTimeOptions(selectedVal) {
+  const maxH = (window._bizCutoffHour != null ? window._bizCutoffHour + 24 : 26);
   const times = [];
-  for (let h = 9; h <= 26; h++) {
+  for (let h = 9; h <= maxH; h++) {
     ['00', '30'].forEach(m => {
-      if (h === 26 && m === '30') return;
+      if (h === maxH && m === '30') return;
       const label = h + ':' + m;
-      const val   = String(h).padStart(2,'0') + ':' + m; // 26:00のままvalueに保持
+      const val   = String(h).padStart(2,'0') + ':' + m;
       times.push({ label, val, h });
     });
   }
