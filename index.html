@@ -1489,6 +1489,16 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
             <label>延長単価（円）</label>
             <input type="number" id="st-extension-price" placeholder="例: 3000" min="0" step="500">
           </div>
+          <div class="form-group">
+            <label>営業終了時刻（時）</label>
+            <select id="st-business-end">
+              <option value="25">25時（翌1:00まで）</option>
+              <option value="26">26時（翌2:00まで）</option>
+              <option value="27" selected>27時（翌3:00まで）※デフォルト</option>
+              <option value="28">28時（翌4:00まで）</option>
+              <option value="29">29時（翌5:00まで）</option>
+            </select>
+          </div>
         </div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:12px">売上入力で「延長◎分 × ◎回」のスライダーで選択できます</div>
         <button class="btn btn-primary btn-sm" onclick="saveMenuSettings()">保存</button>
@@ -2965,13 +2975,16 @@ async function apiGet(action, params = {}) {
     // ===== 予約 =====
     case 'getReservations': {
       const dateStr = params.date; // yyyy-MM-dd
-      // 27時ルール: 当日03:00〜翌日02:59を取得（00:00〜02:59は前日扱いのため除外）
-      const from = dateStr + 'T03:00:00+09:00';
+      // 営業終了時刻ルール: 当日cutoff:00〜翌日(cutoff-1):59を取得
+      const _cut = window._bizCutoffHour ?? 3;
+      const _cutPad = String(_cut).padStart(2,'0');
+      const _prevPad = String(_cut - 1).padStart(2,'0');
+      const from = dateStr + `T${_cutPad}:00:00+09:00`;
       const nextDate = new Date(dateStr + 'T00:00:00+09:00');
       nextDate.setDate(nextDate.getDate() + 1);
       const nextPad = n => String(n).padStart(2,'0');
       const nextStr = nextDate.getFullYear() + '-' + nextPad(nextDate.getMonth()+1) + '-' + nextPad(nextDate.getDate());
-      const to = nextStr + 'T02:59:59+09:00';
+      const to = nextStr + `T${_prevPad}:59:59+09:00`;
       const { data, error } = await _sb.from('reservations')
         .select('*, therapists!reservations_therapist_id_fkey(interval_min)')
         .eq('store_id', STORE_ID)
@@ -3232,14 +3245,14 @@ async function apiGet(action, params = {}) {
       const { startDate, endDate } = params;
       const [salesRes, therapistRes, settingsRes] = await Promise.all([
         (() => {
-          // 27時ルール: startDateの03:00〜endDateの翌日02:59まで取得
-          // 00:00〜02:59は前日扱いのためT03:00:00から開始
+          // 営業終了時刻ルール: startDateのcutoff:00〜endDateの翌日(cutoff-1):59まで取得
+          const _c = window._bizCutoffHour ?? 3;
           const endDt = new Date(endDate + 'T00:00:00+09:00');
           endDt.setDate(endDt.getDate() + 1);
-          endDt.setHours(2, 59, 59, 0);
+          endDt.setHours(_c - 1, 59, 59, 0);
           return _sb.from('sales').select('*')
             .eq('store_id', STORE_ID)
-            .gte('date', startDate + 'T03:00:00+09:00')
+            .gte('date', startDate + 'T' + String(_c).padStart(2,'0') + ':00:00+09:00')
             .lte('date', endDt.toISOString())
             .order('date');
         })(),
@@ -3315,14 +3328,14 @@ async function apiGet(action, params = {}) {
         .select('therapist_name, date')
         .eq('store_id', STORE_ID)
         .eq('status', 'active')
-        .gte('date', startDate + 'T03:00:00+09:00')
+        .gte('date', startDate + 'T' + String(window._bizCutoffHour ?? 3).padStart(2,'0') + ':00:00+09:00')
         .lte('date', resvEndDt.toISOString());
       const resvCountMap = {};
       (resvQuery.data || []).forEach(r => {
         const d = new Date(r.date);
-        // 27時ルール: 3時未満は前日扱い
+        // 営業終了時刻ルール: cutoff時未満は前日扱い
         const dAdj = new Date(d);
-        if (d.getHours() < 3) dAdj.setDate(dAdj.getDate() - 1);
+        if (d.getHours() < (window._bizCutoffHour ?? 3)) dAdj.setDate(dAdj.getDate() - 1);
         const dl = dAdj.getFullYear() + '/' +
           String(dAdj.getMonth()+1).padStart(2,'0') + '/' +
           String(dAdj.getDate()).padStart(2,'0');
@@ -3335,7 +3348,7 @@ async function apiGet(action, params = {}) {
         const d = new Date(r.date);
         // 27時ルール: 3時（JST）より前の売上は前日扱い
         const dAdj = new Date(d);
-        if (d.getHours() < 3) dAdj.setDate(dAdj.getDate() - 1);
+        if (d.getHours() < (window._bizCutoffHour ?? 3)) dAdj.setDate(dAdj.getDate() - 1);
         const dateLabel = dAdj.getFullYear() + '/' +
           String(dAdj.getMonth()+1).padStart(2,'0') + '/' +
           String(dAdj.getDate()).padStart(2,'0');
@@ -4848,10 +4861,11 @@ case 'verifyTokenAction': {
 
     // ===== セラピスト用予約 =====
     case 'getMyReservations': {
-      // 27時ルール：前日03:00〜を取得（当日忘れて翌日に売上入力するケースに対応）
+      // 営業終了時刻ルール：前日cutoff:00〜を取得（当日忘れて翌日に売上入力するケースに対応）
+      const _mc = window._bizCutoffHour ?? 3;
       const today = new Date();
-      if (today.getHours() < 3) today.setDate(today.getDate() - 1);
-      today.setHours(3,0,0,0);
+      if (today.getHours() < _mc) today.setDate(today.getDate() - 1);
+      today.setHours(_mc,0,0,0);
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
       const { data, error } = await _sb.from('reservations').select('*')
@@ -4991,6 +5005,7 @@ case 'sendLineMessage': {
       if (params.shift_reminder_time     !== undefined) upd.shift_reminder_time     = params.shift_reminder_time;
       if (params.extension_min      !== undefined) upd.extension_min      = Number(params.extension_min);
       if (params.extension_price    !== undefined) upd.extension_price    = Number(params.extension_price);
+      if (params.business_end       !== undefined) upd.business_end       = Number(params.business_end);
       if (params.shift_deadline     !== undefined) upd.shift_deadline     = params.shift_deadline || null;
       if (params.admin_pin          !== undefined) upd.admin_pin          = params.admin_pin || null;
       if (ex) {
@@ -5132,6 +5147,8 @@ async function loadStoreSettings() {
     _currentExtensionPrice = EXTENSION_PRICE;
     _editExtensionPrice    = EXTENSION_PRICE;
     window._adminPin = data.admin_pin || null;
+    // 営業終了時刻（27時=デフォルト）から前日扱いの境界時刻を計算
+    window._bizCutoffHour = (data.business_end || 27) - 24;
   } catch(e) { console.warn('店舗設定読み込みエラー:', e); }
 }
 
@@ -11248,6 +11265,7 @@ async function saveMenuSettings() {
       nomination_fee_honshimei:   Number(document.getElementById('st-nom-hon')?.value   || 2000),
       extension_min:              Number(document.getElementById('st-extension-min')?.value   || 30),
       extension_price:            Number(document.getElementById('st-extension-price')?.value || 3000),
+      business_end:               Number(document.getElementById('st-business-end')?.value    || 27),
     });
     await loadStoreSettings();
     await populateCourseSelect();
@@ -11266,8 +11284,10 @@ async function loadMenuMaster() {
     const hEl = document.getElementById('st-nom-hon');  if (hEl) hEl.value = s.nomination_fee_honshimei  ?? NOMINATION_FEE.honshimei  ?? 2000;
     const extMinEl   = document.getElementById('st-extension-min');
     const extPriceEl = document.getElementById('st-extension-price');
+    const bizEndEl   = document.getElementById('st-business-end');
     if (extMinEl)   extMinEl.value   = s.extension_min   || 30;
     if (extPriceEl) extPriceEl.value = s.extension_price || 3000;
+    if (bizEndEl)   bizEndEl.value   = s.business_end    || 27;
   } catch(e) { console.warn('設定読み込みエラー:', e); }
   try {
     clearCache('getMenuMaster');
@@ -13601,11 +13621,11 @@ function renderResvByTherapist(data, el) {
     return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
   }
 
-  // 現在時刻（27時ルール対応）
+  // 現在時刻（営業終了時刻ルール対応）
   const now = new Date();
   let nowMin = now.getHours() * 60 + now.getMinutes();
-  // 0〜2時台なら24+h（前日扱い）
-  if (now.getHours() < 3) nowMin += 24 * 60;
+  // cutoff時未満なら24h加算（前日扱い）
+  if (now.getHours() < (window._bizCutoffHour ?? 3)) nowMin += 24 * 60;
 
   el.innerHTML = `
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px">
@@ -13619,9 +13639,9 @@ function renderResvByTherapist(data, el) {
       // シフト情報・最短案内時刻（複数シフト対応）
       // 今日の予約一覧のみ表示（未来日は不要）
       const viewingDate = currentResvDate;
-      // 27時ルール: 0〜2時台は前日扱いのため、"今日"もその基準で判定
+      // 営業終了時刻ルール: cutoff時未満は前日扱いのため、"今日"もその基準で判定
       const todayDate = new Date();
-      if (todayDate.getHours() < 3) todayDate.setDate(todayDate.getDate() - 1);
+      if (todayDate.getHours() < (window._bizCutoffHour ?? 3)) todayDate.setDate(todayDate.getDate() - 1);
       todayDate.setHours(0, 0, 0, 0);
       const isToday = viewingDate.toDateString() === todayDate.toDateString();
       const shifts = window._resvShiftMap && window._resvShiftMap[th];
@@ -13630,7 +13650,7 @@ function renderResvByTherapist(data, el) {
       if (shifts && shifts.length) {
         shiftLabel = shifts.map(s => `${s.start.substring(0,5)}〜${s.end.substring(0,5)}`).join(' / ');
         if (isToday) {
-          const toMin = t => { const [h,m] = (t||'00:00').split(':').map(Number); return (h<3?h+24:h)*60+(m||0); };
+          const toMin = t => { const [h,m] = (t||'00:00').split(':').map(Number); const _bc = window._bizCutoffHour ?? 3; return (h<_bc?h+24:h)*60+(m||0); };
           let target = null;
           for (const s of shifts) {
             const sStart = toMin(s.start);
@@ -17630,13 +17650,13 @@ async function loadCheckoutPage() {
   el.innerHTML = '<p style="color:var(--muted)">読み込み中...</p>';
 
   try {
-    // 今日のシフトからルームを取得（27時ルール：0〜2時台は前日扱い）
+    // 今日のシフトからルームを取得（営業終了時刻ルール：cutoff時未満は前日扱い）
     const now = new Date();
     const pad = n => String(n).padStart(2,'0');
 
     // 当日の日付
     const todayBase = new Date(now);
-    if (todayBase.getHours() < 3) todayBase.setDate(todayBase.getDate() - 1);
+    if (todayBase.getHours() < (window._bizCutoffHour ?? 3)) todayBase.setDate(todayBase.getDate() - 1);
     const todayStr = todayBase.getFullYear() + '-' + pad(todayBase.getMonth()+1) + '-' + pad(todayBase.getDate());
 
     // 前日の日付
@@ -17727,9 +17747,9 @@ async function submitCheckout() {
 
   try {
     showOverlay();
-    // 27時ルール：0〜2時台は前日扱い
+    // 営業終了時刻ルール：cutoff時未満は前日扱い
     const today = new Date();
-    if (today.getHours() < 3) today.setDate(today.getDate() - 1);
+    if (today.getHours() < (window._bizCutoffHour ?? 3)) today.setDate(today.getDate() - 1);
     const pad = n => String(n).padStart(2,'0');
     const workDate = today.getFullYear() + '-' + pad(today.getMonth()+1) + '-' + pad(today.getDate());
 
