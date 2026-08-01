@@ -672,7 +672,13 @@ div[id$="-modal"] > div[style*="background: var(--surface)"] {
           </select>
         </div>
         <div class="form-group">
-          <label>割引（円）</label>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <label id="resv-discount-label" style="margin:0">割引（円）</label>
+            <button type="button" id="resv-discount-toggle" onclick="_toggleResvDiscountMode()"
+              style="display:none;font-size:11px;padding:2px 8px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--muted);cursor:pointer">
+              加算に切替
+            </button>
+          </div>
           <input type="number" id="resv-discount" value="0" min="0">
         </div>
       </div>
@@ -5309,6 +5315,9 @@ function startAdminMode() {
   if (interviewTab) interviewTab.style.display = 'none';
   const supplyTab = document.getElementById('tab-supply');
   if (supplyTab) supplyTab.style.display = STORE_ID === '55555555-0000-0000-0000-000000000005' ? 'none' : '';
+  // STELLA専用: 割引↔加算切替ボタンを表示
+  const discToggle = document.getElementById('resv-discount-toggle');
+  if (discToggle) discToggle.style.display = STORE_ID === '55555555-0000-0000-0000-000000000005' ? '' : 'none';
   // 神栖店（Premium）のみ外注タブを表示
   if (SCOUT_STORE_IDS.has(STORE_ID)) {
     const scoutTab = document.getElementById('tab-scout');
@@ -13836,7 +13845,18 @@ async function openEditResv(idx) {
   calcCoursePrice();
 
   document.getElementById('resv-nomination').value    = r.nomination || 'free';
-  document.getElementById('resv-discount').value      = r.discount || 0;
+  // 加算モード復元（負の値は加算扱い）
+  const _discVal = Number(r.discount || 0);
+  const _discToggle = document.getElementById('resv-discount-toggle');
+  if (_discToggle && _discVal < 0) {
+    _discToggle.dataset.mode = 'add';
+    _discToggle.textContent = '割引に切替';
+    document.getElementById('resv-discount-label').textContent = '加算（円）';
+    document.getElementById('resv-discount').value = -_discVal;
+  } else {
+    if (_discToggle) { _discToggle.dataset.mode = 'discount'; _discToggle.textContent = '加算に切替'; document.getElementById('resv-discount-label').textContent = '割引（円）'; }
+    document.getElementById('resv-discount').value = _discVal;
+  }
   document.getElementById('resv-customer-no').value   = String(r.customerNo || '');
   document.getElementById('resv-customer-tel').value  = r.tel || '';
   document.getElementById('resv-customer-name').value = r.customer || '';
@@ -13924,7 +13944,7 @@ async function updateResvRow() {
   const customerName  = document.getElementById('resv-customer-name').value.trim();
   const dateVal       = document.getElementById('resv-date').value;
   const tel           = document.getElementById('resv-customer-tel-full').value || document.getElementById('resv-customer-tel').value;
-  const discount      = Number(document.getElementById('resv-discount').value) || 0;
+  const discount      = _getResvDiscountValue();
   const nomination    = document.getElementById('resv-nomination').value;
   const memo          = (document.getElementById('resv-memo') ? document.getElementById('resv-memo').value.trim() : '');
   if (!therapistName) { alert('セラピストを選択してください'); return; }
@@ -14569,6 +14589,34 @@ async function populateTherapistSelect(keepValue) {
     therapists.map(t => `<option value="${t.name}">${t.name}</option>`).join('');
 }
 
+// STELLA専用: 割引 ↔ 加算モード切り替え
+function _toggleResvDiscountMode() {
+  const btn   = document.getElementById('resv-discount-toggle');
+  const label = document.getElementById('resv-discount-label');
+  const input = document.getElementById('resv-discount');
+  if (!btn) return;
+  const isAdd = btn.dataset.mode === 'add';
+  if (isAdd) {
+    btn.dataset.mode = 'discount';
+    btn.textContent  = '加算に切替';
+    label.textContent = '割引（円）';
+    input.min = '0';
+  } else {
+    btn.dataset.mode = 'add';
+    btn.textContent  = '割引に切替';
+    label.textContent = '加算（円）';
+    input.min = '0';
+  }
+  input.value = '0';
+}
+
+// 割引入力値を符号付きで取得（加算モードはマイナス値で返す）
+function _getResvDiscountValue() {
+  const btn = document.getElementById('resv-discount-toggle');
+  const val = Number(document.getElementById('resv-discount').value) || 0;
+  return (btn && btn.dataset.mode === 'add') ? -val : val;
+}
+
 async function checkInterval() {
   document.getElementById('interval-warning').style.display = 'none';
 }
@@ -14582,7 +14630,7 @@ async function submitReservation() {
   const nomFee        = getNominationFee(therapistName, document.getElementById('resv-nomination').value);
   const dateVal       = document.getElementById('resv-date').value;
   const tel           = document.getElementById('resv-customer-tel-full').value || document.getElementById('resv-customer-tel').value;
-  const discount      = Number(document.getElementById('resv-discount').value) || 0;
+  const discount      = _getResvDiscountValue();
   const nomination    = document.getElementById('resv-nomination').value;
   const memo          = (document.getElementById('resv-memo') ? document.getElementById('resv-memo').value.trim() : '');
 
@@ -14917,7 +14965,7 @@ async function saveAndSendLine() {
     const price  = getCoursePrice('resv');
     const therapistName = document.getElementById('resv-therapist').value;
     const nomFee   = getNominationFee(therapistName, document.getElementById('resv-nomination').value);
-    const discount = Number(document.getElementById('resv-discount')?.value) || 0;
+    const discount = _getResvDiscountValue();
     const dateVal = document.getElementById('resv-date').value;
 
     // 重複チェック
@@ -15019,7 +15067,7 @@ async function saveAndSendLine() {
       customerNo: document.getElementById('resv-customer-no').value,
       tel:        document.getElementById('resv-customer-tel-full').value,
       price:      price + nomFee,
-      discount:   Number(document.getElementById('resv-discount').value) || 0,
+      discount:   _getResvDiscountValue(),
       nomination: document.getElementById('resv-nomination').value,
       memo:     (document.getElementById('resv-memo') ? document.getElementById('resv-memo').value.trim() : '') || null,
       roomId:   myShift_sl ? myShift_sl.roomId   : '',
@@ -15168,6 +15216,8 @@ function resetResvForm() {
   }
   document.getElementById('resv-course').value    = '';
   document.getElementById('resv-discount').value  = '0';
+  const _rdt = document.getElementById('resv-discount-toggle');
+  if (_rdt) { _rdt.dataset.mode = 'discount'; _rdt.textContent = '加算に切替'; document.getElementById('resv-discount-label').textContent = '割引（円）'; }
   document.getElementById('resv-customer-no').value = '';
   document.getElementById('resv-customer-name').value = '';
   document.getElementById('resv-customer-tel').value = '';
