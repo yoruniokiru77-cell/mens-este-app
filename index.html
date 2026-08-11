@@ -13626,6 +13626,7 @@ function renderResvByTherapist(data, el) {
     if (shiftEndMin && candidate >= shiftEndMin) return null;
     // 後続の予約なし → シフト終了まで全部使える
     const remaining = shiftEndMin ? shiftEndMin - candidate : 0;
+    if (remaining < MIN_COURSE) return null;
     return { earliest: candidate, remaining };
   }
 
