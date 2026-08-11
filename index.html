@@ -13672,14 +13672,13 @@ function renderResvByTherapist(data, el) {
           let foundAvail = false;
           const firstStart = shifts.length ? toMin(shifts[0].start) : 0;
           const anyStarted = nowMin >= firstStart;
-          console.log('[DEBUG]', th, 'nowMin='+nowMin, 'firstStart='+firstStart, 'anyStarted='+anyStarted, 'shifts='+JSON.stringify(shifts.map(s=>({start:s.start,end:s.end,iv:s.intervalMin}))), 'rows='+rows.length);
           for (const s of shifts) {
             const sStart = toMin(s.start);
-            const sEnd   = toMin(s.end);
-            if (nowMin >= sEnd) { console.log('[DEBUG] skip(ended)', th, s.start+'〜'+s.end, 'sEnd='+sEnd, 'nowMin='+nowMin); continue; }
+            let sEnd     = toMin(s.end);
+            if (sEnd <= sStart) sEnd += 24 * 60; // 日跨ぎシフト補正（例: 20:00〜02:00）
+            if (nowMin >= sEnd) continue; // このシフトは終了済み
             const baseCandidate = Math.max(nowMin, sStart);
             const availResult = calcEarliestAvailable(rows, s.intervalMin || 30, baseCandidate, sEnd);
-            console.log('[DEBUG] shift', th, s.start+'〜'+s.end, 'sStart='+sStart,'sEnd='+sEnd,'baseCandidate='+baseCandidate,'availResult='+JSON.stringify(availResult));
             if (availResult != null && availResult.earliest < sEnd) {
               availLabel = `<span style="font-size:11px;font-weight:600;background:#10b981;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">⏱ 最短 ${minToTimeStr(availResult.earliest)}〜（残${availResult.remaining}分）</span>`;
               foundAvail = true;
