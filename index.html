@@ -13668,32 +13668,24 @@ function renderResvByTherapist(data, el) {
         shiftLabel = shifts.map(s => `${s.start.substring(0,5)}〜${s.end.substring(0,5)}`).join(' / ');
         if (isToday) {
           const toMin = t => { const [h,m] = (t||'00:00').split(':').map(Number); const _bc = window._bizCutoffHour ?? 3; return (h<_bc?h+24:h)*60+(m||0); };
-          let target = null;
+          // 全シフトを順番に確認し、空き枠が見つかったら表示・なければ完売
+          let foundAvail = false;
+          const firstStart = shifts.length ? toMin(shifts[0].start) : 0;
+          const anyStarted = nowMin >= firstStart;
           for (const s of shifts) {
             const sStart = toMin(s.start);
             const sEnd   = toMin(s.end);
-            if (nowMin < sEnd) { target = { start: sStart, end: sEnd, intervalMin: s.intervalMin }; break; }
+            if (nowMin >= sEnd) continue; // このシフトは終了済み
+            const baseCandidate = Math.max(nowMin, sStart);
+            const availResult = calcEarliestAvailable(rows, s.intervalMin || 30, baseCandidate, sEnd);
+            if (availResult != null && availResult.earliest < sEnd) {
+              availLabel = `<span style="font-size:11px;font-weight:600;background:#10b981;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">⏱ 最短 ${minToTimeStr(availResult.earliest)}〜（残${availResult.remaining}分）</span>`;
+              foundAvail = true;
+              break;
+            }
           }
-          if (!target) {
-            // シフト開始前（nowMin < 最初のシフト開始）は完売にしない
-            const firstStart = shifts.length ? toMin(shifts[0].start) : 0;
-            if (nowMin < firstStart) {
-              // 未開始のため表示なし
-            } else {
-              availLabel = `<span style="font-size:11px;font-weight:700;background:#dc2626;color:#fff;padding:2px 10px;border-radius:10px;margin-left:4px">🔥 完売</span>`;
-            }
-          } else {
-            const baseCandidate = Math.max(nowMin, target.start);
-            const availResult = calcEarliestAvailable(rows, target.intervalMin || 30, baseCandidate, target.end);
-            if (availResult != null && availResult.earliest < target.end) {
-              const earliest  = availResult.earliest;
-              const remaining = availResult.remaining;
-              availLabel = `<span style="font-size:11px;font-weight:600;background:#10b981;color:#fff;padding:1px 8px;border-radius:10px;margin-left:4px">⏱ 最短 ${minToTimeStr(earliest)}〜（残${remaining}分）</span>`;
-            } else if (nowMin < target.start) {
-              // シフト開始前は完売にしない
-            } else {
-              availLabel = `<span style="font-size:11px;font-weight:700;background:#dc2626;color:#fff;padding:2px 10px;border-radius:10px;margin-left:4px">🔥 完売</span>`;
-            }
+          if (!foundAvail && anyStarted) {
+            availLabel = `<span style="font-size:11px;font-weight:700;background:#dc2626;color:#fff;padding:2px 10px;border-radius:10px;margin-left:4px">🔥 完売</span>`;
           }
         }
       }
