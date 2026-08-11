@@ -13591,12 +13591,18 @@ function renderResvByTherapist(data, el) {
     const MIN_COURSE = 60; // 最短コース時間（分）
     const minGap = MIN_COURSE + intervalMin;
     // 有効な予約を時刻順にソート
+    const _cutH = window._bizCutoffHour ?? 3;
     const valid = reservations
       .filter(r => r.status !== 'cancelled')
       .map(r => {
-        const dt = new Date(r.date);
-        const h  = dt.getHours(), m = dt.getMinutes();
-        const startMin = (h < 3 ? h + 24 : h) * 60 + m; // 27時ルール
+        // rawDate（ISO文字列）を使う（r.dateは27時表記済みでnew Date()がNaNになる）
+        const iso = r.rawDate
+          ? (r.rawDate.includes('Z') || r.rawDate.includes('+') ? r.rawDate : r.rawDate + 'Z')
+          : null;
+        const dt = iso ? new Date(iso) : null;
+        const h  = dt ? dt.getHours() : 0;
+        const m  = dt ? dt.getMinutes() : 0;
+        const startMin = (h < _cutH ? h + 24 : h) * 60 + m;
         return { startMin, endMin: startMin + Number(r.course || 60) };
       })
       .sort((a, b) => a.startMin - b.startMin);
