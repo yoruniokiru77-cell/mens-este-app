@@ -9902,8 +9902,9 @@ async function saveSalesEdit() {
   const { optTotal, optParts } = calcSalesEditTotal();
 
   // 延長はoption_priceに含める（course_priceはベースのみ）
-  const extOn    = document.getElementById('se-opt-extension').checked;
-  const extCount = parseInt(document.getElementById('se-opt-extension-count').value) || 1;
+  const extEl    = document.getElementById('se-opt-extension');
+  const extOn    = extEl ? extEl.checked : false;
+  const extCount = parseInt((document.getElementById('se-opt-extension-count') || {}).value) || 1;
   const extPrice = extOn ? extCount * _editExtensionPrice : 0;
   const coursePrice  = baseCoursePrice;
   const optOnlyTotal = optTotal;
