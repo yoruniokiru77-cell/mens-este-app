@@ -8244,10 +8244,13 @@ async function loadSalesReport() {
 
   try {
     showOverlay();
-    const [data, expData, storeExpData] = await Promise.all([
+    const [data, expData, storeExpData, shiftsRes] = await Promise.all([
       apiGet('getPayrollData', { startDate, endDate }),
       apiGet('getExpenses', { startDate, endDate }),
-      apiGet('getExpenses', { startDate, endDate, storeOnly: true })
+      apiGet('getExpenses', { startDate, endDate, storeOnly: true }),
+      _sb.from('shifts').select('therapist_name,date,room_name')
+        .eq('store_id', STORE_ID).eq('status', 'approved')
+        .gte('date', startDate).lte('date', endDate)
     ]);
     // セラピスト名・日付 → 雑費マップを作成
     const expMap = {};
@@ -8256,7 +8259,14 @@ async function loadSalesReport() {
       if (!expMap[key]) expMap[key] = {};
       expMap[key][e.category] = e.amount;
     });
-    renderSalesReport(data, therapist, expMap, storeExpData || []);
+    // セラピスト名|YYYY/MM/DD → ルーム名マップ
+    const roomMap = {};
+    (shiftsRes.data || []).forEach(s => {
+      if (!s.room_name) return;
+      const key = s.therapist_name + '|' + (s.date || '').replace(/-/g, '/');
+      if (!roomMap[key]) roomMap[key] = s.room_name;
+    });
+    renderSalesReport(data, therapist, expMap, storeExpData || [], roomMap);
     renderStoreExpenseList(storeExpData || []);
   } catch(e) {
     document.getElementById('report-table').innerHTML = '<p style="color:red">' + e.message + '</p>';
@@ -8265,7 +8275,7 @@ async function loadSalesReport() {
   }
 }
 
-function renderSalesReport(data, filterTherapist, expMap, storeExpData) {
+function renderSalesReport(data, filterTherapist, expMap, storeExpData, roomMap) {
   expMap = expMap || {};
   storeExpData = storeExpData || [];
   const summaryEl = document.getElementById('report-summary');
@@ -8309,6 +8319,38 @@ function renderSalesReport(data, filterTherapist, expMap, storeExpData) {
       <span style="color:${netProfit >= 0 ? '#15803d' : '#dc2626'};font-weight:600">純利益（店落ち−経費）</span>
       <span style="color:${netProfit >= 0 ? '#15803d' : '#dc2626'};font-weight:700">¥${netProfit.toLocaleString()}</span>
     </div>` : '';
+  // ルーム別集計
+  let roomSection = '';
+  if (roomMap && Object.keys(roomMap).length) {
+    const roomAgg = {};
+    filtered.forEach(r => {
+      const key = r.name + '|' + r.dateLabel;
+      const room = roomMap[key] || null;
+      if (!room) return;
+      if (!roomAgg[room]) roomAgg[room] = { storeDrop: 0, count: 0 };
+      roomAgg[room].storeDrop += r.storeDrop;
+      roomAgg[room].count    += r.count;
+    });
+    if (Object.keys(roomAgg).length) {
+      const rows = Object.entries(roomAgg).sort((a,b) => a[0].localeCompare(b[0], 'ja')).map(([room, v]) =>
+        `<tr><td style="padding:6px 10px;border-bottom:1px solid var(--border)">${room}</td>
+             <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right">${v.count}本</td>
+             <td style="padding:6px 10px;border-bottom:1px solid var(--border);text-align:right;color:var(--accent2);font-weight:700">¥${v.storeDrop.toLocaleString()}</td></tr>`
+      ).join('');
+      roomSection = `<div class="card" style="margin-top:8px;padding:10px 12px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px">🚪 ルーム別店落ち</div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="background:var(--bg2)">
+            <th style="padding:6px 10px;text-align:left;border-bottom:2px solid var(--border)">部屋</th>
+            <th style="padding:6px 10px;text-align:right;border-bottom:2px solid var(--border)">本数</th>
+            <th style="padding:6px 10px;text-align:right;border-bottom:2px solid var(--border)">店落ち</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }
+  }
+
   summaryEl.innerHTML = `
     <div class="grid3" style="margin-bottom:8px">
       <div class="card" style="margin-bottom:0;text-align:center">
@@ -8324,7 +8366,7 @@ function renderSalesReport(data, filterTherapist, expMap, storeExpData) {
         <div class="card-title">店落ち合計</div>
         <div class="card-value store" style="color:var(--accent2)">¥${totalStore.toLocaleString()}</div>
       </div>
-    </div>${expRow}`;
+    </div>${expRow}${roomSection}`;
 
   // 日付・セラピスト別テーブル
   tableEl.innerHTML = `
