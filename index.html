@@ -5099,15 +5099,19 @@ case 'sendLineMessage': {
         : { data: null };
       for (const stock of stocks) {
         const newQty = Math.max(0, stock.quantity - stock.consumption_per_use);
-        const shouldNotify = newQty <= stock.notify_threshold && !stock.notified_at;
+        const actuallyConsumed = stock.quantity > 0;
+        const shouldNotify = actuallyConsumed && newQty <= stock.notify_threshold;
         await _sb.from('room_supply_stock').update({
           quantity: newQty,
           notified_at: shouldNotify ? new Date().toISOString() : stock.notified_at,
           updated_at: new Date().toISOString()
         }).eq('id', stock.id);
         if (shouldNotify && storeT && storeT.line_user_id) {
-          const msg = `【${storeName}】在庫アラート\n${roomName || 'ルーム'}の「${stock.supply_name}」残り${newQty}個になりました。補充をご確認ください。`;
+          const zeroLabel = newQty === 0 ? '⚠️在庫切れ' : `残り${newQty}個`;
+          const msg = `【${storeName}】在庫アラート\n${roomName || 'ルーム'}の「${stock.supply_name}」${zeroLabel}になりました。補充をご確認ください。`;
           try { await fetch(LINE_PUSH + '?action=sendLineMessage&userId=' + encodeURIComponent(storeT.line_user_id) + '&message=' + encodeURIComponent(msg)); } catch(e) {}
+        } else if (shouldNotify && !storeT?.line_user_id) {
+          console.warn('在庫アラート送信先未設定:', stock.supply_name, '— store_line_name または LINE ID を確認してください');
         }
       }
       return { ok: true };
@@ -16149,13 +16153,24 @@ async function submitSalesEntry() {
     }
     showToast(wasUpdated ? '売上を更新しました' : '売上を登録しました');
 
-    // 備品在庫を自動減算（新規登録時のみ・ルームあり予約）
+    // 備品在庫を自動減算（新規登録時のみ・ルームありシフト）
     if (!wasUpdated && window._currentReservationId) {
       try {
         const { data: resvForStock } = await _sb.from('reservations')
-          .select('room_id,room_name').eq('id', window._currentReservationId).maybeSingle();
-        if (resvForStock && resvForStock.room_id) {
-          await apiGet('decrementRoomSupplyStock', { roomId: resvForStock.room_id, roomName: resvForStock.room_name || '' });
+          .select('therapist_name,date').eq('id', window._currentReservationId).maybeSingle();
+        if (resvForStock && resvForStock.therapist_name) {
+          const resvDate = new Date(resvForStock.date);
+          const dateStr = resvDate.toISOString().substring(0, 10);
+          const { data: shiftForStock } = await _sb.from('shifts')
+            .select('room_id,room_name')
+            .eq('store_id', STORE_ID)
+            .eq('therapist_name', resvForStock.therapist_name)
+            .eq('date', dateStr)
+            .eq('status', 'approved')
+            .maybeSingle();
+          if (shiftForStock && shiftForStock.room_id) {
+            await apiGet('decrementRoomSupplyStock', { roomId: shiftForStock.room_id, roomName: shiftForStock.room_name || '' });
+          }
         }
       } catch(e) { console.warn('備品在庫減算エラー:', e); }
     }
