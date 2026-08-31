@@ -3429,25 +3429,26 @@ async function apiGet(action, params = {}) {
         });
       });
 
-      // 保証対象セラピスト：シフトはあるが売上がない場合も表示
-      const guarTherapists = (therapistRes.data || []).filter(t => t.has_guarantee && (t.hourly_rate || t.daily_guarantee));
-      if (guarTherapists.length) {
-        const shiftsRes = await _sb.from('shifts').select('therapist_name, date, start_time, end_time')
+      // シフト承認済みのセラピスト：売上0でも表示（保証有無に関わらず）
+      {
+        const allShiftsRes = await _sb.from('shifts').select('therapist_name, date, start_time, end_time, attendance_type')
           .eq('store_id', STORE_ID).eq('status', 'approved')
           .gte('date', startDate).lte('date', endDate);
-        (shiftsRes.data || []).forEach(s => {
+        (allShiftsRes.data || []).filter(s => !['absent','noshow'].includes(s.attendance_type)).forEach(s => {
           const dateLabel = s.date.replace(/-/g, '/');
           const key = dateLabel + '_' + s.therapist_name;
           if (result[key]) return; // 既に売上がある
           const tInfo = tMap[s.therapist_name];
-          if (!tInfo || !tInfo.has_guarantee) return;
+          if (!tInfo) return; // アクティブでないセラピストはスキップ
+          const pf = tInfo.parking_fee ? Number(tInfo.parking_fee) : 0;
           result[key] = {
             dateLabel, name: s.therapist_name,
-            pay: 0, storeDrop: 0, count: 0,
-            resvCount: 0,
-            hasGuarantee: true,
+            pay: pf, storeDrop: -pf, count: 0,
+            resvCount: resvCountMap[key] || 0,
+            hasGuarantee: tInfo.has_guarantee || false,
             hourlyRate: tInfo.hourly_rate || null,
             dailyGuarantee: tInfo.daily_guarantee || null,
+            parkingFee: pf,
             shiftStart: s.start_time ? s.start_time.substring(0,5) : '',
             shiftEnd:   s.end_time   ? s.end_time.substring(0,5)   : '',
             details: []
